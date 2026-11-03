@@ -28,5 +28,6 @@ async function startGame() {
   mod.showGame(app, { userTeam, cpuTeam: getTeam(settings.cpuTeamId), lineup, innings: settings.innings }, menu);
 }
 
-if (location.hash === "#lineup") showLineup(app, userTeam, storage, lineup, l => { lineup = l; menu(); });
+if (location.hash.startsWith("#game")) { settings = { cpuTeamId: location.hash.split("-")[1] || "lg", innings: 1 }; startGame(); }
+else if (location.hash === "#lineup") showLineup(app, userTeam, storage, lineup, l => { lineup = l; menu(); });
 else menu();
