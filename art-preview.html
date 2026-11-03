@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>아트 미리보기</title>
+<style>html,body{margin:0;height:100%;background:#0b1a2e}canvas{width:100%;height:100%;display:block}</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<script type="module">
+// 개발 확인용: #pitch #windup #bat #swing #field #closeup
+import { getTeam } from './js/data/rosters.js';
+import { createRng } from './js/core/rng.js';
+import { makeView, ballScreen } from './js/ui/art/view.js';
+import { buildBackdrop } from './js/ui/art/stadium.js';
+import { uniformFor } from './js/ui/art/uniforms.js';
+import { PIT_POSES, BAT_POSES, pitcherPoseAt, batterPoseAt } from './js/ui/art/rig.js';
+import { drawBatter, drawPitcher, drawCatcherAndUmpire, drawBall } from './js/ui/art/figures.js';
+import { pitcherAnchor, batterAnchor } from './js/ui/art/view.js';
+import { planPlay, drawFieldView } from './js/ui/art/fieldview.js';
+
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+const dpr = window.devicePixelRatio || 1, W = innerWidth, H = innerHeight;
+cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+const sam = getTeam('samsung'), lg = getTeam('lg');
+const uH = uniformFor(sam, 'home'), uA = uniformFor(lg, 'away');
+const scene = location.hash.slice(1) || 'pitch';
+const pitch = { throws: 'R', plate: { x: 0.4, y: -0.3 }, breakX: -0.45, breakY: -0.15, travelMs: 700 };
+
+if (scene === 'pitch' || scene === 'windup') {
+  const V = makeView('pitcher', W, H);
+  ctx.drawImage(buildBackdrop('pitcher', V, W, H, dpr, sam), 0, 0, W, H);
+  drawCatcherAndUmpire(ctx, V, { x: 0.6, y: -0.4 }, uH);
+  const b = batterAnchor(V, 'L');
+  drawBatter(ctx, { ...b, pose: BAT_POSES.STANCE, uni: uA });
+  const a = pitcherAnchor(V, 'R');
+  const pose = scene === 'windup' ? PIT_POSES.COCK : PIT_POSES.SET;
+  drawPitcher(ctx, { ...a, pose, uni: uH, holdBall: true, player: sam.pitchers[0] });
+} else if (scene === 'bat' || scene === 'swing') {
+  const V = makeView('catcher', W, H);
+  ctx.drawImage(buildBackdrop('catcher', V, W, H, dpr, sam), 0, 0, W, H);
+  const a = pitcherAnchor(V, 'R');
+  const pp = scene === 'bat' ? pitcherPoseAt(1100, 1000, 800) : pitcherPoseAt(1300, 1000, 800);
+  drawPitcher(ctx, { ...a, pose: pp.pose, uni: uA, holdBall: pp.holdBall, player: lg.pitchers[0] });
+  const bs = ballScreen(V, pitch, 1000, scene === 'bat' ? 1450 : 1700);
+  drawBall(ctx, bs.x, bs.y, bs.r, bs.spin);
+  const b = batterAnchor(V, 'L');
+  const pose = scene === 'bat' ? batterPoseAt(1450, { pitchStart: 1000, travelMs: 700 }) : batterPoseAt(1070, { swingAt: 1000 });
+  drawBatter(ctx, { ...b, pose, uni: uH });
+} else if (scene === 'field') {
+  const play = planPlay('DOUBLE', true, { pull: 0.5 }, { bats: 'L' }, createRng(3), 0);
+  drawFieldView(ctx, W, H, play, play.dur * 0.6, uA, [true, false, false]);
+} else if (scene === 'closeup') {
+  ctx.fillStyle = '#2f8c43'; ctx.fillRect(0, 0, W, H);
+  drawBatter(ctx, { x: W * 0.3, y: H * 0.48, scale: 1.9, facing: 1, pose: BAT_POSES.STANCE, uni: uH });
+  drawPitcher(ctx, { x: W * 0.72, y: H * 0.48, scale: 1.9, mirror: 1, pose: PIT_POSES.SET, uni: uA, holdBall: true });
+  drawPitcher(ctx, { x: W * 0.3, y: H * 0.97, scale: 1.9, mirror: -1, pose: PIT_POSES.SET, uni: uH, back: true, holdBall: true, player: sam.pitchers[0] });
+  drawBatter(ctx, { x: W * 0.72, y: H * 0.97, scale: 1.9, facing: -1, pose: BAT_POSES.CONTACT, uni: uA });
+}
+document.title = 'ready';
+</script>
+</body>
+</html>
