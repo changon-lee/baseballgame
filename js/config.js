@@ -8,4 +8,11 @@ export const CONFIG = {
   AIM_LIFT_PX: 60,         // 조준점을 손가락 위로 띄우는 거리
   WIND_CPU_MS: 800,        // 상대 투수 와인드업 시간
   WIND_USER_MS: 550,       // 내 투수 와인드업 시간
+  // 밸런스 (tests/balance.test.mjs가 야구다운 범위인지 확인)
+  BALANCE: {
+    EDGE_PENALTY: 0.35, BREAK_PENALTY: 0.08, WEAK_CONTACT: 0.25,
+    HR_Q: 0.78, HR_BASE: 0.10, HR_POWER: 0.55,
+    HIT_BASE: 0.05, HIT_Q: 0.40,
+    CPU_ZONE: 0.5, SWING_ZONE: 0.68, CHASE: 0.15, SIGMA_BASE: 100,
+  },
 };
