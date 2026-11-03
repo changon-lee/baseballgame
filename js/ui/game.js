@@ -20,16 +20,25 @@ const LABEL = {
 const HITS = ['SINGLE', 'DOUBLE', 'TRIPLE', 'HR'];
 const OUTS = ['OUT', 'SAC_FLY', 'DOUBLE_PLAY'];
 
-export function showGame(root, { userTeam, cpuTeam, lineup, innings }, onExit) {
+// onExit(result): 경기를 끝까지 하면 { home, away, log, starterId }, 중간에 나가면 null
+export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterId, title }, onExit) {
   const rng = createRng((Date.now() ^ (Math.random() * 1e9)) >>> 0);
-  let match = createMatch({ userTeam, cpuTeam, userLineup: lineup, innings, rng });
+  let match = createMatch({ userTeam, cpuTeam, userLineup: lineup, innings, rng, cpuStarterId });
   const uni = { home: uniformFor(userTeam, 'home'), away: uniformFor(cpuTeam, 'away') };
 
   root.innerHTML = `
   <div class="game">
     <div class="board">
-      <div class="top"><span class="sc"></span><span class="inn"></span><button class="exit" aria-label="나가기">✕</button></div>
-      <div class="sub"><span class="mu"></span><span class="bso"></span></div>
+      <div class="bug">
+        <div class="tms">
+          <div class="tm" style="--c:${cpuTeam.colors.main}"><i></i><b>${cpuTeam.short}</b><span class="r ra">0</span></div>
+          <div class="tm" style="--c:${userTeam.colors.main}"><i></i><b>${userTeam.short}</b><span class="r rh">0</span></div>
+        </div>
+        <div class="st"><div class="inn"></div><div class="bases"><i></i><i></i><i></i></div></div>
+        <div class="bso"></div>
+        <button class="exit" aria-label="나가기">✕</button>
+      </div>
+      <div class="sub"><span class="mu"></span>${title ? `<span class="ttl">${title}</span>` : ''}</div>
     </div>
     <div class="stage"><canvas></canvas><div class="overlay hidden"></div></div>
     <div class="controls"></div>
@@ -66,11 +75,13 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings }, onExit) {
   // ── 스코어보드 ──
   function updateBoard() {
     const g = match.game, mu = matchup(match);
-    $('.sc').textContent = `${cpuTeam.short} ${g.score.away} : ${g.score.home} ${userTeam.short}`;
-    $('.inn').textContent = `${g.inning}회${g.half === 'top' ? '초' : '말'}`;
+    $('.ra').textContent = g.score.away; $('.rh').textContent = g.score.home;
+    $('.tms').dataset.bat = g.half === 'top' ? 'away' : 'home';
+    $('.inn').innerHTML = `<small>${g.half === 'top' ? '▲' : '▼'}</small>${g.inning}`;
+    root.querySelectorAll('.bases i').forEach((el, i) => el.classList.toggle('on', !!g.bases[i]));
     const dots = (cls, n, max) => Array.from({ length: max }, (_, i) => `<i class="${cls}${i < n ? ' on' : ''}"></i>`).join('');
-    $('.bso').innerHTML = `B${dots('b', g.balls, 3)} S${dots('s', g.strikes, 2)} O${dots('o', g.outs, 2)}`;
-    $('.mu').textContent = `${mu.pitcher.name}(${match.pitchCount[mu.pitchingSide]}구) vs ${g.battingIndex[mu.battingSide] + 1}번 ${mu.batter.name}`;
+    $('.bso').innerHTML = `<div><em>B</em>${dots('b', g.balls, 3)}</div><div><em>S</em>${dots('s', g.strikes, 2)}</div><div><em>O</em>${dots('o', g.outs, 2)}</div>`;
+    $('.mu').innerHTML = `<b>${mu.pitcher.name}</b> <small>${match.pitchCount[mu.pitchingSide]}구</small> <span class="vs">vs</span> <small>${g.battingIndex[mu.battingSide] + 1}번</small> <b>${mu.batter.name}</b>`;
   }
   const setControls = html => { controls.innerHTML = html; };
   function showMsg(text, color, ms, sub, then) {
@@ -218,24 +229,29 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings }, onExit) {
   function showEnd() {
     mode = 'end';
     const g = match.game;
-    const res = g.result === 'home' ? `${userTeam.short} 승리!` : g.result === 'away' ? `${cpuTeam.short} 승리` : '무승부';
-    overlay.innerHTML = `<div class="tag">경기 종료 · ${g.inning}회</div><h1>${res}</h1>
-      <p class="final">${cpuTeam.short} ${g.score.away} : ${g.score.home} ${userTeam.short}</p>
-      <button class="primary" data-act="menu">메뉴로</button>`;
+    const res = g.result === 'home' ? '승리' : g.result === 'away' ? '패배' : '무승부';
+    overlay.innerHTML = `<div class="end-card ${g.result === 'home' ? 'win' : ''}">
+      <div class="tag">경기 종료 · ${g.inning}회</div><h1>${res}</h1>
+      <div class="final"><span>${cpuTeam.short}</span><b>${g.score.away}</b><i>:</i><b>${g.score.home}</b><span>${userTeam.short}</span></div>
+      <button class="primary" data-act="menu">계속</button></div>`;
     overlay.classList.remove('hidden');
     if (g.result === 'home') { playSound('cheer'); vibrate([80, 60, 80, 60, 160]); }
-    overlay.querySelector('[data-act=menu]').onclick = exit;
+    overlay.querySelector('[data-act=menu]').onclick = () => exit({
+      home: g.score.home, away: g.score.away, log: match.log, starterId: lineup.starterId });
     setControls('');
   }
 
-  function exit() {
+  function exit(result = null) {
     alive = false;
     loop.stop(); timers.forEach(clearTimeout); window.removeEventListener('resize', resize);
     document.removeEventListener('visibilitychange', onVisibility);
     root.removeEventListener('pointerdown', onRootDown);
-    onExit();
+    onExit(result);
   }
-  $('.exit').onclick = () => { if (mode === 'end' || confirm('경기를 그만두고 메뉴로 갈까요?')) exit(); };
+  $('.exit').onclick = () => {
+    if (mode === 'end') return overlay.querySelector('[data-act=menu]').click();
+    if (confirm('경기를 그만둘까요? (시즌 경기는 기록되지 않고 다시 할 수 있어요)')) exit();
+  };
 
   // 화면이 가려지면 던지던 공을 취소하고 다시 던진다(순간이동 방지)
   let interrupted = false;

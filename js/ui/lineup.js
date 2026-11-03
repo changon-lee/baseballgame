@@ -28,7 +28,7 @@ export function showLineup(root, team, storage, lineup, onDone) {
         <button class="chip ${p.id === starterId ? 'on' : ''}" data-sp="${p.id}">${p.name}<small>${p.velo}km · 제구 ${p.control}</small></button>`).join('')}
       </div>
       ${note ? `<p class="note">${note}</p>` : ''}
-      <div class="menu-actions"><button class="primary" id="save">저장</button></div>
+      <div class="actions"><button class="primary" id="save">저장</button></div>
     </div>`;
     root.querySelectorAll('[data-id]').forEach(el => { el.onclick = () => tap(el.dataset.id); });
     root.querySelectorAll('[data-sp]').forEach(el => { el.onclick = () => { starterId = el.dataset.sp; render(); }; });

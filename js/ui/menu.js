@@ -1,26 +1,24 @@
 // 메뉴: 상대팀, 이닝 수, 경기 시작, 타순 편집
 import { TEAMS, USER_TEAM_ID } from '../data/rosters.js';
 
-export function showMenu(root, settings, { onStart, onLineup }) {
+export function showMenu(root, settings, { onStart, onLineup, onBack }) {
   let { cpuTeamId, innings } = settings;
   const rivals = TEAMS.filter(t => t.id !== USER_TEAM_ID);
   root.innerHTML = `
   <div class="screen menu">
-    <header class="hero">
-      <div class="hero-tag">KBO · 개인용</div>
-      <h1>삼성 라이온즈<br><span>야구</span></h1>
-    </header>
+    <header class="bar"><button class="ghost small" id="back">←</button><h2>친선 경기</h2></header>
+    <p class="hint">기록·성장에 반영되지 않는 한 경기예요</p>
     <section>
-      <h2>상대 팀</h2>
+      <div class="label">상대 팀</div>
       <div class="team-grid">${rivals.map(t => `
         <button class="team-btn" data-team="${t.id}" style="--c:${t.colors.main};--s:${t.colors.sub}">${t.short}</button>`).join('')}
       </div>
     </section>
     <section>
-      <h2>이닝</h2>
+      <div class="label">이닝</div>
       <div class="seg">${[3, 5, 9].map(n => `<button data-inn="${n}">${n}이닝</button>`).join('')}</div>
     </section>
-    <div class="menu-actions">
+    <div class="actions">
       <button class="ghost" id="edit-lineup">타순 편집</button>
       <button class="primary" id="start">경기 시작</button>
     </div>
@@ -32,6 +30,7 @@ export function showMenu(root, settings, { onStart, onLineup }) {
   root.querySelectorAll('[data-team]').forEach(b => { b.onclick = () => { cpuTeamId = b.dataset.team; sync(); }; });
   root.querySelectorAll('[data-inn]').forEach(b => { b.onclick = () => { innings = +b.dataset.inn; sync(); }; });
   root.querySelector('#start').onclick = () => onStart({ cpuTeamId, innings });
+  root.querySelector('#back').onclick = onBack;
   root.querySelector('#edit-lineup').onclick = () => onLineup({ cpuTeamId, innings });
   sync();
 }
