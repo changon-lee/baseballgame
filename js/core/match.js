@@ -10,9 +10,9 @@ const other = s => (s === 'home' ? 'away' : 'home');
 const pitcherOf = (m, side) => m.teams[side].pitchers.find(p => p.id === m.pitcher[side]);
 const batterOf = (m, side) => m.teams[side].batters.find(b => b.id === m.lineups[side].order[m.game.battingIndex[side]]);
 
-export function createMatch({ userTeam, cpuTeam, userLineup, innings, rng }) {
+export function createMatch({ userTeam, cpuTeam, userLineup, innings, rng, cpuStarterId }) {
   const sps = cpuTeam.pitchers.filter(p => p.role === 'SP');
-  const cpuStarter = sps[Math.floor(rng() * sps.length)];
+  const cpuStarter = sps.find(p => p.id === cpuStarterId) || sps[Math.floor(rng() * sps.length)];
   const lineups = { home: userLineup, away: { ...defaultLineup(cpuTeam), starterId: cpuStarter.id } };
   return {
     game: createGameState({ innings }),
@@ -21,6 +21,7 @@ export function createMatch({ userTeam, cpuTeam, userLineup, innings, rng }) {
     pitcher: { home: userLineup.starterId, away: cpuStarter.id },
     pitchCount: { home: 0, away: 0 },
     used: { home: new Set(), away: new Set() },
+    log: [],                      // 끝난 타석: { batterId, pitcherId, event, runs, outs }
   };
 }
 
@@ -34,10 +35,21 @@ export function matchup(m) {
   };
 }
 
+// 타석 결과 이름 (볼넷·삼진은 마지막 공 이벤트와 다르다)
+const paEvent = e => (e === 'BALL' ? 'WALK' : e === 'STRIKE' ? 'STRIKEOUT' : e);
+const OUTS_OF = { STRIKEOUT: 1, OUT: 1, SAC_FLY: 1, DOUBLE_PLAY: 2 };
+
 // 공 하나의 결과를 경기에 반영
 function commit(m, event, ps) {
+  const mu = matchup(m);
   const { state, runs, paEnded } = applyEvent(m.game, event);
-  return { match: { ...m, game: state, pitchCount: { ...m.pitchCount, [ps]: m.pitchCount[ps] + 1 } }, runs, paEnded };
+  let log = m.log || [];
+  if (paEnded) {
+    const ev = paEvent(event);
+    const outs = Math.min(OUTS_OF[ev] || 0, 3 - m.game.outs);
+    log = [...log, { batterId: mu.batter.id, pitcherId: mu.pitcher.id, event: ev, runs, outs }];
+  }
+  return { match: { ...m, game: state, log, pitchCount: { ...m.pitchCount, [ps]: m.pitchCount[ps] + 1 } }, runs, paEnded };
 }
 
 // 스윙(또는 노스윙) → 이벤트
@@ -81,12 +93,12 @@ export function changePitcher(m, side, pitcherId) {
   return { ...m, used, pitcher: { ...m.pitcher, [side]: pitcherId }, pitchCount: { ...m.pitchCount, [side]: 0 } };
 }
 
-export function cpuMaybeChangePitcher(m, rng) {
-  const p = pitcherOf(m, 'away');
-  if (fatigue(m.pitchCount.away, p.stamina) < 0.6) return m;
-  const avail = availableRelievers(m.teams.away, m.used.away, p.id);
+export function cpuMaybeChangePitcher(m, rng, side = 'away') {
+  const p = pitcherOf(m, side);
+  if (fatigue(m.pitchCount[side], p.stamina) < 0.6) return m;
+  const avail = availableRelievers(m.teams[side], m.used[side], p.id);
   const rps = avail.filter(q => q.role === 'RP');
   const pool = rps.length ? rps : avail;
   if (!pool.length) return m;
-  return changePitcher(m, 'away', pool[Math.floor(rng() * pool.length)].id);
+  return changePitcher(m, side, pool[Math.floor(rng() * pool.length)].id);
 }
