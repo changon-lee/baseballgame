@@ -3,7 +3,8 @@ import { saveLineup } from '../core/team.js';
 
 export function showLineup(root, team, storage, lineup, onDone) {
   const order = [...lineup.order];
-  let starterId = lineup.starterId, picked = null, note = '';
+  let starterId = lineup.starterId, picked = null, note = '', done = false;
+  const finish = l => { if (done) return; done = true; onDone(l); };   // 한 번만 나간다
   const byId = id => team.batters.find(b => b.id === id);
   const batsLabel = b => (b.bats === 'L' ? '좌' : b.bats === 'R' ? '우' : '양');
 
@@ -31,13 +32,13 @@ export function showLineup(root, team, storage, lineup, onDone) {
     </div>`;
     root.querySelectorAll('[data-id]').forEach(el => { el.onclick = () => tap(el.dataset.id); });
     root.querySelectorAll('[data-sp]').forEach(el => { el.onclick = () => { starterId = el.dataset.sp; render(); }; });
-    root.querySelector('#back').onclick = () => onDone({ order: [...order], starterId });
+    root.querySelector('#back').onclick = () => finish({ order: [...order], starterId });
     root.querySelector('#save').onclick = () => {
       const l = { order: [...order], starterId };
-      if (saveLineup(storage, team, l)) return onDone(l);
+      if (saveLineup(storage, team, l)) return finish(l);
       note = '이 브라우저에서는 저장이 안 돼요 (이번 경기에만 적용돼요)';
       render();
-      setTimeout(() => onDone(l), 1400);
+      setTimeout(() => finish(l), 1400);
     };
   };
 

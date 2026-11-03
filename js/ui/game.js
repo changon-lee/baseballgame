@@ -45,7 +45,11 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings }, onExit) {
   let ball = null;              // { pitch, start, wind, arrival, result, swung, hitAt, contact }
   let pitchAt = 0, swingAt = null, play = null, msg = null, info = '';
   let timers = [];
-  const later = (fn, ms) => { const id = setTimeout(fn, ms); timers.push(id); return id; };
+  let alive = true;            // exit() 뒤에는 어떤 타이머·입력도 이 경기를 움직이지 않는다
+  const later = (fn, ms) => {
+    const id = setTimeout(() => { timers = timers.filter(t => t !== id); if (alive) fn(); }, ms);
+    timers.push(id); return id;
+  };
 
   // ── 레이아웃 ──
   function resize() {
@@ -80,6 +84,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings }, onExit) {
     if (match.game.over) return showEnd();
     ball = null; play = null; swingAt = null; pitchAt = 0;
     setView();
+    // 화면이 숨겨진 동안에는 다음 공을 준비하지 않는다(돌아오면 onVisibility가 이어서 진행)
+    if (document.hidden) { interrupted = true; mode = 'msg'; return; }
     if (userPitching()) {
       mode = 'aim'; pitchType = null;
       setControls(`<p>스트라이크존 위를 <b>드래그</b>해서 포수 미트 위치를 정하세요</p>
@@ -223,8 +229,10 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings }, onExit) {
   }
 
   function exit() {
+    alive = false;
     loop.stop(); timers.forEach(clearTimeout); window.removeEventListener('resize', resize);
     document.removeEventListener('visibilitychange', onVisibility);
+    root.removeEventListener('pointerdown', onRootDown);
     onExit();
   }
   $('.exit').onclick = () => { if (mode === 'end' || confirm('경기를 그만두고 메뉴로 갈까요?')) exit(); };
@@ -235,6 +243,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings }, onExit) {
     if (document.hidden) {
       if (mode === 'flight' || mode === 'bflight' || mode === 'bwait' || mode === 'gauge') { interrupted = true; ball = null; mode = 'msg'; }
     } else if (interrupted) { interrupted = false; nextPlay(); }
+    else if (mode === 'bwait') pitchAt = Math.max(pitchAt, performance.now() + CONFIG.WIND_CPU_MS + 500);
   }
   document.addEventListener('visibilitychange', onVisibility);
 
@@ -250,12 +259,14 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings }, onExit) {
   cv.addEventListener('pointermove', e => { if (dragging) target = aimFromTouch(zoneTouch(e), zoneRect(V), CONFIG.AIM_LIFT_PX, V.mirror); });
   const endDrag = () => { if (dragging) { dragging = false; showPitchButtons(); } };
   cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
-  root.addEventListener('pointerdown', e => {
+  function onRootDown(e) {
+    if (!alive) return;
     unlockAudio();
     if (e.target.closest('button')) return;
     if (mode === 'gauge') throwUserPitch(e.timeStamp);
     else if (mode === 'bflight') userSwing(e.timeStamp);
-  });
+  }
+  root.addEventListener('pointerdown', onRootDown);
 
   // ── 그리기 ──
   function drawGauge(now) {
@@ -366,7 +377,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings }, onExit) {
     }
   }
 
-  window.__game = () => ({ mode, dragging, V: !!V, W, H, target });
+  window.__game = () => ({ mode, dragging, V: !!V, W, H, target, ball: !!ball, ballStart: ball ? ball.start : null, arrival: ball ? ball.arrival : null, swung: !!(ball && ball.swung), pitchAt });
   const loop = startLoop(frame);
   resize();
   updateBoard();
