@@ -366,6 +366,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings }, onExit) {
     }
   }
 
+  window.__game = () => ({ mode, dragging, V: !!V, W, H, target });
   const loop = startLoop(frame);
   resize();
   updateBoard();
