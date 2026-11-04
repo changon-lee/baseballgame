@@ -338,6 +338,18 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       return;
     }
 
+    // 공 잔상: 바로 전 위치 몇 개를 옅게 → 구종마다 휘는 길이 보인다
+    const drawTrail = t => {
+      ctx.save(); ctx.fillStyle = '#fff';
+      for (let i = 6; i >= 1; i--) {
+        const tt = t - i * 16;
+        if (tt < ball.start) continue;
+        const q = ballScreen(V, ball.pitch, ball.start, tt);
+        ctx.globalAlpha = 0.32 * (1 - i / 7);
+        ctx.beginPath(); ctx.arc(q.x, q.y, q.r * (1 - i * 0.07), 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+    };
     if (!bg[V.kind] || bg[V.kind].ready !== standsReady(V.kind)) bg[V.kind] = buildBackdrop(V.kind, V, W, H, DPR, userTeam);
     ctx.drawImage(bg[V.kind], 0, 0, W, H);
     const mu = matchup(match);
@@ -360,12 +372,12 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       if (!drawCatcherSprite(ctx, V, aiming ? target : null, now)) drawCatcherAndUmpire(ctx, V, aiming ? target : null, uni.home);
       drawZone(0.7);
       drawB();
-      if (bp && bp.prog <= 1.02) drawBall(ctx, bp.x, bp.y, bp.r, bp.spin);
+      if (bp && bp.prog <= 1.02) { drawTrail(now); drawBall(ctx, bp.x, bp.y, bp.r, bp.spin); }
       drawP();
     } else {
       drawP();
       drawZone(0.32);
-      if (bp && bp.prog <= 1.02) drawBall(ctx, bp.x, bp.y, bp.r, bp.spin);
+      if (bp && bp.prog <= 1.02) { drawTrail(now); drawBall(ctx, bp.x, bp.y, bp.r, bp.spin); }
       drawB();
     }
     drawHUD();

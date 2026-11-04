@@ -9,10 +9,11 @@
 <body>
 <canvas id="cv"></canvas>
 <script type="module">
-// 개발 확인용: #pitch #windup #bat #swing #field #closeup #sprites(일러스트 동작 연속 장면)
+// 개발 확인용: #pitch #windup #bat #swing #field #closeup #sprites(일러스트 동작 연속 장면) #traj(구종별 궤적)
 import { getTeam } from './js/data/rosters.js';
 import { createRng } from './js/core/rng.js';
-import { makeView, ballScreen } from './js/ui/art/view.js';
+import { makeView, ballScreen, PITCH_PATH } from './js/ui/art/view.js';
+import { PITCH_TYPES } from './js/core/pitch.js';
 import { buildBackdrop } from './js/ui/art/stadium.js';
 import { uniformFor } from './js/ui/art/uniforms.js';
 import { PIT_POSES, BAT_POSES, pitcherPoseAt, batterPoseAt } from './js/ui/art/rig.js';
@@ -94,6 +95,24 @@ if (scene === 'sprites') {
     ctx.fillText(Math.round(tb - rel) + 'ms', cw * i + 2, 12); ctx.fillText((ts - 20000) + 'ms', cw * i + 2, rh * 2 + 12);
   }
   document.title = 'sprites-ready';
+}
+if (scene === 'traj') {                      // 구종별 공 궤적(타격 시점 / 투구 시점)
+  const cols = ['#ff5252', '#ffb74d', '#fff176', '#81c784', '#4fc3f7', '#ba68c8', '#f06292'];
+  ['catcher', 'pitcher'].forEach((kind, i) => {
+    const pw = W / 2, V = makeView(kind, pw, H);
+    ctx.save(); ctx.translate(i * pw, 0);
+    ctx.fillStyle = '#2f6b3a'; ctx.fillRect(0, 0, pw, H);
+    ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.strokeRect(V.cx - V.zw / 2, V.cy - V.zh / 2, V.zw, V.zh);
+    Object.keys(PITCH_PATH).forEach((type, j) => {
+      const p = { type, throws: 'R', plate: { x: 0, y: 0 }, travelMs: 600 / PITCH_TYPES[type].speedMul };
+      ctx.fillStyle = cols[j];
+      for (let t = 0; t <= p.travelMs; t += p.travelMs / 40) {
+        const b = ballScreen(V, p, 0, t); ctx.globalAlpha = 0.85; ctx.beginPath(); ctx.arc(b.x, b.y, Math.max(1.5, b.r * 0.35), 0, 7); ctx.fill();
+      }
+      ctx.globalAlpha = 1; ctx.font = '12px sans-serif'; ctx.fillText(PITCH_TYPES[type].name, 6, 16 + j * 15);
+    });
+    ctx.restore();
+  });
 }
 document.title = document.title === 'sprites-ready' ? 'sprites-ready' : 'ready';
 </script>

@@ -8,7 +8,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export function makeView(kind, W, H) {
   if (kind === 'catcher') {
     const zw = Math.min(W * 0.36, H * 0.24), zh = zw * 1.2, cy = H * 0.58;
-    return { kind, W, H, zw, zh, cx: W / 2, cy, mirror: false, d0: 18.5, d1: 1.5,
+    return { kind, W, H, zw, zh, cx: W / 2, cy, mirror: false, d0: 18.5, d1: 4.5, brk: 1.2, screenBreak: true,
       feetY: cy + zh * 1.06, figH: zh * 2, batX: 1.9, moundY: H * 0.34, pitX: W / 2, pitY: H * 0.34, pitS: zh * 0.85 / 180 };
   }
   const zw = Math.min(W * 0.36, H * 0.23), zh = zw * 1.2, cy = H * 0.36;
@@ -43,7 +43,25 @@ export function batterAnchor(V, bats) {
   return { x, y: V.feetY, scale: V.figH / 180, facing: (V.mirror ? -1 : 1) * -side };
 }
 
-// 공 화면 위치. 원근(가까울수록 큼) + 변화는 늦게 꺾임
+// 구종별로 화면에 보이는 휘는 정도(존 반폭·반높이 단위, 우투수 기준, 중력 포함)와 휘는 시점.
+// 공은 (도착점 - 휨) 쪽으로 곧게 출발해서 휨 * p^n 만큼 꺾여 도착점에 닿는다. n이 클수록 늦게 확 꺾인다.
+// 게임 판정(도착점, 타격)은 그대로이고 보이는 길만 다르다.
+export const PITCH_PATH = {
+  FB: { x: 0.0, y: -0.3, n: 2 },      // 직구: 거의 일직선
+  SI: { x: 0.9, y: -1.0, n: 2.3 },    // 투심: 팔 쪽으로 휘며 가라앉음
+  CT: { x: -0.7, y: -0.5, n: 2.8 },   // 커터: 막판에 살짝 반대쪽
+  SL: { x: -1.7, y: -0.9, n: 2.6 },   // 슬라이더: 옆으로 크게, 늦게
+  CU: { x: -0.8, y: -2.7, n: 2 },     // 커브: 위로 떴다가 크게 뚝
+  CH: { x: 0.9, y: -1.5, n: 2.6 },    // 체인지업: 팔 쪽으로 흐르며 떨어짐
+  FO: { x: 0.0, y: -2.3, n: 3.4 },    // 포크: 똑바로 오다 막판에 뚝
+};
+export function pitchPath(pitch) {
+  const p = PITCH_PATH[pitch.type];
+  if (!p) return { x: pitch.breakX, y: pitch.breakY, n: 2 };
+  return { x: p.x * (pitch.throws === 'L' ? -1 : 1), y: p.y, n: p.n };
+}
+
+// 공 화면 위치. 원근(가까울수록 큼) + 구종별 꺾임
 export function ballScreen(V, pitch, startAt, now) {
   const prog = clamp((now - startAt) / pitch.travelMs, 0, 1.1);
   const pp = Math.min(prog, 1);
@@ -51,8 +69,10 @@ export function ballScreen(V, pitch, startAt, now) {
   const k = (1 / V.d0 - 1 / d) / (1 / V.d0 - 1 / V.d1);
   const S = releasePoint(V, pitch.throws);
   const [px, py] = toS(V, pitch.plate.x, pitch.plate.y);
-  const Bx = (V.mirror ? -1 : 1) * pitch.breakX * V.zw / 2, By = -pitch.breakY * V.zh / 2;
-  const late = pp * pp * (V.d1 / d);
+  const br = pitchPath(pitch), m = V.brk || 1;            // 타격 시점은 원근 때문에 덜 휘어 보여서 더 키운다
+  const Bx = (V.mirror ? -1 : 1) * br.x * m * V.zw / 2, By = -br.y * m * V.zh / 2;
+  // 타격 시점: 원근대로면 꺾임이 마지막 두세 프레임에 몰려 안 보여서, 화면에서 움직인 만큼에 맞춰 꺾는다
+  const late = V.screenBreak ? Math.pow(k, br.n) : Math.pow(pp, br.n) * (V.d1 / d);
   const x = S[0] + (px - Bx - S[0]) * k + Bx * late, y = S[1] + (py - By - S[1]) * k + By * late;
   const r = clamp(ballRadius(V) * V.d1 / d, 2.5, V.zw * 0.28);
   return { x, y, r, prog, spin: (now - startAt) / 25 };
