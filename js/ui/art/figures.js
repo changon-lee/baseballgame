@@ -116,6 +116,7 @@ function torsoPart(ctx, a, b, hip, u, light, frontView) {
 }
 
 // ── 타자 ───────────────────────────────────────────────
+export function drawBat(ctx, hands, ang) { bat(ctx, hands, ang); }
 function bat(ctx, hands, ang) {
   const d = [Math.cos(ang), Math.sin(ang)];
   const knob = [hands[0] - d[0] * 8, hands[1] - d[1] * 8];

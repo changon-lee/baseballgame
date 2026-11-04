@@ -6,7 +6,8 @@ import { availableRelievers } from '../core/team.js';
 import { createMatch, matchup, playUserPitch, cpuPitchToUser, resolveUserSwing, changePitcher, cpuMaybeChangePitcher } from '../core/match.js';
 import { startLoop } from './loop.js';
 import { unlockAudio, playSound, vibrate, shake } from './feedback.js';
-import { makeView, toS, zoneRect, ballScreen, ballRadius, pitcherAnchor, batterAnchor } from './art/view.js';
+import { makeView, toS, zoneRect, ballScreen, ballRadius, pitcherAnchor, batterAnchor, setReleaseOverride } from './art/view.js';
+import { drawPitcherSprite, drawBatterSprite, drawCatcherSprite, spriteReleaseOffset } from './art/sprites.js';
 import { buildBackdrop } from './art/stadium.js';
 import { uniformFor } from './art/uniforms.js';
 import { pitcherPoseAt, batterPoseAt } from './art/rig.js';
@@ -23,6 +24,7 @@ const OUTS = ['OUT', 'SAC_FLY', 'DOUBLE_PLAY'];
 // onExit(result): 경기를 끝까지 하면 { home, away, log, starterId }, 중간에 나가면 null
 export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterId, title }, onExit) {
   const rng = createRng((Date.now() ^ (Math.random() * 1e9)) >>> 0);
+  setReleaseOverride(spriteReleaseOffset);
   let match = createMatch({ userTeam, cpuTeam, userLineup: lineup, innings, rng, cpuStarterId });
   const uni = { home: uniformFor(userTeam, 'home'), away: uniformFor(cpuTeam, 'away') };
 
@@ -343,21 +345,25 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     const pp = ball ? pitcherPoseAt(now, ball.start, ball.wind) : mode === 'bwait' && pitchAt ? pitcherPoseAt(now, pitchAt, CONFIG.WIND_CPU_MS) : pitcherPoseAt(now, null, 0);
     const pa = pitcherAnchor(V, mu.pitcher.throws), ba = batterAnchor(V, mu.batter.bats === 'S' ? (mu.pitcher.throws === 'L' ? 'R' : 'L') : mu.batter.bats);
     const bpose = batterPoseAt(now, { swingAt, pitchStart: ball ? ball.start : null, travelMs: ball ? ball.pitch.travelMs : 1 });
-    const pitcherArgs = { ...pa, pose: pp.pose, uni: uni[mu.pitchingSide], holdBall: pp.holdBall, player: mu.pitcher };
-    const batterArgs = { ...ba, pose: bpose, uni: uni[mu.battingSide] };
+    const releaseAt = ball ? ball.start : mode === 'bwait' && pitchAt ? pitchAt : null;
+    const pitcherArgs = { ...pa, pose: pp.pose, uni: uni[mu.pitchingSide], holdBall: pp.holdBall, player: mu.pitcher,
+      throws: mu.pitcher.throws, now, releaseAt, windMs: ball ? ball.wind : CONFIG.WIND_CPU_MS };
+    const batterArgs = { ...ba, pose: bpose, uni: uni[mu.battingSide], now, swingAt };
+    const drawP = () => drawPitcherSprite(ctx, pitcherArgs) || drawPitcher(ctx, pitcherArgs);
+    const drawB = () => drawBatterSprite(ctx, batterArgs) || drawBatter(ctx, batterArgs);
 
     if (V.kind === 'pitcher') {
       const aiming = mode === 'aim' || mode === 'pick' || mode === 'gauge' || (ball && !ball.hitAt);
-      drawCatcherAndUmpire(ctx, V, aiming ? target : null, uni.home);
+      if (!drawCatcherSprite(ctx, V, aiming ? target : null)) drawCatcherAndUmpire(ctx, V, aiming ? target : null, uni.home);
       drawZone(0.7);
-      drawBatter(ctx, batterArgs);
+      drawB();
       if (bp && bp.prog <= 1.02) drawBall(ctx, bp.x, bp.y, bp.r, bp.spin);
-      drawPitcher(ctx, pitcherArgs);
+      drawP();
     } else {
-      drawPitcher(ctx, pitcherArgs);
+      drawP();
       drawZone(0.32);
       if (bp && bp.prog <= 1.02) drawBall(ctx, bp.x, bp.y, bp.r, bp.spin);
-      drawBatter(ctx, batterArgs);
+      drawB();
     }
     drawHUD();
     if (mode === 'gauge') drawGauge(now);

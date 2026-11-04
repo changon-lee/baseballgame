@@ -1,0 +1,103 @@
+{
+ "pitcher_back": [
+  {
+   "src": "pitcher_back_0.webp",
+   "w": 162,
+   "h": 505,
+   "ax": 78.5,
+   "ay": 505
+  },
+  {
+   "src": "pitcher_back_1.webp",
+   "w": 173,
+   "h": 496,
+   "ax": 109.0,
+   "ay": 496
+  },
+  {
+   "src": "pitcher_back_2.webp",
+   "w": 326,
+   "h": 458,
+   "ax": 146.5,
+   "ay": 458
+  },
+  {
+   "src": "pitcher_back_3.webp",
+   "w": 342,
+   "h": 465,
+   "ax": 135.5,
+   "ay": 465
+  },
+  {
+   "src": "pitcher_back_4.webp",
+   "w": 243,
+   "h": 374,
+   "ax": 109.5,
+   "ay": 374
+  }
+ ],
+ "pitcher_front": [
+  {
+   "src": "pitcher_front_0.webp",
+   "w": 251,
+   "h": 730,
+   "ax": 120.5,
+   "ay": 730
+  },
+  {
+   "src": "pitcher_front_1.webp",
+   "w": 225,
+   "h": 707,
+   "ax": 137.5,
+   "ay": 707
+  },
+  {
+   "src": "pitcher_front_2.webp",
+   "w": 242,
+   "h": 665,
+   "ax": 105.5,
+   "ay": 665
+  }
+ ],
+ "batter": [
+  {
+   "src": "batter_0.webp",
+   "w": 333,
+   "h": 660,
+   "ax": 166.0,
+   "ay": 660
+  },
+  {
+   "src": "batter_1.webp",
+   "w": 411,
+   "h": 642,
+   "ax": 202.0,
+   "ay": 642
+  },
+  {
+   "src": "batter_2.webp",
+   "w": 395,
+   "h": 641,
+   "ax": 191.5,
+   "ay": 641
+  }
+ ],
+ "catcher": [
+  {
+   "src": "catcher_0.webp",
+   "w": 762,
+   "h": 1005,
+   "ax": 380.5,
+   "ay": 1005
+  }
+ ],
+ "umpire": [
+  {
+   "src": "umpire_0.webp",
+   "w": 633,
+   "h": 1177,
+   "ax": 316.0,
+   "ay": 1177
+  }
+ ]
+}

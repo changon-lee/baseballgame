@@ -27,7 +27,12 @@ export function pitcherAnchor(V, throws) {
   const mirror = (throws === 'L' ? -1 : 1) * (front ? 1 : -1);
   return { x: V.pitX, y: V.pitY, scale: V.pitS, mirror, back: !front };
 }
+// 일러스트 스프라이트를 쓰면 손 위치가 달라서, 화면 쪽에서 덮어쓸 수 있게 한다
+let releaseOverride = null;
+export function setReleaseOverride(fn) { releaseOverride = fn; }
 export function releasePoint(V, throws) {
+  const o = releaseOverride && releaseOverride(V.kind !== 'catcher', throws);
+  if (o) return [V.pitX + o[0] * V.pitS, V.pitY + o[1] * V.pitS];
   const a = pitcherAnchor(V, throws), h = PIT_POSES.RELEASE.lH;
   return [a.x + h[0] * a.scale * a.mirror, a.y + h[1] * a.scale];
 }
