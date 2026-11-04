@@ -7,7 +7,7 @@ import { drawBat } from './figures.js';
 
 const BASE = new URL('../../../assets/sprites/', import.meta.url).href;
 const STAND = 182;                                       // 서 있는 선수 키(포즈 단위)
-const BAT_SHIFT = 26;                                    // 그림 타자는 손이 몸 뒤쪽이라 홈플레이트 쪽으로 당긴다
+const BAT_SHIFT = 0;                                     // 필요하면 타자 그림을 홈플레이트 쪽(+)으로 당긴다
 
 // dy/sc = 그 동작일 때 몸 위치·크기 변화(투수가 홈 쪽으로 내딛는 느낌)
 const SETS = {

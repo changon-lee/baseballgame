@@ -9,11 +9,11 @@ export function makeView(kind, W, H) {
   if (kind === 'catcher') {
     const zw = Math.min(W * 0.36, H * 0.24), zh = zw * 1.2, cy = H * 0.58;
     return { kind, W, H, zw, zh, cx: W / 2, cy, mirror: false, d0: 18.5, d1: 1.5,
-      feetY: cy + zh * 1.06, figH: zh * 2, moundY: H * 0.34, pitX: W / 2, pitY: H * 0.34, pitS: zh * 0.85 / 180 };
+      feetY: cy + zh * 1.06, figH: zh * 2, batX: 1.9, moundY: H * 0.34, pitX: W / 2, pitY: H * 0.34, pitS: zh * 0.85 / 180 };
   }
   const zw = Math.min(W * 0.36, H * 0.23), zh = zw * 1.2, cy = H * 0.36;
   return { kind, W, H, zw, zh, cx: W / 2, cy, mirror: true, d0: 2, d1: 19,
-    feetY: cy + zh * 1.06, figH: zh * 1.85, pitX: W * 0.5, pitY: H * 1.07, pitS: H * 0.4 / 180 };
+    feetY: cy + zh * 1.06, figH: zh * 1.85, batX: 2.45, pitX: W * 0.5, pitY: H * 1.07, pitS: H * 0.4 / 180 };
 }
 
 export const toS = (V, x, y) => [V.cx + (V.mirror ? -x : x) * V.zw / 2, V.cy - y * V.zh / 2];
@@ -36,10 +36,10 @@ export function releasePoint(V, throws) {
   const a = pitcherAnchor(V, throws), h = PIT_POSES.RELEASE.lH;
   return [a.x + h[0] * a.scale * a.mirror, a.y + h[1] * a.scale];
 }
-// 타자 위치: 포수 좌표계에서 우타자는 x<0 쪽(1루 반대편)
+// 타자 위치: 포수 좌표계에서 우타자는 x<0 쪽(1루 반대편). batX = 홈플레이트 중심에서 타자 머리까지(존 반폭 단위)
 export function batterAnchor(V, bats) {
   const side = bats === 'L' ? 1 : -1;
-  const [x] = toS(V, side * 2.05, 0);
+  const [x] = toS(V, side * (V.batX || 2.05), 0);
   return { x, y: V.feetY, scale: V.figH / 180, facing: (V.mirror ? -1 : 1) * -side };
 }
 

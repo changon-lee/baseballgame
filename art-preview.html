@@ -58,6 +58,25 @@ if (scene === 'pitch' || scene === 'windup') {
   drawPitcher(ctx, { x: W * 0.3, y: H * 0.97, scale: 1.9, mirror: -1, pose: PIT_POSES.SET, uni: uH, back: true, holdBall: true, player: sam.pitchers[0] });
   drawBatter(ctx, { x: W * 0.72, y: H * 0.97, scale: 1.9, facing: -1, pose: BAT_POSES.CONTACT, uni: uA });
 }
+if (scene === 'views') {                     // 투구/타격 시점 x 우타/좌타 네 칸
+  const sp = await import('./js/ui/art/sprites.js');
+  const { buildBackdrop: bb, standsReady } = await import('./js/ui/art/stadium.js');
+  while (!sp.spritesReady() || !standsReady('catcher') || !standsReady('pitcher')) await new Promise(r => setTimeout(r, 50));
+  const pw = W / 4;
+  [['pitcher', 'R'], ['pitcher', 'L'], ['catcher', 'R'], ['catcher', 'L']].forEach(([kind, bats], i) => {
+    const V = makeView(kind, pw, H);
+    ctx.save(); ctx.translate(i * pw, 0); ctx.beginPath(); ctx.rect(0, 0, pw, H); ctx.clip();
+    ctx.drawImage(bb(kind, V, pw, H, dpr, sam), 0, 0, pw, H);
+    const ba = batterAnchor(V, bats), pa = pitcherAnchor(V, 'R');
+    const bArgs = { ...ba, uni: kind === 'pitcher' ? uA : uH, now: 0, swingAt: null };
+    const pArgs = { ...pa, uni: kind === 'pitcher' ? uH : uA, player: sam.pitchers[0], throws: 'R', now: 0, releaseAt: null, windMs: 1 };
+    ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.strokeRect(V.cx - V.zw / 2, V.cy - V.zh / 2, V.zw, V.zh);
+    if (kind === 'pitcher') { sp.drawCatcherSprite(ctx, V, null, 0); sp.drawBatterSprite(ctx, bArgs); sp.drawPitcherSprite(ctx, pArgs); }
+    else { sp.drawPitcherSprite(ctx, pArgs); sp.drawBatterSprite(ctx, bArgs); }
+    ctx.restore();
+  });
+  document.title = 'sprites-ready';
+}
 if (scene === 'sprites') {
   const sp = await import('./js/ui/art/sprites.js');
   while (!sp.spritesReady()) await new Promise(r => setTimeout(r, 50));
