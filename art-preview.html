@@ -81,14 +81,15 @@ if (scene === 'sprites') {
   const sp = await import('./js/ui/art/sprites.js');
   while (!sp.spritesReady()) await new Promise(r => setTimeout(r, 50));
   ctx.fillStyle = '#3a5a3a'; ctx.fillRect(0, 0, W, H);
-  const cols = 9, cw = W / cols, rh = H / 3;
+  const cols = 12, cw = W / cols, rh = H / 3;
   const wind = 1050, rel = 10000;
+  const swingT = [-40, 0, 12, 24, 36, 48, 60, 70, 120, 200, 320, 520];   // 스윙 시작 기준(ms)
   for (let i = 0; i < cols; i++) {
     const tb = rel - wind + i * (wind + 350) / (cols - 1);           // 와인드업 ~ 팔로스루
     sp.drawPitcherSprite(ctx, { x: cw * (i + 0.5), y: rh - 8, scale: rh / 220, back: true, uni: uH, player: sam.pitchers[0], throws: 'R', now: tb, releaseAt: rel, windMs: wind });
     sp.drawPitcherSprite(ctx, { x: cw * (i + 0.5), y: rh * 2 - 8, scale: rh / 220, back: false, uni: uA, throws: 'R', now: tb, releaseAt: rel, windMs: wind });
-    const ts = 20000 + -40 + i * 25;                                  // 스윙 -40ms ~ 160ms
-    sp.drawBatterSprite(ctx, { x: cw * (i + 0.5) - cw * 0.15, y: rh * 3 - 8, scale: rh / 260, facing: 1, uni: uH, now: ts, swingAt: 20000, pitchStart: null, travelMs: 1 });
+    const ts = 20000 + swingT[i];
+    sp.drawBatterSprite(ctx, { x: cw * (i + 0.5) - cw * 0.15, y: rh * 3 - 8, scale: rh / 260, facing: 1, uni: uH, now: ts, swingAt: 20000, pitchStart: 19000, travelMs: 1000 });
     ctx.fillStyle = '#fff'; ctx.font = '10px sans-serif';
     ctx.fillText(Math.round(tb - rel) + 'ms', cw * i + 2, 12); ctx.fillText((ts - 20000) + 'ms', cw * i + 2, rh * 2 + 12);
   }

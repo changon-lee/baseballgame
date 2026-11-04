@@ -10,13 +10,17 @@ const STAND = 182;                                       // 서 있는 선수 �
 const BAT_SHIFT = 0;                                     // 필요하면 타자 그림을 홈플레이트 쪽(+)으로 당긴다
 
 // dy/sc = 그 동작일 때 몸 위치·크기 변화(투수가 홈 쪽으로 내딛는 느낌)
+// k = 그림 배율 보정(중간 동작 그림은 더 크게 그려져 있어서 줄인다). 없으면 1
 const SETS = {
-  pitcher_back: {
+  pitcher_back: {                                        // 셋 → 와인드업 → 다리 들기 → 팔 내림 → 내딛기 → 팔 젖히기 → 릴리스 → 팔로스루
     h0: 505,
     frames: [
       { w: 162, h: 505, ax: 89, num: [80, 145], dy: 0, sc: 1 },
+      { w: 248, h: 660, ax: 164, num: [130, 175], dy: -1, sc: 1, k: 0.73 },
       { w: 173, h: 496, ax: 111, num: [100, 140], dy: -3, sc: 1 },
-      { w: 326, h: 458, ax: 172, num: [160, 150], dy: 0, sc: 1 },
+      { w: 584, h: 606, ax: 327, num: [345, 165], dy: -3, sc: 1, k: 0.73 },
+      { w: 486, h: 596, ax: 245, num: [312, 160], dy: -4, sc: 0.99, k: 0.73 },
+      { w: 326, h: 458, ax: 172, num: [160, 150], dy: -5, sc: 0.98 },
       { w: 342, h: 465, ax: 148, num: [169, 150], hand: [329, 12], dy: -7, sc: 0.97 },
       { w: 243, h: 374, ax: 157, num: [107, 85], dy: -11, sc: 0.95 },
     ],
@@ -25,18 +29,25 @@ const SETS = {
     h0: 529,
     frames: [
       { w: 169, h: 529, ax: 84, dy: 0, sc: 1 },
+      { w: 295, h: 826, ax: 145, dy: 0, sc: 1, k: 0.63 },
       { w: 159, h: 520, ax: 88, dy: 0, sc: 1 },
-      { w: 147, h: 507, ax: 76, dy: 0, sc: 1 },
+      { w: 409, h: 796, ax: 224, dy: 1, sc: 1.01, k: 0.63 },
+      { w: 147, h: 507, ax: 76, dy: 1, sc: 1.01 },
+      { w: 346, h: 807, ax: 204, dy: 2, sc: 1.02, k: 0.63 },
       { w: 215, h: 477, ax: 132, hand: [14, 160], dy: 3, sc: 1.04 },
       { w: 197, h: 387, ax: 139, dy: 5, sc: 1.07 },
     ],
   },
   batter: {                                              // 그림은 왼쪽(투수 쪽)을 본다. dx = 투수 쪽으로 내딛기
-    h0: 660,
+    h0: 660,                                             // 준비 → 로드 → 당기기 → 스윙 시작 → 임팩트 → 임팩트 직후 → 팔로스루
     frames: [
       { w: 333, h: 660, ax: 161, grip: [298, 95], dx: 0 },
+      { w: 329, h: 628, ax: 162, grip: [32, 80], dx: 1 },
       { w: 411, h: 642, ax: 170, grip: [72, 110], dx: 3 },
+      { w: 362, h: 632, ax: 187, grip: [95, 82], dx: 4 },
       { w: 395, h: 641, ax: 238, grip: [26, 160], dx: 5 },
+      { w: 382, h: 626, ax: 228, grip: [20, 152], dx: 6 },
+      { w: 390, h: 629, ax: 163, grip: [60, 130], dx: 5 },
     ],
   },
   catcher: { h0: 1005, frames: [{ w: 762, h: 1005, ax: 380, mitt: [517, 413] }] },
@@ -84,6 +95,9 @@ function frameMix(keys, t, hold = 0.4) {
   return { a: last, b: last, mix: 0, s: 1, i: keys.length - 1 };
 }
 
+// 겹침 정도 → 앞/뒤 프레임 투명도. 가운데선 둘 다 진하게(배경이 비쳐 보이지 않게), 끝에선 앞 프레임이 완전히 사라진다
+const fade = mix => mix <= 0 ? [1, 0] : [Math.min(1, 2 * (1 - mix)), Math.min(1, 2 * mix)];
+
 // ── 팀 색 입히기: 파란 부분 → 구단색, 원정은 흰 유니폼 → 회색 ──
 const SAMSUNG = '#074CA1';
 const hsv = (r, g, b) => {
@@ -130,33 +144,35 @@ function shadowAt(ctx, w) {
 }
 
 // ── 투수 ──
-// 와인드업 u(0~1): 셋 → 다리 들기 → 팔 젖히기 → 릴리스. 릴리스 뒤: 팔로스루 → (잠시 뒤) 다시 셋.
-const WIND_KEYS = [[0, 0], [0.42, 1], [0.78, 2], [1, 3]];
+// 와인드업 u(0~1): 셋 → … → 릴리스(6). 릴리스 뒤: 팔로스루(7) → (잠시 뒤) 다시 셋.
+const WIND_KEYS = [[0, 0], [0.17, 1], [0.37, 2], [0.53, 3], [0.67, 4], [0.83, 5], [1, 6]];
+const REL = 6, FOL = 7;
 function pitchState(now, releaseAt, windMs) {
   if (releaseAt == null) return { a: 0, b: 0, mix: 0, idle: true };
   if (now < releaseAt) {
     const u = (now - (releaseAt - windMs)) / windMs;
     if (u < 0) return { a: 0, b: 0, mix: 0, idle: true };
-    return frameMix(WIND_KEYS, u, 0.55);
+    return frameMix(WIND_KEYS, u, 0.4);
   }
   const dt = now - releaseAt;
-  return frameMix([[0, 3], [140, 4], [900, 4], [1250, 0]], dt, dt < 140 ? 0.25 : 0.5);
+  return frameMix([[0, REL], [140, FOL], [900, FOL], [1250, 0]], dt, dt < 140 ? 0.25 : 0.5);
 }
 
 // 공이 손을 떠나는 위치(포즈 단위, 투수 발 기준). 스프라이트를 못 쓰면 null
 export function spriteReleaseOffset(back, throws) {
   if (!spritesReady()) return null;
   const set = SETS[back ? 'pitcher_back' : 'pitcher_front'];
-  const f = set.frames.find(q => q.hand), su = (STAND / set.h0) * f.sc, flip = throws === 'L' ? -1 : 1;
+  const f = set.frames.find(q => q.hand), su = (STAND / set.h0) * f.sc * (f.k || 1), flip = throws === 'L' ? -1 : 1;
   return [(f.hand[0] - f.ax) * su * flip, (f.hand[1] - f.h) * su + f.dy];
 }
 
 function drawPitcherFrame(ctx, f, img, su, flip, alpha, back, player, uni) {
   if (alpha <= 0.01) return;
-  ctx.save(); ctx.globalAlpha = alpha; ctx.scale(flip * su, su);
+  const k = f.k || 1;
+  ctx.save(); ctx.globalAlpha = alpha; ctx.scale(flip * su * k, su * k);
   ctx.drawImage(img, -f.ax, -f.h);
-  if (back && player && f.num) {                       // 등 이름·번호
-    ctx.translate(f.num[0] - f.ax, f.num[1] - f.h); ctx.scale(flip, 1);
+  if (back && player && f.num) {                       // 등 이름·번호(그림 배율과 상관없이 같은 크기)
+    ctx.translate(f.num[0] - f.ax, f.num[1] - f.h); ctx.scale(flip / k, 1 / k);
     ctx.textAlign = 'center'; ctx.lineJoin = 'round';
     ctx.font = '800 17px "Pretendard Variable",system-ui,sans-serif';
     ctx.fillStyle = uni.num; ctx.fillText(player.name, 0, -30);
@@ -181,8 +197,9 @@ export function drawPitcherSprite(ctx, { x, y, scale, back, uni, player, throws,
   ctx.save(); ctx.translate(x, y); ctx.scale(scale, scale);
   shadowAt(ctx, 50);
   ctx.translate(0, dy); ctx.scale(1, breathe);
-  drawPitcherFrame(ctx, A, tinted(A, uni), su, flip, 1, back, player, uni);
-  if (st.mix > 0) drawPitcherFrame(ctx, B, tinted(B, uni), su, flip, st.mix, back, player, uni);
+  const [aA, aB] = fade(st.mix);
+  drawPitcherFrame(ctx, A, tinted(A, uni), su, flip, aA, back, player, uni);
+  drawPitcherFrame(ctx, B, tinted(B, uni), su, flip, aB, back, player, uni);
   ctx.restore();
   return true;
 }
@@ -190,19 +207,19 @@ export function drawPitcherSprite(ctx, { x, y, scale, back, uni, player, throws,
 // ── 타자 ── (facing: +1 = 투수가 화면 오른쪽)
 // 스윙 시각표(ms): 준비 → 시작 → 임팩트 → (머묾) → 준비 자세로 돌아옴
 export const SWING_CONTACT_MS = 70;                     // 스윙 시작 → 방망이가 공에 닿는 순간
-const SWING_FRAMES = [[0, 0], [35, 1], [SWING_CONTACT_MS, 2], [650, 2], [950, 0]];
-const SWING_BAT = [[0, -2.3], [35, -2.95], [SWING_CONTACT_MS, 0.1], [300, -2.45], [650, -2.45], [950, -2.05]];
+const SWING_FRAMES = [[0, 1], [22, 2], [46, 3], [SWING_CONTACT_MS, 4], [170, 5], [400, 6], [800, 6], [1150, 0]];
+const SWING_BAT = [[0, -2.3], [22, -2.95], [46, -3.05], [SWING_CONTACT_MS, 0.1], [170, -0.6], [400, -2.45], [800, -2.45], [1150, -2.05]];
 
 function batterState(now, swingAt, pitchStart, travelMs) {
   if (swingAt != null && now >= swingAt) {
     const t = now - swingAt;
-    const fm = frameMix(SWING_FRAMES, t, t < SWING_CONTACT_MS ? 0 : 0.6);
+    const fm = frameMix(SWING_FRAMES, t, t < SWING_CONTACT_MS ? 0 : t < 400 ? 0.2 : 0.6);
     return { ...fm, ang: track(SWING_BAT, t), t, swinging: t < SWING_CONTACT_MS + 60 };
   }
   // 공이 오는 동안 살짝 뒤로 당기는 로드, 기다릴 때는 방망이를 가볍게 흔든다
   const load = pitchStart != null && now >= pitchStart ? smooth((now - pitchStart) / Math.max(1, travelMs) / 0.6) : 0;
   const waggle = Math.sin(now / 260) * 0.07 * (1 - load);
-  return { a: 0, b: 0, mix: 0, s: 0, ang: -2.05 - 0.25 * load + waggle, load, t: -1 };
+  return { a: 0, b: 1, mix: load, s: load, ang: -2.05 - 0.25 * load + waggle, load, t: -1 };   // 공이 오면 로드 자세로 넘어간다
 }
 
 function drawBatterFrame(ctx, f, img, su, alpha) {
@@ -230,8 +247,9 @@ export function drawBatterSprite(ctx, { x, y, scale, facing, uni, now, swingAt, 
   const batBehind = st.ang < -1.6 && st.t < 0;          // 준비 자세에선 방망이가 머리 뒤
   if (batBehind) drawBat(ctx, grip, st.ang);
   ctx.save(); ctx.translate(0, bob);
-  drawBatterFrame(ctx, A, tinted(A, uni), su, 1);
-  if (st.mix > 0) drawBatterFrame(ctx, B, tinted(B, uni), su, st.mix);
+  const [aA, aB] = fade(st.mix);
+  drawBatterFrame(ctx, A, tinted(A, uni), su, aA);
+  drawBatterFrame(ctx, B, tinted(B, uni), su, aB);
   ctx.restore();
   if (st.swinging) {                                     // 스윙 잔상
     const a0 = track(SWING_BAT, Math.max(0, st.t - 45)), a1 = st.ang;
