@@ -39,24 +39,38 @@
  "pitcher_front": [
   {
    "src": "pitcher_front_0.webp",
-   "w": 251,
-   "h": 730,
-   "ax": 120.5,
-   "ay": 730
+   "w": 169,
+   "h": 529,
+   "ax": 80.0,
+   "ay": 529
   },
   {
    "src": "pitcher_front_1.webp",
-   "w": 225,
-   "h": 707,
-   "ax": 137.5,
-   "ay": 707
+   "w": 159,
+   "h": 520,
+   "ax": 85.0,
+   "ay": 520
   },
   {
    "src": "pitcher_front_2.webp",
-   "w": 242,
-   "h": 665,
-   "ax": 105.5,
-   "ay": 665
+   "w": 147,
+   "h": 507,
+   "ax": 77.0,
+   "ay": 507
+  },
+  {
+   "src": "pitcher_front_3.webp",
+   "w": 215,
+   "h": 477,
+   "ax": 102.5,
+   "ay": 477
+  },
+  {
+   "src": "pitcher_front_4.webp",
+   "w": 197,
+   "h": 387,
+   "ax": 81.0,
+   "ay": 387
   }
  ],
  "batter": [

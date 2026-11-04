@@ -9,7 +9,7 @@
 <body>
 <canvas id="cv"></canvas>
 <script type="module">
-// 개발 확인용: #pitch #windup #bat #swing #field #closeup
+// 개발 확인용: #pitch #windup #bat #swing #field #closeup #sprites(일러스트 동작 연속 장면)
 import { getTeam } from './js/data/rosters.js';
 import { createRng } from './js/core/rng.js';
 import { makeView, ballScreen } from './js/ui/art/view.js';
@@ -58,7 +58,24 @@ if (scene === 'pitch' || scene === 'windup') {
   drawPitcher(ctx, { x: W * 0.3, y: H * 0.97, scale: 1.9, mirror: -1, pose: PIT_POSES.SET, uni: uH, back: true, holdBall: true, player: sam.pitchers[0] });
   drawBatter(ctx, { x: W * 0.72, y: H * 0.97, scale: 1.9, facing: -1, pose: BAT_POSES.CONTACT, uni: uA });
 }
-document.title = 'ready';
+if (scene === 'sprites') {
+  const sp = await import('./js/ui/art/sprites.js');
+  while (!sp.spritesReady()) await new Promise(r => setTimeout(r, 50));
+  ctx.fillStyle = '#3a5a3a'; ctx.fillRect(0, 0, W, H);
+  const cols = 9, cw = W / cols, rh = H / 3;
+  const wind = 1050, rel = 10000;
+  for (let i = 0; i < cols; i++) {
+    const tb = rel - wind + i * (wind + 350) / (cols - 1);           // 와인드업 ~ 팔로스루
+    sp.drawPitcherSprite(ctx, { x: cw * (i + 0.5), y: rh - 8, scale: rh / 220, back: true, uni: uH, player: sam.pitchers[0], throws: 'R', now: tb, releaseAt: rel, windMs: wind });
+    sp.drawPitcherSprite(ctx, { x: cw * (i + 0.5), y: rh * 2 - 8, scale: rh / 220, back: false, uni: uA, throws: 'R', now: tb, releaseAt: rel, windMs: wind });
+    const ts = 20000 + -40 + i * 25;                                  // 스윙 -40ms ~ 160ms
+    sp.drawBatterSprite(ctx, { x: cw * (i + 0.5) - cw * 0.15, y: rh * 3 - 8, scale: rh / 260, facing: 1, uni: uH, now: ts, swingAt: 20000, pitchStart: null, travelMs: 1 });
+    ctx.fillStyle = '#fff'; ctx.font = '10px sans-serif';
+    ctx.fillText(Math.round(tb - rel) + 'ms', cw * i + 2, 12); ctx.fillText((ts - 20000) + 'ms', cw * i + 2, rh * 2 + 12);
+  }
+  document.title = 'sprites-ready';
+}
+document.title = document.title === 'sprites-ready' ? 'sprites-ready' : 'ready';
 </script>
 </body>
 </html>

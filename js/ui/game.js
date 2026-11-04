@@ -7,7 +7,7 @@ import { createMatch, matchup, playUserPitch, cpuPitchToUser, resolveUserSwing, 
 import { startLoop } from './loop.js';
 import { unlockAudio, playSound, vibrate, shake } from './feedback.js';
 import { makeView, toS, zoneRect, ballScreen, ballRadius, pitcherAnchor, batterAnchor, setReleaseOverride } from './art/view.js';
-import { drawPitcherSprite, drawBatterSprite, drawCatcherSprite, spriteReleaseOffset } from './art/sprites.js';
+import { drawPitcherSprite, drawBatterSprite, drawCatcherSprite, spriteReleaseOffset, SWING_CONTACT_MS } from './art/sprites.js';
 import { buildBackdrop, standsReady } from './art/stadium.js';
 import { uniformFor } from './art/uniforms.js';
 import { pitcherPoseAt, batterPoseAt } from './art/rig.js';
@@ -161,7 +161,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   // 내가 던진 공이 도착
   function arriveUserPitch() {
     const r = ball.result;
-    if (r.swing) swingAt = performance.now() - 70;
+    if (r.swing) swingAt = ball.arrival - SWING_CONTACT_MS;
     const k = r.contact ? r.contact.kind : null;
     if (k === 'INPLAY' || k === 'FOUL') { playSound(k === 'FOUL' ? 'foul' : 'hit'); ball.hitAt = performance.now(); ball.contact = r.contact; }
     else if (k === 'MISS') { playSound('whiff'); playSound('mitt'); }
@@ -173,7 +173,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   // 내 스윙
   function userSwing(ts) {
     if (!ball || ball.swung) return;
-    ball.swung = true; swingAt = performance.now();
+    ball.swung = true; swingAt = performance.now() - 30;   // 터치하자마자 방망이가 나가 보이게
     const diff = ts - ball.arrival;
     const r = resolveUserSwing(match, ball.pitch, diff, rng);
     const k = r.contact.kind;
@@ -348,13 +348,16 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     const releaseAt = ball ? ball.start : mode === 'bwait' && pitchAt ? pitchAt : null;
     const pitcherArgs = { ...pa, pose: pp.pose, uni: uni[mu.pitchingSide], holdBall: pp.holdBall, player: mu.pitcher,
       throws: mu.pitcher.throws, now, releaseAt, windMs: ball ? ball.wind : CONFIG.WIND_CPU_MS };
-    const batterArgs = { ...ba, pose: bpose, uni: uni[mu.battingSide], now, swingAt };
+    // 상대 타자가 칠 공이면 공이 닿기 직전부터 스윙 동작을 시작한다
+    const cpuSwingAt = ball && ball.result && ball.result.swing && !ball.hitAt ? ball.arrival - SWING_CONTACT_MS : null;
+    const batterArgs = { ...ba, pose: bpose, uni: uni[mu.battingSide], now, swingAt: swingAt ?? cpuSwingAt,
+      pitchStart: ball ? ball.start : null, travelMs: ball ? ball.pitch.travelMs : 1 };
     const drawP = () => drawPitcherSprite(ctx, pitcherArgs) || drawPitcher(ctx, pitcherArgs);
     const drawB = () => drawBatterSprite(ctx, batterArgs) || drawBatter(ctx, batterArgs);
 
     if (V.kind === 'pitcher') {
       const aiming = mode === 'aim' || mode === 'pick' || mode === 'gauge' || (ball && !ball.hitAt);
-      if (!drawCatcherSprite(ctx, V, aiming ? target : null)) drawCatcherAndUmpire(ctx, V, aiming ? target : null, uni.home);
+      if (!drawCatcherSprite(ctx, V, aiming ? target : null, now)) drawCatcherAndUmpire(ctx, V, aiming ? target : null, uni.home);
       drawZone(0.7);
       drawB();
       if (bp && bp.prog <= 1.02) drawBall(ctx, bp.x, bp.y, bp.r, bp.spin);

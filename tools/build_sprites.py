@@ -2,7 +2,7 @@
 
 사용법: python -I tools/build_sprites.py <압축 푼 폴더>
   <폴더>/pitcher_back/baseball-pitcher/*.png, pitcher_front/baseball-player/*.png,
-  batter_side/baseball-player/*.png, catcher/baseball-catcher/baseball-catcher-1.png, ump/umpire.png
+  (pitcher_front2 = catcher_front.zip을 푼 것) batter_side/baseball-player/*.png, catcher/baseball-catcher/baseball-catcher-1.png, ump/umpire.png
 결과: assets/sprites/<이름>.webp + assets/sprites/sprites.json (크기, 발 기준점)
   - 투명 구멍(분할 도구가 뚫은 구멍)은 주변 색으로 메운다
   - 반투명 가장자리는 정리한다
@@ -18,7 +18,7 @@ os.makedirs(OUT, exist_ok=True)
 # 이름: (파일, 동작) — 조각 번호는 분할 도구가 매긴 순서라 동작 순서와 다르다
 SETS = {
     'pitcher_back': ['pitcher_back/baseball-pitcher/baseball-pitcher-%d.png' % i for i in (2, 3, 1, 5, 4)],   # SET LIFT COCK RELEASE FOLLOW
-    'pitcher_front': ['pitcher_front/baseball-player/baseball-player-%d.png' % i for i in (1, 4, 5)],         # SET LIFT RELEASE
+    'pitcher_front': ['pitcher_front2/baseball-player/baseball-player-%d.png' % i for i in (1, 3, 5, 4, 2)],  # SET LIFT COCK RELEASE FOLLOW
     'batter': ['batter_side/baseball-player/baseball-player-%d.png' % i for i in (1, 3, 4)],                  # STANCE SWING CONTACT (모두 왼쪽=투수 쪽을 보게)
     'catcher': ['catcher/baseball-catcher/baseball-catcher-1.png'],
     'umpire': ['ump/umpire.png'],
