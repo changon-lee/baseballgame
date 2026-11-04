@@ -75,8 +75,12 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   window.addEventListener('resize', resize);
 
   // ── 스코어보드 ──
+  // 타석 결과(삼진 등)를 보여주는 동안은 끝난 타석의 타자·투수를 그대로 그린다. 다음 공을 준비할 때 넘긴다
+  let hold = null;
+  const shownMu = () => hold || matchup(match);
+
   function updateBoard() {
-    const g = match.game, mu = matchup(match);
+    const g = match.game, mu = shownMu();
     $('.ra').textContent = g.score.away; $('.rh').textContent = g.score.home;
     $('.tms').dataset.bat = g.half === 'top' ? 'away' : 'home';
     $('.inn').innerHTML = `<small>${g.half === 'top' ? '▲' : '▼'}</small>${g.inning}`;
@@ -93,6 +97,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
 
   // ── 진행 ──
   function nextPlay() {
+    hold = null;
     updateBoard();
     if (match.game.over) return showEnd();
     ball = null; play = null; swingAt = null; pitchAt = 0;
@@ -207,6 +212,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   }
 
   function settle(prev, r, userPitched) {
+    hold = matchup(match);
     match = r.match;
     let label = LABEL[r.event] || (r.fly ? '뜬공 아웃' : '땅볼 아웃');
     if (r.event === 'STRIKE' && prev.strikes === 2) { label = '삼진!'; playSound('strikeout'); }
@@ -298,7 +304,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     ctx.fillStyle = '#fff'; ctx.fillRect(mx - 2, by - 7, 4, bh + 14);
   }
   function drawHUD() {
-    const mu = matchup(match), p = mu.pitcher, pc = match.pitchCount[mu.pitchingSide];
+    const mu = shownMu(), p = mu.pitcher, pc = match.pitchCount[mu.pitchingSide];
     const left = energy(pc, p.stamina), f = fatigue(pc, p.stamina);
     ctx.fillStyle = 'rgba(6,14,26,.62)'; ctx.fillRect(10, 10, 124, 38);
     ctx.font = '12px system-ui,sans-serif'; ctx.textAlign = 'left'; ctx.fillStyle = '#e4ecf6';
@@ -328,7 +334,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     if (mode === 'bwait' && pitchAt && now >= pitchAt) throwCpuPitch();
 
     if (play && now >= play.start) {
-      const { landed } = drawFieldView(ctx, W, H, play, now, uni[matchup(match).pitchingSide], play.bases);
+      const { landed } = drawFieldView(ctx, W, H, play, now, uni[shownMu().pitchingSide], play.bases);
       if (landed && !play.landed) {
         play.landed = true;
         if (play.event === 'HR') { playSound('cheer'); vibrate([60, 40, 60]); } else if (play.hit) playSound('ooh'); else playSound('mitt');
@@ -352,7 +358,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     };
     if (!bg[V.kind] || bg[V.kind].ready !== standsReady(V.kind)) bg[V.kind] = buildBackdrop(V.kind, V, W, H, DPR, userTeam);
     ctx.drawImage(bg[V.kind], 0, 0, W, H);
-    const mu = matchup(match);
+    const mu = shownMu();
     const bp = ball && !ball.hitAt && now >= ball.start ? ballScreen(V, ball.pitch, ball.start, now) : null;
     const pp = ball ? pitcherPoseAt(now, ball.start, ball.wind) : mode === 'bwait' && pitchAt ? pitcherPoseAt(now, pitchAt, CONFIG.WIND_CPU_MS) : pitcherPoseAt(now, null, 0);
     const pa = pitcherAnchor(V, mu.pitcher.throws), ba = batterAnchor(V, mu.batter.bats === 'S' ? (mu.pitcher.throws === 'L' ? 'R' : 'L') : mu.batter.bats);
