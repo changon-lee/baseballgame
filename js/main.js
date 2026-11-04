@@ -7,6 +7,8 @@ import { newCareer, loadCareer, saveCareer, startSeason, applyUserGame, applyAut
 import { showMenu } from './ui/menu.js';
 import { showLineup } from './ui/lineup.js';
 import { showHub, showResult } from './ui/hub.js';
+import './ui/art/sprites.js';   // 경기 그림을 홈 화면에서 미리 불러 둔다
+import './ui/art/stadium.js';
 
 const app = document.getElementById('app');
 const storage = (() => { try { return window.localStorage; } catch (e) { return null; } })();

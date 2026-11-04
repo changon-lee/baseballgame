@@ -8,7 +8,7 @@ import { startLoop } from './loop.js';
 import { unlockAudio, playSound, vibrate, shake } from './feedback.js';
 import { makeView, toS, zoneRect, ballScreen, ballRadius, pitcherAnchor, batterAnchor, setReleaseOverride } from './art/view.js';
 import { drawPitcherSprite, drawBatterSprite, drawCatcherSprite, spriteReleaseOffset } from './art/sprites.js';
-import { buildBackdrop } from './art/stadium.js';
+import { buildBackdrop, standsReady } from './art/stadium.js';
 import { uniformFor } from './art/uniforms.js';
 import { pitcherPoseAt, batterPoseAt } from './art/rig.js';
 import { drawBatter, drawPitcher, drawCatcherAndUmpire, drawBall } from './art/figures.js';
@@ -338,7 +338,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       return;
     }
 
-    if (!bg[V.kind]) bg[V.kind] = buildBackdrop(V.kind, V, W, H, DPR, userTeam);
+    if (!bg[V.kind] || bg[V.kind].ready !== standsReady(V.kind)) bg[V.kind] = buildBackdrop(V.kind, V, W, H, DPR, userTeam);
     ctx.drawImage(bg[V.kind], 0, 0, W, H);
     const mu = matchup(match);
     const bp = ball && !ball.hitAt && now >= ball.start ? ballScreen(V, ball.pitch, ball.start, now) : null;

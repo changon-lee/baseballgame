@@ -71,14 +71,37 @@ function plate(ctx, x, y, w, flip) {
   ctx.beginPath(); ctx.moveTo(x - w / 2, y); ctx.lineTo(x + w / 2, y); ctx.lineTo(x + w / 2, y + 6 * s); ctx.lineTo(x, y + 12 * s); ctx.lineTo(x - w / 2, y + 6 * s); ctx.closePath(); ctx.fill();
 }
 
+// 관중석 일러스트(assets/stadium). 불러오기 전/실패하면 코드로 그린 관중석을 쓴다.
+const STANDS = {};
+if (typeof Image !== 'undefined') {
+  for (const k of ['catcher', 'pitcher']) {
+    const img = new Image();
+    img.onload = () => { STANDS[k] = img; };
+    img.src = new URL(`../../../assets/stadium/${k}.webp`, import.meta.url).href;
+  }
+}
+export const standsReady = kind => !!STANDS[kind];
+// 그림 아래 끝(펜스 바로 아래 = 잔디 시작)을 bottom에 맞추고 가로를 꽉 채운다
+function drawStands(ctx, img, W, bottom) {
+  const s = W / img.width, h = img.height * s;
+  ctx.drawImage(img, 0, bottom - h, W, h);
+  const g = ctx.createLinearGradient(0, bottom - 6, 0, bottom + 4);            // 잔디와 이음새 부드럽게
+  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.25)');
+  ctx.fillStyle = g; ctx.fillRect(0, bottom - 6, W, 10);
+}
+
 export function buildBackdrop(kind, V, W, H, dpr, homeTeam) {
   const c = document.createElement('canvas'); c.width = Math.round(W * dpr); c.height = Math.round(H * dpr);
   const ctx = c.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const rng = createRng(kind === 'catcher' ? 7 : 11);
   const home = [homeTeam.colors.main, '#f4f6fa', homeTeam.colors.main, '#a8c2ea', '#e9e9e9', '#2b5fae', '#ffffff'];
 
+  const art = STANDS[kind];
+  c.ready = !!art;
   if (kind === 'catcher') {
-    const wallY = H * 0.2;
+    const wallY = art ? H * 0.25 : H * 0.2;
+    if (art) { drawStands(ctx, art, W, wallY + 9); grass(ctx, W, H, wallY + 9, W / 2, W * 0.36, rng); }
+    else {
     const sky = ctx.createLinearGradient(0, 0, 0, wallY); sky.addColorStop(0, '#050b16'); sky.addColorStop(1, '#16233a');
     ctx.fillStyle = sky; ctx.fillRect(0, 0, W, wallY);
     ctx.fillStyle = '#0e1a2d'; ctx.fillRect(0, wallY * 0.32, W, wallY * 0.68);                     // 관중석 바탕
@@ -92,6 +115,7 @@ export function buildBackdrop(kind, V, W, H, dpr, homeTeam) {
     ctx.fillStyle = '#1d4a2a'; ctx.fillRect(0, wallY - 2, W, 7); ctx.fillStyle = '#f1c40f'; ctx.fillRect(0, wallY - 2, W, 1.5);   // 펜스 + 노란 선
     ctx.fillStyle = '#7a5a3c'; ctx.fillRect(0, wallY + 5, W, 4);                                     // 워닝 트랙
     grass(ctx, W, H, wallY + 9, W / 2, W * 0.36, rng);
+    }
     // 내야
     dirtEllipse(ctx, W / 2, V.moundY + H * 0.085, W * 1.0, H * 0.075, rng, Math.PI, Math.PI * 2);
     ctx.fillStyle = '#2d833f'; ctx.beginPath(); ctx.ellipse(W / 2, V.moundY + H * 0.125, W * 0.62, H * 0.065, 0, Math.PI, Math.PI * 2); ctx.fill();
@@ -99,8 +123,8 @@ export function buildBackdrop(kind, V, W, H, dpr, homeTeam) {
     ctx.fillStyle = 'rgba(255,240,215,.25)'; ctx.beginPath(); ctx.ellipse(W / 2, V.moundY - 3, W * 0.09, H * 0.01, 0, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#fafafa'; ctx.fillRect(W / 2 - 9, V.moundY - 2, 18, 2.5);                     // 투수판
     // 파울 라인
-    chalk(ctx, [[W / 2 - V.zw * 0.6, V.feetY], [-W * 0.6, H * 0.2 + 9]]);
-    chalk(ctx, [[W / 2 + V.zw * 0.6, V.feetY], [W * 1.6, H * 0.2 + 9]]);
+    chalk(ctx, [[W / 2 - V.zw * 0.6, V.feetY], [-W * 0.6, wallY + 9]]);
+    chalk(ctx, [[W / 2 + V.zw * 0.6, V.feetY], [W * 1.6, wallY + 9]]);
     // 홈 주변
     dirtEllipse(ctx, W / 2, V.feetY + H * 0.045, W * 0.64, H * 0.125, rng);
     ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = 2;
@@ -108,6 +132,13 @@ export function buildBackdrop(kind, V, W, H, dpr, homeTeam) {
     plate(ctx, W / 2, V.feetY - 6, V.zw, false);
   } else {
     const wallY = H * 0.13;
+    if (art) {
+      const bottom = wallY + H * 0.065 + 2;
+      drawStands(ctx, art, W, bottom);
+      ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.font = `900 ${Math.floor(H * 0.018)}px system-ui,sans-serif`; ctx.textAlign = 'center';
+      ctx.fillText(homeTeam.short + ' 홈구장', W / 2, bottom - H * 0.012); ctx.textAlign = 'left';
+      grass(ctx, W, H, bottom, W / 2, W * 0.42, rng);
+    } else {
     const sky = ctx.createLinearGradient(0, 0, 0, wallY); sky.addColorStop(0, '#060c18'); sky.addColorStop(1, '#17243b');
     ctx.fillStyle = sky; ctx.fillRect(0, 0, W, wallY);
     crowd(ctx, W, 2, wallY, rng, home);
@@ -121,6 +152,7 @@ export function buildBackdrop(kind, V, W, H, dpr, homeTeam) {
     ctx.fillText(homeTeam.short + ' 홈구장', W / 2, wallY + H * 0.055); ctx.textAlign = 'left';
     ctx.fillStyle = '#f1c40f'; ctx.fillRect(0, wallY + H * 0.065, W, 2);
     grass(ctx, W, H, wallY + H * 0.065 + 2, W / 2, W * 0.42, rng);
+    }
     // 홈 주변 흙
     dirtEllipse(ctx, V.cx, V.feetY - V.zh * 0.12, V.zw * 2.7, V.zh * 0.78, rng);
     chalk(ctx, [[V.cx - V.zw * 0.5, V.feetY], [-W * 0.3, H * 0.92]]);
