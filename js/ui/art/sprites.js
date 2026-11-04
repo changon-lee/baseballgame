@@ -12,17 +12,17 @@ const BAT_SHIFT = 0;                                     // 필요하면 타자 
 // dy/sc = 그 동작일 때 몸 위치·크기 변화(투수가 홈 쪽으로 내딛는 느낌)
 // k = 그림 배율 보정(중간 동작 그림은 더 크게 그려져 있어서 줄인다). 없으면 1
 const SETS = {
-  pitcher_back: {                                        // 셋 → 와인드업 → 다리 들기 → 팔 내림 → 내딛기 → 팔 젖히기 → 릴리스 → 팔로스루
-    h0: 505,
+  pitcher_back: {                                        // 셋 → 다리 들기 시작 → 최고점 → 손 빼기 → 착지·팔 젖힘 → 가속 → 릴리스 → 팔로스루
+    h0: 667, txt: 1.3,                                   // txt = 등 이름·번호 글자 배율
     frames: [
-      { w: 162, h: 505, ax: 89, num: [80, 145], dy: 0, sc: 1 },
-      { w: 248, h: 660, ax: 164, num: [130, 175], dy: -1, sc: 1, k: 0.73 },
-      { w: 173, h: 496, ax: 111, num: [100, 140], dy: -3, sc: 1 },
-      { w: 584, h: 606, ax: 327, num: [345, 165], dy: -3, sc: 1, k: 0.73 },
-      { w: 486, h: 596, ax: 245, num: [312, 160], dy: -4, sc: 0.99, k: 0.73 },
-      { w: 326, h: 458, ax: 172, num: [160, 150], dy: -5, sc: 0.98 },
-      { w: 342, h: 465, ax: 148, num: [169, 150], hand: [329, 12], dy: -7, sc: 0.97 },
-      { w: 243, h: 374, ax: 157, num: [107, 85], dy: -11, sc: 0.95 },
+      { w: 236, h: 667, ax: 138, num: [115, 175], dy: 0, sc: 1 },
+      { w: 219, h: 663, ax: 134, num: [125, 175], dy: 0, sc: 1 },
+      { w: 234, h: 665, ax: 152, num: [135, 175], dy: -1, sc: 1 },
+      { w: 419, h: 660, ax: 240, num: [235, 170], dy: -3, sc: 0.99 },
+      { w: 482, h: 520, ax: 237, num: [245, 145], dy: -6, sc: 0.97, k: 1.15 },
+      { w: 341, h: 522, ax: 169, num: [175, 150], dy: -7, sc: 0.96, k: 1.15 },
+      { w: 350, h: 559, ax: 120, num: [165, 150], hand: [335, 18], dy: -9, sc: 0.95, k: 1.15 },
+      { w: 421, h: 420, ax: 112, dy: -12, sc: 0.93, k: 1.15 },
     ],
   },
   pitcher_front: {
@@ -166,13 +166,13 @@ export function spriteReleaseOffset(back, throws) {
   return [(f.hand[0] - f.ax) * su * flip, (f.hand[1] - f.h) * su + f.dy];
 }
 
-function drawPitcherFrame(ctx, f, img, su, flip, alpha, back, player, uni) {
+function drawPitcherFrame(ctx, f, img, su, flip, alpha, back, player, uni, txt = 1) {
   if (alpha <= 0.01) return;
   const k = f.k || 1;
   ctx.save(); ctx.globalAlpha = alpha; ctx.scale(flip * su * k, su * k);
   ctx.drawImage(img, -f.ax, -f.h);
   if (back && player && f.num) {                       // 등 이름·번호(그림 배율과 상관없이 같은 크기)
-    ctx.translate(f.num[0] - f.ax, f.num[1] - f.h); ctx.scale(flip / k, 1 / k);
+    ctx.translate(f.num[0] - f.ax, f.num[1] - f.h); ctx.scale(flip * txt / k, txt / k);
     ctx.textAlign = 'center'; ctx.lineJoin = 'round';
     ctx.font = '800 17px "Pretendard Variable",system-ui,sans-serif';
     ctx.fillStyle = uni.num; ctx.fillText(player.name, 0, -30);
@@ -198,8 +198,8 @@ export function drawPitcherSprite(ctx, { x, y, scale, back, uni, player, throws,
   shadowAt(ctx, 50);
   ctx.translate(0, dy); ctx.scale(1, breathe);
   const [aA, aB] = fade(st.mix);
-  drawPitcherFrame(ctx, A, tinted(A, uni), su, flip, aA, back, player, uni);
-  drawPitcherFrame(ctx, B, tinted(B, uni), su, flip, aB, back, player, uni);
+  drawPitcherFrame(ctx, A, tinted(A, uni), su, flip, aA, back, player, uni, set.txt);
+  drawPitcherFrame(ctx, B, tinted(B, uni), su, flip, aB, back, player, uni, set.txt);
   ctx.restore();
   return true;
 }
@@ -267,9 +267,9 @@ export function drawBatterSprite(ctx, { x, y, scale, facing, uni, now, swingAt, 
 export function drawCatcherSprite(ctx, V, mitt, now = 0) {
   if (!spritesReady()) return false;
   const base = V.feetY - V.zh * 0.05;
-  const um = SETS.umpire.frames[0], us = (V.zh * 1.75) / um.h;
-  ctx.drawImage(um.img, V.cx + V.zw * 0.32 - um.ax * us, base - V.zh * 0.22 - um.h * us, um.w * us, um.h * us);
-  const c = SETS.catcher.frames[0], cs = (V.zh * 1.12) / c.h;
+  const um = SETS.umpire.frames[0], us = (V.zh * 1.35) / um.h;
+  ctx.drawImage(um.img, V.cx + V.zw * 0.3 - um.ax * us, base - V.zh * 0.2 - um.h * us, um.w * us, um.h * us);
+  const c = SETS.catcher.frames[0], cs = (V.zh * 0.86) / c.h;
   const breathe = Math.sin(now / 480) * V.zh * 0.004;
   ctx.save(); ctx.translate(V.cx, base); shadowAt(ctx, V.zw * 0.6); ctx.restore();
   ctx.drawImage(c.img, V.cx - c.ax * cs, base - c.h * cs + breathe, c.w * cs, c.h * cs);

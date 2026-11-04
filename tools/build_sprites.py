@@ -2,7 +2,7 @@
 
 사용법: python -I tools/build_sprites.py <압축 푼 폴더>
   <폴더>/pitcher_back/baseball-pitcher/*.png, pitcher_front/baseball-player/*.png,
-  (pitcher_front2 = catcher_front.zip을 푼 것, *_mid = 중간 동작 zip) batter_side/baseball-player/*.png, catcher/baseball-catcher/baseball-catcher-1.png, ump/umpire.png
+  (pitcher_front2 = catcher_front.zip을 푼 것, *_mid = 중간 동작 zip, pitcher_seq_A/B = 뒷모습 투구폼 8동작) batter_side/baseball-player/*.png, catcher/baseball-catcher/baseball-catcher-1.png, ump/umpire.png
 결과: assets/sprites/<이름>.webp + assets/sprites/sprites.json (크기, 발 기준점)
   - 투명 구멍(분할 도구가 뚫은 구멍)은 주변 색으로 메운다
   - 반투명 가장자리는 정리한다
@@ -16,12 +16,12 @@ OUT = os.path.join(os.path.dirname(__file__), '..', 'assets', 'sprites')
 os.makedirs(OUT, exist_ok=True)
 
 # 이름: (파일, 동작) — 조각 번호는 분할 도구가 매긴 순서라 동작 순서와 다르다
-PB, PBM = 'pitcher_back/baseball-pitcher/baseball-pitcher-%d.png', 'pitcher_back_mid/baseball-pitcher/baseball-pitcher-%d.png'
+SA, SB = 'pitcher_seq_A/baseball-player/baseball-player-%d.png', 'pitcher_seq_B/baseball-player/baseball-player-%d.png'
 PF, PFM = 'pitcher_front2/baseball-player/baseball-player-%d.png', 'pitcher_front_mid/baseball-player/baseball-player-%d.png'
 BS, BM = 'batter_side/baseball-player/baseball-player-%d.png', 'batter_mid/baseball-player/baseball-player-%d.png'
 SETS = {
-    # SET 와인드업시작 LIFT 팔내림 내딛기 COCK RELEASE FOLLOW
-    'pitcher_back': [PB % 2, PBM % 3, PB % 3, PBM % 1, PBM % 2, PB % 1, PB % 5, PB % 4],
+    # 뒷모습(카메라에서 멀어지며 던짐): 셋 → 다리 들기 시작 → 최고점 → 손 빼기 → 착지·팔 젖힘 → 가속 → 릴리스 → 팔로스루
+    'pitcher_back': [SA % 2, SA % 3, SA % 1, SA % 4, SB % 1, SB % 3, SB % 4, SB % 2],
     # SET 와인드업시작 LIFT 손빼기 COCK 내딛기 RELEASE FOLLOW
     'pitcher_front': [PF % 1, PFM % 1, PF % 3, PFM % 3, PF % 5, PFM % 2, PF % 4, PF % 2],
     # STANCE 로드 당기기 스윙시작 CONTACT 임팩트직후 팔로스루 (모두 왼쪽=투수 쪽을 보게)
@@ -33,7 +33,7 @@ SETS = {
 
 MAX_HOLE = 2500          # 이보다 작은 구멍만 메운다(분할 도구가 뚫은 구멍)
 BIG_FILL = {('pitcher_front', 0), ('pitcher_front', 1)}   # 글러브 속이 통째로 뚫린 그림: 큰 구멍도 메운다
-FLIP = {('batter', 0)}   # 첫 타격 동작만 오른쪽을 보고 있어서 뒤집는다
+FLIP = {('batter', 0), ('pitcher_back', 4)}   # 반대 방향으로 그려진 그림은 뒤집는다(타자 준비, 투수 착지는 글러브 손이 반대)
 
 
 def fill_holes(im, max_hole):

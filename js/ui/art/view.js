@@ -11,9 +11,10 @@ export function makeView(kind, W, H) {
     return { kind, W, H, zw, zh, cx: W / 2, cy, mirror: false, d0: 18.5, d1: 4.5, brk: 1.2, screenBreak: true,
       feetY: cy + zh * 1.06, figH: zh * 2, batX: 1.9, moundY: H * 0.34, pitX: W / 2, pitY: H * 0.34, pitS: zh * 0.85 / 180 };
   }
-  const zw = Math.min(W * 0.36, H * 0.23), zh = zw * 1.2, cy = H * 0.36;
+  // 투구 시점: 투수는 카메라 바로 앞이라 크게, 멀리 있는 타자·포수·심판은 작게
+  const zw = Math.min(W * 0.33, H * 0.21), zh = zw * 1.2, cy = H * 0.36;
   return { kind, W, H, zw, zh, cx: W / 2, cy, mirror: true, d0: 2, d1: 19,
-    feetY: cy + zh * 1.06, figH: zh * 1.85, batX: 2.45, pitX: W * 0.5, pitY: H * 1.07, pitS: H * 0.4 / 180 };
+    feetY: cy + zh * 1.06, figH: zh * 1.35, batX: 2.3, pitX: W * 0.5, pitY: H * 1.13, pitS: H * 0.56 / 180 };
 }
 
 export const toS = (V, x, y) => [V.cx + (V.mirror ? -x : x) * V.zw / 2, V.cy - y * V.zh / 2];
