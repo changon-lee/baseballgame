@@ -84,7 +84,7 @@ if (scene === 'sprites') {
   ctx.fillStyle = '#3a5a3a'; ctx.fillRect(0, 0, W, H);
   const cols = 12, cw = W / cols, rh = H / 3;
   const wind = 1050, rel = 10000;
-  const swingT = [-40, 0, 12, 24, 36, 48, 60, 70, 120, 200, 320, 520];   // 스윙 시작 기준(ms)
+  const swingT = [-300, -40, 0, 20, 40, 60, 70, 120, 200, 330, 450, 600];   // 스윙 시작 기준(ms)
   for (let i = 0; i < cols; i++) {
     const tb = rel - wind + i * (wind + 350) / (cols - 1);           // 와인드업 ~ 팔로스루
     sp.drawPitcherSprite(ctx, { x: cw * (i + 0.5), y: rh - 8, scale: rh / 220, back: true, uni: uH, player: sam.pitchers[0], throws: 'R', now: tb, releaseAt: rel, windMs: wind });
