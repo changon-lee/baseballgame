@@ -12,7 +12,8 @@ import { buildBackdrop, standsReady } from './art/stadium.js';
 import { uniformFor } from './art/uniforms.js';
 import { pitcherPoseAt, batterPoseAt } from './art/rig.js';
 import { drawBatter, drawPitcher, drawCatcherAndUmpire, drawBall } from './art/figures.js';
-import { planPlay, drawFieldView } from './art/fieldview.js';
+import { buildPlay, toMs } from './art/playscript.js';
+import { drawPlay3D } from './art/field3d.js';
 
 const LABEL = {
   BALL: '볼', STRIKE: '스트라이크', FOUL: '파울', SINGLE: '안타!', DOUBLE: '2루타!', TRIPLE: '3루타!', HR: '홈런!!',
@@ -206,8 +207,9 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     const finish = () => settle(prev, r, userPitched);
     if (['BALL', 'STRIKE', 'FOUL'].includes(r.event)) return finish();
     const batter = matchup(match).batter;
-    play = planPlay(r.event, r.fly, r.contact, batter, rng, performance.now() + 320);
-    play.bases = [...prev.bases];
+    play = buildPlay({ event: r.event, fly: r.fly, contact: r.contact, bats: batter.bats, bases: prev.bases, rng });
+    play.sounds.sort((a, b) => a.t - b.t);
+    play.start = performance.now() + 320; play.si = 0;
     play.then = finish;
   }
 
@@ -289,6 +291,10 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     if (e.target.closest('button')) return;
     if (mode === 'gauge') throwUserPitch(e.timeStamp);
     else if (mode === 'bflight') userSwing(e.timeStamp);
+    else if (play && !play.landed && performance.now() >= play.start) {   // 타구 장면 건너뛰기: 결과가 정해지는 순간으로
+      play.start = performance.now() - play.decisiveMs;
+      while (play.si < play.sounds.length && play.sounds[play.si].t <= play.decisive) play.si++;
+    }
   }
   root.addEventListener('pointerdown', onRootDown);
 
@@ -334,11 +340,17 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     if (mode === 'bwait' && pitchAt && now >= pitchAt) throwCpuPitch();
 
     if (play && now >= play.start) {
-      const { landed } = drawFieldView(ctx, W, H, play, now, uni[shownMu().pitchingSide], play.bases);
-      if (landed && !play.landed) {
+      const mu = shownMu(), ms = now - play.start;
+      drawPlay3D(ctx, W, H, play, ms, { field: uni[mu.pitchingSide], bat: uni[mu.battingSide] });
+      while (play.si < play.sounds.length && toMs(play.sounds[play.si].t) <= ms) playSound(play.sounds[play.si++].name);
+      if (ms >= play.decisiveMs && !play.landed) {
         play.landed = true;
-        if (play.event === 'HR') { playSound('cheer'); vibrate([60, 40, 60]); } else if (play.hit) playSound('ooh'); else playSound('mitt');
-        later(play.then, 500);
+        if (play.event === 'HR') vibrate([60, 40, 60]);
+        later(play.then, 350);
+      }
+      if (!play.landed) {
+        ctx.font = '600 12px system-ui,sans-serif'; ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(255,255,255,.75)';
+        ctx.fillText('터치하면 건너뛰기', W - 12, H - 16); ctx.textAlign = 'left';
       }
       drawMsg();
       return;
@@ -420,7 +432,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     }
   }
 
-  window.__game = () => ({ mode, dragging, V: !!V, W, H, target, ball: !!ball, ballStart: ball ? ball.start : null, arrival: ball ? ball.arrival : null, swung: !!(ball && ball.swung), pitchAt });
+  window.__game = () => ({ mode, dragging, V: !!V, W, H, target, ball: !!ball, ballStart: ball ? ball.start : null, arrival: ball ? ball.arrival : null, swung: !!(ball && ball.swung), pitchAt, play: play && play.start ? { ms: Math.round(performance.now() - play.start), event: play.event } : null });
   const loop = startLoop(frame);
   resize();
   updateBoard();

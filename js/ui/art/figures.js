@@ -321,18 +321,3 @@ export function drawBall(ctx, x, y, r, spin = 0) {
     ctx.restore();
   }
 }
-
-// ── 위에서 본 수비수 (타구 화면) ───────────────────────────
-export function drawFielderTop(ctx, x, y, u, label, facing = 0) {
-  shadow(ctx, x + 2, y + 3, 10, 5);
-  const g = ctx.createRadialGradient(x - 2, y - 2, 1, x, y, 9); g.addColorStop(0, u.jerseyL); g.addColorStop(1, u.jerseyD);
-  ellipse(ctx, x, y, 9, 5.5, facing, g, INK);                         // 어깨
-  ellipse(ctx, x + Math.cos(facing) * 8, y + Math.sin(facing) * 8 - 1, 3, 3, 0, '#8a5a2b');    // 글러브
-  const cg = ctx.createRadialGradient(x - 1, y - 2, 0.5, x, y - 1, 4.2); cg.addColorStop(0, shadeMix(u.cap, 1.5)); cg.addColorStop(1, u.capD);
-  ellipse(ctx, x, y - 1, 4.2, 4.2, 0, cg);                             // 모자
-  if (label) {
-    ctx.font = 'bold 9px system-ui,sans-serif'; ctx.textAlign = 'center';
-    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.strokeText(label, x, y + 16);
-    ctx.fillStyle = '#eef3fa'; ctx.fillText(label, x, y + 16); ctx.textAlign = 'left';
-  }
-}

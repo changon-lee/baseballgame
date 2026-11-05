@@ -1,0 +1,412 @@
+// 인플레이 타구 대본: 공·수비수·주자가 시간에 따라 어디서 무엇을 하는지 미리 계산한다(그리기 없음).
+// 결과(안타/아웃 등)는 이미 정해져 있고, 그 결과가 자연스럽게 나오도록 움직임을 맞춘다.
+// 좌표: 피트. 홈 = (0,0), +y = 중견수 쪽, +x = 1루 쪽, z = 높이. 시간: 실제 초. 화면에선 SPEED배 빠르게 보여준다.
+import { randNormal } from '../../core/rng.js';
+
+export const SPEED = 1.3;
+export const toMs = t => t * 1000 / SPEED;
+export const toSec = ms => ms * SPEED / 1000;
+
+const G = 32;                                            // 중력(ft/s²)
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const hyp = (ax, ay, bx, by) => Math.hypot(bx - ax, by - ay);
+export const polar = (deg, dist) => { const a = deg * Math.PI / 180; return [Math.sin(a) * dist, Math.cos(a) * dist]; };
+export const angOf = (x, y) => Math.atan2(x, y) * 180 / Math.PI;
+export const fenceAt = deg => 330 + 70 * Math.cos(clamp(deg, -45, 45) * Math.PI / 90);
+export const FENCE_H = 10;
+export const BASES = [[0, 0], [63.6, 63.6], [0, 127.3], [-63.6, 63.6]];
+export const SPOTS = {
+  P: [0, 56], C: [0, -3.5], '1B': polar(38, 100), '2B': polar(14, 148), SS: polar(-14, 148), '3B': polar(-38, 100),
+  LF: polar(-28, 285), CF: polar(0, 315), RF: polar(28, 285),
+};
+const IF = ['1B', '2B', 'SS', '3B'], OF = ['LF', 'CF', 'RF'];
+const runSpeed = n => (OF.includes(n) ? 27 : IF.includes(n) ? 24 : 20);
+const armSpeed = n => (OF.includes(n) ? 118 : 100);
+const REACT = 0.25;
+const BAG = [null, [61.5, 65.5], [-1.5, 125.5], [-61.5, 65.5]];   // 베이스를 지키는 수비수가 서는 곳
+const nearest = (pt, names) => names.reduce((b, n) => (hyp(...SPOTS[n], ...pt) < hyp(...SPOTS[b], ...pt) ? n : b));
+
+// ── 시간표(keys) ── key = {t, x, y, act}: t초에 (x,y)에 있고 act를 시작해 다음 key의 위치로 움직인다
+export function trackAt(keys, t) {
+  let i = 0;
+  while (i + 1 < keys.length && keys[i + 1].t <= t) i++;
+  const a = keys[i], b = keys[i + 1];
+  if (!b || t <= a.t) return { x: a.x, y: a.y, act: a.act, since: Math.max(0, t - a.t), vx: 0, vy: 0, face: a.face };
+  const u = (t - a.t) / (b.t - a.t), d = b.t - a.t;
+  return { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u, act: a.act, since: t - a.t, vx: (b.x - a.x) / d, vy: (b.y - a.y) / d, face: a.face };
+}
+const lastKey = keys => keys[keys.length - 1];
+function key(keys, t, x, y, act, face) {
+  const l = lastKey(keys);
+  t = Math.max(t, l.t);
+  if (t === l.t && keys.length > 1) { Object.assign(l, { x, y, act, face }); return t; }
+  keys.push({ t, x, y, act, face });
+  return t;
+}
+const act = (keys, t, a, face) => { const l = lastKey(keys); return key(keys, t, l.x, l.y, a, face); };
+// 지금 자리에서 (x,y)까지 뛰어간다. 도착 시각을 돌려준다
+function runTo(keys, t0, x, y, speed, after = 'stand', runAct = 'run') {
+  const l = lastKey(keys); t0 = Math.max(t0, l.t);
+  const d = hyp(l.x, l.y, x, y);
+  if (d < 0.5) return act(keys, t0, after);
+  key(keys, t0, l.x, l.y, runAct);
+  return key(keys, t0 + d / speed, x, y, after);
+}
+// 도착 시각을 정해 두고 뛴다(그보다 빨리 갈 수 있으면 늦게 출발)
+function arriveAt(keys, tMin, tArr, x, y, speed, after) {
+  const l = lastKey(keys), d = hyp(l.x, l.y, x, y);
+  const start = Math.max(tMin, l.t, tArr - d / speed);
+  if (d < 0.5) return act(keys, start, after);
+  key(keys, start, l.x, l.y, 'run');
+  return key(keys, Math.max(tArr, start + 0.05), x, y, after);
+}
+
+// ── 공 ──
+// fly: 포물선(수평은 공기저항으로 점점 느려지고, 꼭대기가 뒤쪽에 있다), path: 굴러가는 공(미리 계산한 점들), hold: 수비수 손
+function flyPos(s, t) {
+  const u = clamp((t - s.t0) / (s.t1 - s.t0), 0, 1), k = s.k, sk = s.skew;
+  const h = u * (1 + k) - k * u * u, f = Math.pow(u, sk);
+  return [s.p0[0] + (s.p1[0] - s.p0[0]) * h, s.p0[1] + (s.p1[1] - s.p0[1]) * h, s.p0[2] + (s.p1[2] - s.p0[2]) * u + 4 * s.H * f * (1 - f)];
+}
+function pathPos(s, t) {
+  const n = s.pts.length / 3 - 1, i = clamp((t - s.t0) / s.dt, 0, n), a = Math.floor(i), b = Math.min(n, a + 1), u = i - a;
+  const P = s.pts;
+  return [P[a * 3] + (P[b * 3] - P[a * 3]) * u, P[a * 3 + 1] + (P[b * 3 + 1] - P[a * 3 + 1]) * u, P[a * 3 + 2] + (P[b * 3 + 2] - P[a * 3 + 2]) * u];
+}
+const HAND_Z = { field: 1.2, catch: 6.8, camp: 5, receive: 5, throw: 6.5, tag: 2 };
+export function ballAt(sc, t) {
+  const segs = sc.ball;
+  let s = segs[0];
+  for (const q of segs) if (q.t0 <= t) s = q;
+  const tt = Math.min(t, s.t1 ?? t);
+  if (s.type === 'fly' || s.type === 'throw') return { p: flyPos(s, tt), seg: s };
+  if (s.type === 'path') return { p: pathPos(s, tt), seg: s };
+  if (s.type === 'hold') {
+    const f = trackAt(sc.fielders[s.who], t);
+    return { p: [f.x, f.y, HAND_Z[f.act] ?? 4], seg: s, held: true };
+  }
+  return { p: s.p, seg: s };                              // rest
+}
+
+// 굴러가는(튀는) 공을 흉내 낸다. 펜스에 맞으면 튕겨 나온다
+function simGround(p0, v0, t0, maxT = 9) {
+  const dt = 1 / 60, pts = [];
+  let [x, y, z] = p0, [vx, vy, vz] = v0, rolling = false;
+  pts.push(x, y, z);
+  for (let i = 0; i < maxT / dt; i++) {
+    if (!rolling) { vz -= G * dt; z += vz * dt; }
+    x += vx * dt; y += vy * dt;
+    if (!rolling && z <= 0) {
+      z = 0;
+      if (vz < -5) { vz = -vz * 0.4; vx *= 0.8; vy *= 0.8; } else { vz = 0; rolling = true; }
+    }
+    if (rolling) {
+      const sp = Math.hypot(vx, vy), ns = Math.max(0, sp - 13 * dt);
+      if (sp > 0) { vx *= ns / sp; vy *= ns / sp; }
+    }
+    const r = Math.hypot(x, y), fa = fenceAt(angOf(x, y)) - 1.5;
+    if (Math.abs(angOf(x, y)) <= 46 && r >= fa) {
+      const vr = (vx * x + vy * y) / r;
+      if (vr > 0) { vx += (-0.3 * vr - vr) * x / r; vy += (-0.3 * vr - vr) * y / r; x *= fa / r; y *= fa / r; }
+    }
+    pts.push(x, y, z);
+    if (rolling && Math.hypot(vx, vy) < 0.3) break;
+  }
+  return { type: 'path', t0, t1: t0 + (pts.length / 3 - 1) * dt, dt, pts };
+}
+// 수비수가 굴러오는 공을 잡을 수 있는 가장 이른 순간
+function intercept(path, f0, speed, tMin, zMax = 4.5) {
+  for (let t = Math.max(path.t0, tMin); t <= path.t1; t += 1 / 60) {
+    const p = pathPos(path, t);
+    if (p[2] <= zMax && hyp(...f0, p[0], p[1]) / speed + REACT <= t) return { t, x: p[0], y: p[1] };
+  }
+  const e = pathPos(path, path.t1);
+  return { t: Math.max(path.t1, REACT + hyp(...f0, e[0], e[1]) / speed), x: e[0], y: e[1] };
+}
+const hang = H => 2 * Math.sqrt(2 * H / G) * 0.95;
+const cutAt = (segs, t) => { const s = segs[segs.length - 1]; s.t1 = Math.min(s.t1, t); };
+
+// ── 대본 만들기 ──
+// event: SINGLE/DOUBLE/TRIPLE/HR/OUT/SAC_FLY/DOUBLE_PLAY, fly: 뜬공 여부, contact.pull, bats: 'L'|'R'|'S', bases: 치기 전 주자
+export function buildPlay({ event, fly, contact, bats, bases = [false, false, false], rng }) {
+  const hand = bats === 'L' ? 1 : bats === 'R' ? -1 : (rng() < 0.5 ? 1 : -1);
+  const pull = contact ? contact.pull : 0;
+  let ang = clamp(hand * pull * 35 + randNormal(rng) * 7, -42, 42);
+  const hit = ['SINGLE', 'DOUBLE', 'TRIPLE', 'HR'].includes(event);
+  const sc = { event, hit, fly: !!fly, ball: [], fielders: {}, runners: [], sounds: [], watch: [], decisive: 0, end: 0, distM: 0, landT: null, outs: [] };
+  const F = sc.fielders;
+  for (const n of Object.keys(SPOTS)) F[n] = [{ t: 0, x: SPOTS[n][0], y: SPOTS[n][1], act: n === 'C' ? 'crouch' : n === 'P' ? 'pitch' : 'ready' }];
+  const used = new Set();
+  const P0 = [0, 1.5, 3];
+
+  // 주자: 타자(0) + 누상 주자. lead = 베이스에서 다음 베이스 쪽으로 조금 나가 있는 자리
+  const baseAlong = (b, d) => { const a = BASES[b % 4], c = BASES[(b + 1) % 4], L = hyp(...a, ...c); return [a[0] + (c[0] - a[0]) * d / L, a[1] + (c[1] - a[1]) * d / L]; };
+  const mkRunner = (base, x, y, a) => { const r = { base, keys: [{ t: 0, x, y, act: a }] }; sc.runners.push(r); return r; };
+  const B = mkRunner(0, hand > 0 ? 3.2 : -3.2, 0.5, 'bat');
+  const R = [null, null, null];
+  bases.forEach((on, i) => { if (on) R[i] = mkRunner(i + 1, ...baseAlong(i + 1, i === 2 ? 6 : 10), 'lead'); });
+  // 주자를 from 베이스에서 to 베이스까지 돌린다(베이스마다 key). 마지막 베이스 도착 시각
+  const runBases = (r, t0, from, to, speed, endAct = 'stand') => {
+    let t = t0;
+    for (let b = from + 1; b <= to; b++) t = runTo(r.keys, t, ...BASES[b % 4], speed, b === to ? endAct : 'run', 'run');
+    return t;
+  };
+
+  // 공을 던진다: from 수비수가 tRel에 놓아서 to 지점에 도착하는 시각
+  const throwBall = (from, tRel, to) => {
+    const f = trackAt(F[from], tRel), d = hyp(f.x, f.y, ...to), dur = d / armSpeed(from) + 0.1;
+    cutAt(sc.ball, tRel);
+    sc.ball.push({ type: 'throw', t0: tRel, t1: tRel + dur, p0: [f.x, f.y, 6.5], p1: [to[0], to[1], 5], H: clamp(d * 0.03, 0.5, 12), k: 0.08, skew: 1 });
+    return tRel + dur;
+  };
+  const hold = (who, t) => { cutAt(sc.ball, t); sc.ball.push({ type: 'hold', who, t0: t, t1: Infinity }); };
+  // 받는 사람: spot에 미리 가 있다가 받는다
+  const receive = (who, spot, tFrom, tArr, after = 'stand') => {
+    used.add(who);
+    runTo(F[who], tFrom, ...spot, runSpeed(who), 'cover');
+    act(F[who], tArr - 0.3, 'receive');
+    act(F[who], tArr + 0.25, after);
+    hold(who, tArr);
+    sc.sounds.push({ t: tArr, name: 'mitt' });
+    sc.watch.push({ kind: 'f', id: who, t0: tArr - 1.2, t1: tArr + 0.6 });
+  };
+  // 뜬공 잡기
+  const catchFly = (who, x, y, H) => {
+    used.add(who);
+    const T = hang(H), fx = x, fy = y - 1.2;
+    sc.ball.push({ type: 'fly', t0: 0, t1: T, p0: P0, p1: [x, y, 6.8], H, k: 0.3, skew: 1.16 });
+    const sp = Math.max(runSpeed(who), hyp(...SPOTS[who], fx, fy) / Math.max(0.5, T - 0.4 - REACT));
+    const arr = runTo(F[who], REACT, fx, fy, sp, 'camp');
+    act(F[who], Math.max(arr, T - 0.3), 'catch');
+    hold(who, T);
+    sc.sounds.push({ t: T, name: 'mitt' });
+    sc.watch.push({ kind: 'f', id: who, t0: 0.3, t1: T + 0.8 });
+    return T;
+  };
+  // 굴러가는 공 잡기(땅볼/안타 처리). 잡은 시각과 자리
+  const fieldBall = (who, path, tMin) => {
+    used.add(who);
+    const sp = runSpeed(who) * (OF.includes(who) ? 1 : 1.05);
+    const I = intercept(path, F[who][0] ? [lastKey(F[who]).x, lastKey(F[who]).y] : SPOTS[who], sp, tMin);
+    const arr = arriveAt(F[who], REACT, I.t - 0.05, I.x, I.y + (OF.includes(who) ? 0.5 : 1), sp, 'set');
+    act(F[who], Math.max(arr, I.t - 0.15), 'field');
+    sc.ball.push(path);
+    hold(who, I.t);
+    sc.watch.push({ kind: 'f', id: who, t0: 0.3, t1: I.t + 0.8 });
+    return I;
+  };
+  const groundPath = (a, v, la = -3) => {
+    const [dx, dy] = polar(a, 1), r = la * Math.PI / 180;
+    return simGround(P0.slice(0, 2).concat([2.5]), [dx * v * Math.cos(r), dy * v * Math.cos(r), v * Math.sin(r)], 0);
+  };
+  // 타자가 1루로 뛴다(아웃이면 outT보다 조금 늦게 도착)
+  const batterTo1B = outT => {
+    const natural = 0.45 + 90 / 27.5;
+    const arr = outT != null ? Math.max(natural, outT + 0.22) : natural;
+    act(B.keys, 0.25, 'drop');
+    key(B.keys, 0.45, B.keys[0].x, B.keys[0].y, 'run');
+    key(B.keys, arr, ...BASES[1], 'run');
+    const [ox, oy] = [BASES[1][0] + 13, BASES[1][1] + 6];
+    key(B.keys, arr + 0.7, ox, oy, 'stand');
+    return arr;
+  };
+
+  if (event === 'HR') {
+    const fa = fenceAt(ang), dist = fa + 18 + rng() * 50, H = 105 + rng() * 35;
+    const [x, y] = polar(ang, dist), zLand = FENCE_H + (dist - fa) * 0.55;
+    const T = hang(H) * 0.95;
+    sc.ball.push({ type: 'fly', t0: 0, t1: T, p0: P0, p1: [x, y, zLand], H, k: 0.3, skew: 1.16 });
+    sc.ball.push({ type: 'rest', t0: T, t1: Infinity, p: [x, y, zLand] });
+    const who = nearest([x, y], OF); used.add(who);
+    const [wx, wy] = polar(ang, fa - 5);
+    const sp = runSpeed(who), arr = REACT + hyp(...SPOTS[who], wx, wy) / sp;
+    if (arr < T) { runTo(F[who], REACT, wx, wy, sp, 'watch'); }
+    else { const k = (T - REACT) * sp / hyp(...SPOTS[who], wx, wy); runTo(F[who], REACT, SPOTS[who][0] + (wx - SPOTS[who][0]) * k, SPOTS[who][1] + (wy - SPOTS[who][1]) * k, sp, 'watch'); }
+    sc.watch.push({ kind: 'f', id: who, t0: 0.4, t1: T - 0.6 });
+    sc.landT = T; sc.distM = Math.round(dist * 0.3048);
+    sc.sounds.push({ t: T, name: 'cheer' });
+    // 다 같이 천천히 홈까지
+    act(B.keys, 0.3, 'drop');
+    runBases(B, 0.9, 0, 4, 20, 'stand');
+    R.forEach((r, i) => r && runBases(r, 0.6 + i * 0.1, i + 1, 4, 19, 'stand'));
+    sc.decisive = T + 0.5;
+    sc.ballUntil = T + 0.4;                                 // 그 뒤로 카메라는 베이스를 도는 타자를 따라간다
+    sc.watch.push({ kind: 'r', id: 0, t0: T + 0.4, t1: Infinity });
+  } else if (hit) {
+    // 안타: 땅볼이면 내야 사이를 빠져나가고, 뜬공이면 수비수 앞/사이에 떨어진다
+    let path, chaser, landT = 0;
+    if (event === 'SINGLE' && !fly) {
+      const gaps = [-27, -5, 5, 27];
+      ang = gaps[Math.floor(rng() * 4)] + randNormal(rng) * 2.5;
+      path = groundPath(ang, 105 + rng() * 20);
+      // 가까운 내야수가 몸을 날리지만 닿지 않는다
+      const tIF = (() => { for (let t = 0; t < path.t1; t += 1 / 60) { const p = pathPos(path, t); if (Math.hypot(p[0], p[1]) > 128) return t; } return 1; })();
+      const pIF = pathPos(path, tIF), diver = nearest([pIF[0], pIF[1]], IF.filter(n => n !== '1B' || ang > 20));
+      used.add(diver);
+      const dv = SPOTS[diver], k = 0.72;
+      runTo(F[diver], REACT, dv[0] + (pIF[0] - dv[0]) * k, dv[1] + (pIF[1] - dv[1]) * k, hyp(...dv, pIF[0], pIF[1]) * k / Math.max(0.3, tIF - REACT), 'dive');
+      act(F[diver], tIF + 0.7, 'stand');
+      chaser = nearest(pathPos(path, Math.min(path.t1, tIF + 1)).slice(0, 2), OF);
+      sc.ball.length = 0;
+    } else {
+      let dist, H;
+      if (event === 'TRIPLE') { ang = (ang < 0 ? -1 : 1) * (19 + rng() * 9); dist = fenceAt(ang) - 25; H = 45; }
+      else if (event === 'DOUBLE') { ang = (ang < 0 ? -1 : 1) * (rng() < 0.5 ? 14 + rng() * 9 : 36 + rng() * 6); dist = 255 + rng() * 55; H = 38 + rng() * 15; }
+      else { dist = 150 + rng() * 55; H = 18 + rng() * 22; }
+      dist = Math.min(dist, fenceAt(ang) - 12);
+      const [x, y] = polar(ang, dist), T = hang(H);
+      const fl = { type: 'fly', t0: 0, t1: T, p0: P0, p1: [x, y, 0], H, k: 0.3, skew: 1.16 };
+      sc.ball.push(fl);
+      const vh = 0.7 * dist / T, [dx, dy] = polar(ang, 1);
+      path = simGround([x, y, 0], [dx * vh, dy * vh, (0 - P0[2] - 4 * H * 1.16) / T], T);
+      landT = T; sc.landT = T; sc.distM = Math.round(dist * 0.3048);
+      sc.sounds.push({ t: T, name: 'ooh' });
+      chaser = nearest([x, y], OF);
+    }
+    // 외야수가 공을 쫓아가 잡는다(떨어진 뒤에)
+    const I = fieldBall(chaser, path, Math.max(landT + 0.08, path.t0 + 0.6));
+    // 다른 외야수는 뒤를 받쳐 준다
+    // 주자들: 정해진 베이스까지
+    const dest = { SINGLE: [1, 2, 4, 4], DOUBLE: [2, 3, 4, 4], TRIPLE: [3, 4, 4, 4] }[event];
+    act(B.keys, 0.25, 'drop');
+    key(B.keys, 0.45, B.keys[0].x, B.keys[0].y, 'run');
+    let lastSafe = runBases(B, 0.45, 0, dest[0], 27);
+    R.forEach((r, i) => { if (r) lastSafe = Math.max(lastSafe, runBases(r, 0.12, i + 1, dest[i + 1], 26.5)); });
+    // 공은 중계 수비수에게 → 주자가 다 들어간 뒤 내야로
+    const cut = ang < 0 ? 'SS' : '2B', other = cut === 'SS' ? '2B' : 'SS';
+    const tgtBase = event === 'SINGLE' ? 2 : 3;
+    const fieldSpot = [I.x, I.y];
+    const relay = (() => { const b = BASES[tgtBase], k = event === 'SINGLE' ? 0 : 0.55; return [b[0] + (fieldSpot[0] - b[0]) * k, b[1] + (fieldSpot[1] - b[1]) * k]; })();
+    act(F[chaser], I.t + 0.3, 'throw');
+    const rel = I.t + 0.65;
+    const coverer = event === 'SINGLE' ? (ang < 0 ? '2B' : 'SS') : cut;
+    const arr1 = throwBall(chaser, rel, event === 'SINGLE' ? BAG[2] : relay);
+    act(F[chaser], rel + 0.45, 'stand');
+    receive(coverer, event === 'SINGLE' ? BAG[2] : relay, REACT + 0.2, arr1, 'hold');
+    let ballIn = arr1;
+    if (event !== 'SINGLE') {
+      const recv = event === 'TRIPLE' ? '3B' : other, spot = BAG[tgtBase];
+      runTo(F[recv], REACT + 0.3, ...spot, runSpeed(recv), 'cover');
+      const d2 = hyp(...relay, ...spot) / armSpeed(coverer) + 0.1;
+      const rel2 = Math.max(arr1 + 0.45, lastSafe + 0.15 - d2);   // 주자가 들어간 뒤에 도착하게
+      act(F[coverer], rel2 - 0.3, 'throw');
+      const arr2 = throwBall(coverer, rel2, spot);
+      act(F[coverer], rel2 + 0.4, 'stand');
+      receive(recv, spot, REACT + 0.3, arr2, 'hold');
+      ballIn = arr2;
+    }
+    sc.watch.push({ kind: 'r', id: 0, t0: I.t, t1: lastSafe + 0.5 });
+    sc.decisive = Math.max(lastSafe + 0.3, ballIn + 0.2);
+  } else if (event === 'OUT' && fly || event === 'SAC_FLY') {
+    let who, dist, H;
+    if (event === 'SAC_FLY') { who = OF[Math.floor(rng() * 3)]; ang = angOf(...SPOTS[who]) + randNormal(rng) * 4; dist = hyp(0, 0, ...SPOTS[who]) + 5 + rng() * 25; H = 75 + rng() * 15; }
+    else {
+      const deep = rng() < 0.55;
+      who = deep ? nearest(polar(ang, 280), OF) : nearest(polar(ang, 160), [...IF, ...OF]);
+      ang = angOf(...SPOTS[who]) + randNormal(rng) * 6;
+      dist = hyp(0, 0, ...SPOTS[who]) + randNormal(rng) * (IF.includes(who) ? 12 : 25);
+      H = IF.includes(who) ? 70 + rng() * 25 : deep ? 80 + rng() * 15 : 55 + rng() * 15;
+    }
+    dist = Math.min(dist, fenceAt(ang) - 8);
+    const [x, y] = polar(ang, dist);
+    const T = catchFly(who, x, y, H);
+    sc.distM = Math.round(dist * 0.3048);
+    sc.outs.push(T);
+    // 타자는 1루 쪽으로 뛰다가 잡히면 멈춘다
+    act(B.keys, 0.25, 'drop');
+    key(B.keys, 0.45, B.keys[0].x, B.keys[0].y, 'run');
+    const toFirst = 0.45 + 90 / 25;
+    if (T < toFirst) { const k = (T - 0.45) / (toFirst - 0.45); key(B.keys, T, BASES[1][0] * k, BASES[1][1] * k, 'stand'); }
+    else { key(B.keys, toFirst, ...BASES[1], 'run'); key(B.keys, T, BASES[1][0] + 8, BASES[1][1] + 30, 'stand'); }
+    // 누상 주자: 몇 걸음 나갔다가 잡히면 돌아온다. 희생플라이면 3루 주자는 붙어 있다가 홈으로
+    R.forEach((r, i) => {
+      if (!r) return;
+      const base = BASES[i + 1];
+      if (event === 'SAC_FLY' && i === 2) {
+        runTo(r.keys, 0.3, ...base, 14, 'tag');
+        const home = runTo(r.keys, T + 0.05, 0, 0, 27, 'stand');
+        sc.watch.push({ kind: 'r', id: sc.runners.indexOf(r), t0: T, t1: home + 0.4 });
+        // 홈 송구는 한 발 늦게
+        act(F[who], T + 0.25, 'throw');
+        const rel = T + 0.6, arr = throwBall(who, rel, [0.5, 2]);
+        act(F[who], rel + 0.45, 'stand');
+        receive('C', [0.5, 2], 0.6, Math.max(arr, home + 0.3), 'stand');
+        sc.decisive = Math.max(home, arr) + 0.3;
+        return;
+      }
+      const [lx, ly] = baseAlong(i + 1, 22);
+      runTo(r.keys, 0.4, lx, ly, 12, 'lead');
+      runTo(r.keys, T + 0.1, ...base, 16, 'stand');
+    });
+    if (!sc.decisive) {
+      // 공을 내야로 돌려준다
+      act(F[who], T + 0.4, 'throw');
+      const rel = T + 0.75, tgt = IF.includes(who) ? SPOTS.P : BAG[2], rcv = IF.includes(who) ? 'P' : (ang < 0 ? 'SS' : '2B');
+      const arr = throwBall(who, rel, tgt);
+      act(F[who], rel + 0.45, 'stand');
+      receive(rcv, tgt, REACT + 0.5, arr, 'hold');
+      sc.decisive = T + 0.45;
+    }
+  } else {
+    // 땅볼 아웃 / 병살
+    const dp = event === 'DOUBLE_PLAY';
+    let who = nearest(polar(ang, 140), IF);
+    if (dp && who === '1B') who = '2B';
+    ang = angOf(...SPOTS[who]) + randNormal(rng) * 5;
+    const path = groundPath(ang, 80 + rng() * 30, -6 + rng() * 5);
+    const I = fieldBall(who, path, 0.3);
+    act(F[who], I.t + 0.3, 'throw');
+    let rel = I.t + 0.55, outT;
+    if (dp) {
+      const pivot = who === 'SS' || who === '3B' ? '2B' : 'SS';
+      const a1 = throwBall(who, rel, BAG[2]);
+      act(F[who], rel + 0.4, 'stand');
+      receive(pivot, BAG[2], REACT, a1, 'throw');
+      // 1루 주자는 2루에서 아웃
+      const r1 = R[0];
+      if (r1) { runTo(r1.keys, 0.15, ...BASES[2], Math.min(27, hyp(r1.keys[0].x, r1.keys[0].y, ...BASES[2]) / Math.max(0.5, a1 + 0.2 - 0.15)), 'stand'); runTo(r1.keys, a1 + 0.5, -14, 120, 8, 'stand'); }
+      const rel2 = a1 + 0.35;
+      const a2 = throwBall(pivot, rel2, BAG[1]);
+      act(F[pivot], rel2 + 0.4, 'stand');
+      receive('1B', BAG[1], REACT, a2, 'stand');
+      sc.outs.push(a1, a2);
+      outT = a2;
+    } else if (who === '1B') {
+      // 1루수가 잡아서 직접 베이스를 밟는다
+      outT = runTo(F['1B'], I.t + 0.2, ...BASES[1], 22, 'tag');
+      act(F['1B'], outT + 0.4, 'stand');
+      sc.sounds.push({ t: outT, name: 'mitt' });
+      sc.outs.push(outT);
+    } else {
+      outT = throwBall(who, rel, BAG[1]);
+      act(F[who], rel + 0.4, 'stand');
+      receive('1B', BAG[1], REACT, outT, 'stand');
+      sc.outs.push(outT);
+    }
+    batterTo1B(outT);
+    sc.decisive = outT + 0.35;
+  }
+
+  // 남은 수비수: 공 쪽을 보며 몇 걸음, 내야수는 가까운 베이스로
+  const bl = (() => { const s = sc.ball.find(q => q.type === 'fly') || sc.ball.find(q => q.type === 'path'); if (!s) return [0, 120]; const p = s.type === 'fly' ? s.p1 : pathPos(s, s.t1); return [p[0], p[1]]; })();
+  for (const n of Object.keys(F)) {
+    if (used.has(n)) continue;
+    const keys = F[n];
+    if (n === 'C') { act(keys, 0.45, 'stand'); continue; }
+    if (n === 'P') { act(keys, 0.35, 'watch'); continue; }
+    if (n === '1B' && (hit || event === 'OUT')) { runTo(keys, 0.4, ...BAG[1], 20, 'cover'); continue; }
+    if (n === '3B' && hit && !fly) { act(keys, 0.4, 'watch'); continue; }
+    const [sx, sy] = SPOTS[n], k = OF.includes(n) ? 0.3 : 0.1;
+    runTo(keys, 0.35, sx + (bl[0] - sx) * k, sy + (bl[1] - sy) * k, OF.includes(n) ? 16 : 10, 'watch');
+  }
+  // 누상 주자 중 아직 할 일이 없는 사람은 제자리
+  for (const r of sc.runners) if (r.keys.length === 1) act(r.keys, 0.3, 'stand');
+
+  let end = sc.decisive;
+  for (const n of Object.keys(F)) end = Math.max(end, lastKey(F[n]).t);
+  for (const r of sc.runners) end = Math.max(end, lastKey(r.keys).t);
+  sc.end = end + 1;
+  sc.decisiveMs = toMs(sc.decisive);
+  sc.endMs = toMs(sc.end);
+  return sc;
+}

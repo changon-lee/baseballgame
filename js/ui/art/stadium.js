@@ -81,6 +81,7 @@ if (typeof Image !== 'undefined') {
   }
 }
 export const standsReady = kind => !!STANDS[kind];
+export const standsImage = kind => STANDS[kind] || null;
 // 그림 아래 끝(펜스 바로 아래 = 잔디 시작)을 bottom에 맞추고 가로를 꽉 채운다
 function drawStands(ctx, img, W, bottom) {
   const s = W / img.width, h = img.height * s;

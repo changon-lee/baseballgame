@@ -19,7 +19,8 @@ import { uniformFor } from './js/ui/art/uniforms.js';
 import { PIT_POSES, BAT_POSES, pitcherPoseAt, batterPoseAt } from './js/ui/art/rig.js';
 import { drawBatter, drawPitcher, drawCatcherAndUmpire, drawBall } from './js/ui/art/figures.js';
 import { pitcherAnchor, batterAnchor } from './js/ui/art/view.js';
-import { planPlay, drawFieldView } from './js/ui/art/fieldview.js';
+import { buildPlay } from './js/ui/art/playscript.js';
+import { drawPlay3D } from './js/ui/art/field3d.js';
 
 const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
 const dpr = window.devicePixelRatio || 1, W = innerWidth, H = innerHeight;
@@ -49,9 +50,6 @@ if (scene === 'pitch' || scene === 'windup') {
   const b = batterAnchor(V, 'L');
   const pose = scene === 'bat' ? batterPoseAt(1450, { pitchStart: 1000, travelMs: 700 }) : batterPoseAt(1070, { swingAt: 1000 });
   drawBatter(ctx, { ...b, pose, uni: uH });
-} else if (scene === 'field') {
-  const play = planPlay('DOUBLE', true, { pull: 0.5 }, { bats: 'L' }, createRng(3), 0);
-  drawFieldView(ctx, W, H, play, play.dur * 0.6, uA, [true, false, false]);
 } else if (scene === 'closeup') {
   ctx.fillStyle = '#2f8c43'; ctx.fillRect(0, 0, W, H);
   drawBatter(ctx, { x: W * 0.3, y: H * 0.48, scale: 1.9, facing: 1, pose: BAT_POSES.STANCE, uni: uH });
@@ -96,6 +94,30 @@ if (scene === 'sprites') {
   }
   document.title = 'sprites-ready';
 }
+if (scene.startsWith('play')) {               // #play-HR-3 : 타구 장면 6컷 (이벤트-시드[-g = 땅볼])
+  const [, ev = 'DOUBLE', seed = '3', g] = scene.split('-');
+  const { standsReady } = await import('./js/ui/art/stadium.js');
+  while (!standsReady('catcher')) await new Promise(r => setTimeout(r, 50));
+  const sc = buildPlay({ event: ev, fly: g !== 'g', contact: { pull: 0.5 }, bats: 'L', bases: [true, false, true], rng: createRng(+seed) });
+  const cols = 3, rows = 2, pw = W / cols, ph = H / rows;
+  const fr = [0.03, 0.2, 0.4, 0.6, 0.8, 1.0];
+  fr.forEach((f, i) => {
+    const ms = (g === 'all' ? Math.min(sc.endMs, sc.decisiveMs + 3000) : sc.decisiveMs) * f;
+    ctx.save(); ctx.translate((i % cols) * pw, Math.floor(i / cols) * ph); ctx.beginPath(); ctx.rect(0, 0, pw, ph); ctx.clip();
+    drawPlay3D(ctx, pw, ph, sc, ms, { field: uA, bat: uH });
+    ctx.fillStyle = '#fff'; ctx.font = '12px sans-serif'; ctx.fillText(Math.round(ms) + 'ms', 6, 14);
+    ctx.restore();
+  });
+  document.title = 'sprites-ready';
+}
+if (scene === 'perf') {                      // 타구 화면 한 장 그리는 시간(ms)
+  const { standsReady } = await import('./js/ui/art/stadium.js');
+  while (!standsReady('catcher')) await new Promise(r => setTimeout(r, 50));
+  const sc = buildPlay({ event: 'DOUBLE', fly: true, contact: { pull: 0.5 }, bats: 'L', bases: [true, false, false], rng: createRng(3) });
+  const t0 = performance.now(), N = 120;
+  for (let i = 0; i < N; i++) drawPlay3D(ctx, W, H, sc, sc.decisiveMs * i / N, { field: uA, bat: uH });
+  document.title = 'perf ' + ((performance.now() - t0) / N).toFixed(2);
+}
 if (scene === 'traj') {                      // 구종별 공 궤적(타격 시점 / 투구 시점)
   const cols = ['#ff5252', '#ffb74d', '#fff176', '#81c784', '#4fc3f7', '#ba68c8', '#f06292'];
   ['catcher', 'pitcher'].forEach((kind, i) => {
@@ -114,7 +136,7 @@ if (scene === 'traj') {                      // 구종별 공 궤적(타격 시�
     ctx.restore();
   });
 }
-document.title = document.title === 'sprites-ready' ? 'sprites-ready' : 'ready';
+if (document.title !== 'sprites-ready' && !document.title.startsWith('perf')) document.title = 'ready';
 </script>
 </body>
 </html>
