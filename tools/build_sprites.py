@@ -3,6 +3,7 @@
 사용법: python -I tools/build_sprites.py <압축 푼 폴더>
   <폴더>/pitcher_back/baseball-pitcher/*.png, pitcher_front/baseball-player/*.png,
   (pitcher_front2 = catcher_front.zip을 푼 것, *_mid = 중간 동작 zip, pitcher_seq_A/B = 뒷모습 투구폼 8동작, pitcher_front_seq_A/B = 정면 8동작) batter_seq_A/B = 타자 스윙 8동작, catcher/baseball-catcher/baseball-catcher-1.png, ump/umpire.png
+  fielder_A/run/throw, runner_run = 타구 장면 수비수·주자(먼저 tools/fix_fielders.py 로 장갑을 붙인다)
 결과: assets/sprites/<이름>.webp + assets/sprites/sprites.json (크기, 발 기준점)
   - 투명 구멍(분할 도구가 뚫은 구멍)은 주변 색으로 메운다
   - 반투명 가장자리는 정리한다
@@ -158,3 +159,36 @@ for i, (cx, cy) in GLOVE_TO.items():
     print('glove pasted', name, i)
 im = Image.open(os.path.join(OUT, 'pitcher_front_7.webp')).convert('RGBA')
 drop_specks(im); im.save(os.path.join(OUT, 'pitcher_front_7.webp'), 'WEBP', quality=88, method=6)
+
+
+# ── 타구 장면(3D)용 수비수·주자: 작게 줄여서(1피트 = PX_FT 픽셀) 저장한다. 옆모습은 모두 오른쪽을 보게 ──
+# 먼저 tools/fix_fielders.py 로 장갑을 붙인 그림(fixed/)을 만든다
+PX_FT = 50
+FX, FR, RR = 'fixed/%s.png', 'fielder_run/baseball-player/baseball-player-%d.png', 'runner_run/baseball-player/baseball-player-%d.png'
+FIELD = {   # 이름: (그림 1피트당 픽셀, 오른쪽 보게 뒤집기, 파일들)
+    'fielder': (110, False, [FX % 'fielderA-1', FX % 'fielderA-3', FX % 'fielderA-4', FX % 'fielderA-2']),   # 준비, 땅볼, 뜬공, 서서 보기
+    'frun': (90, False, [FR % i for i in range(1, 6)]),
+    'fthrow': (95, True, [FX % 'throw-1', FX % 'throw-3', FX % 'throw-2', FX % 'throw-4']),            # 내딛기, 던질 준비, 릴리스, 다이빙
+    'runner': (102, False, [RR % i for i in range(1, 5)]),
+}
+fmeta = {}
+for name, (pxft, flip, files) in FIELD.items():
+    frames = []
+    for i, f in enumerate(files):
+        im = Image.open(os.path.join(SRC, f)).convert('RGBA')
+        if flip: im = im.transpose(Image.FLIP_LEFT_RIGHT)
+        fill_holes(im, 300)
+        drop_specks(im)
+        im = clean_edges(im)
+        im = im.crop(im.getchannel('A').getbbox())
+        k = PX_FT / pxft
+        im = im.resize((max(1, round(im.width * k)), max(1, round(im.height * k))), Image.LANCZOS)
+        out = f'{name}_{i}.webp'
+        im.save(os.path.join(OUT, out), 'WEBP', quality=86, method=6)
+        w, h = im.size
+        A = im.getchannel('A').load()
+        xs = [x for y in range(int(h * 0.92), h) for x in range(w) if A[x, y] > 128]
+        frames.append({'w': w, 'h': h, 'ax': round((min(xs) + max(xs)) / 2 if xs else w / 2)})
+        print(name, i, f, (w, h), 'size', os.path.getsize(os.path.join(OUT, out)))
+    fmeta[name] = frames
+print(json.dumps(fmeta))

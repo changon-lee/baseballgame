@@ -138,6 +138,30 @@ function tinted(f, uni) {
   return c;
 }
 
+// ── 타구 장면(3D)용 수비수·주자 그림: 1피트 = FIELD_PX 픽셀로 줄여 저장. 옆모습은 오른쪽을 본다 ──
+// 투수·타자 그림과 따로 불러와서, 못 불러온 그림만 코드로 그린 사람으로 대신한다
+export const FIELD_PX = 50;
+const FIELD = {
+  fielder: [{ w: 186, h: 250, ax: 92 }, { w: 177, h: 194, ax: 88 }, { w: 113, h: 331, ax: 56 }, { w: 117, h: 303, ax: 55 }],   // 준비, 땅볼, 뜬공, 서서 보기(정면)
+  frun: [{ w: 237, h: 279, ax: 118 }, { w: 243, h: 281, ax: 120 }, { w: 239, h: 284, ax: 119 }, { w: 236, h: 284, ax: 92 }, { w: 234, h: 284, ax: 83 }],
+  fthrow: [{ w: 234, h: 256, ax: 116 }, { w: 243, h: 263, ax: 118 }, { w: 243, h: 263, ax: 105 }, { w: 320, h: 171, ax: 22 }],   // 내딛기, 던질 준비, 릴리스, 다이빙
+  runner: [{ w: 241, h: 279, ax: 123 }, { w: 247, h: 277, ax: 124 }, { w: 223, h: 286, ax: 74 }, { w: 236, h: 284, ax: 78 }],
+};
+for (const [name, frames] of Object.entries(FIELD)) {
+  frames.forEach((f, i) => {
+    const img = new Image();
+    img.onload = () => { f.ok = true; };
+    img.src = `${BASE}${name}_${i}.webp`;
+    f.img = img;
+  });
+}
+// 그림 한 장(팀 색 입힌 것). 아직 못 불러왔으면 null
+export function fieldSprite(name, i, uni) {
+  const f = FIELD[name]?.[i];
+  if (!f || !f.ok) return null;
+  return { img: tinted(f, uni), w: f.w, h: f.h, ax: f.ax };
+}
+
 function shadowAt(ctx, w) {
   const g = ctx.createRadialGradient(0, 0, 0, 0, 0, w);
   g.addColorStop(0, 'rgba(0,0,0,.35)'); g.addColorStop(1, 'rgba(0,0,0,0)');
