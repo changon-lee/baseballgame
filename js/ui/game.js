@@ -487,7 +487,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     // 상대 타자가 칠 공이면 공이 닿기 직전부터 스윙 동작을 시작한다
     const cpuSwingAt = ball && ball.result && ball.result.swing && !ball.hitAt ? ball.arrival - SWING_CONTACT_MS : null;
     const batterArgs = { ...ba, pose: bpose, uni: uni[mu.battingSide], now, swingAt: swingAt ?? cpuSwingAt,
-      pitchStart: ball ? ball.start : null, travelMs: ball ? ball.pitch.travelMs : 1 };
+      pitchStart: ball ? ball.start : null, travelMs: ball ? ball.pitch.travelMs : 1, front: V.kind === 'pitcher' };
     const drawP = () => drawPitcherSprite(ctx, pitcherArgs) || drawPitcher(ctx, pitcherArgs);
     const drawB = () => drawBatterSprite(ctx, batterArgs) || drawBatter(ctx, batterArgs);
 

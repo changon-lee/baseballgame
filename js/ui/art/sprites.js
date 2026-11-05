@@ -105,21 +105,59 @@ const SETS = {
       { w: 430, h: 649, ax: 184, ay: 646 },
     ],
   },
+  batter_front: {                                        // 투수 시점(앞에서 본 타자). 그림은 홈플레이트가 왼쪽. 순서·기준점은 batter와 같다
+    h0: 662,                                             // 14 임팩트 = 방망이가 몸 뒤에서 카메라 쪽으로 돌아 나와 홈플레이트를 가로지른 순간
+    frames: [
+      { w: 436, h: 730, ax: 191, ay: 728 },
+      { w: 360, h: 741, ax: 68, ay: 744 },
+      { w: 365, h: 755, ax: 80, ay: 732 },
+      { w: 366, h: 760, ax: 87, ay: 716 },
+      { w: 361, h: 756, ax: 83, ay: 689 },
+      { w: 378, h: 711, ax: 85, ay: 644 },
+      { w: 379, h: 711, ax: 85, ay: 644 },
+      { w: 365, h: 713, ax: 86, ay: 645 },
+      { w: 381, h: 716, ax: 87, ay: 648 },
+      { w: 443, h: 717, ax: 87, ay: 650 },
+      { w: 485, h: 718, ax: 87, ay: 650 },
+      { w: 485, h: 719, ax: 87, ay: 652 },
+      { w: 389, h: 721, ax: 88, ay: 653 },
+      { w: 317, h: 723, ax: 106, ay: 656 },
+      { w: 459, h: 726, ax: 245, ay: 658 },
+      { w: 510, h: 728, ax: 293, ay: 660 },
+      { w: 513, h: 729, ax: 293, ay: 663 },
+      { w: 517, h: 732, ax: 293, ay: 665 },
+      { w: 523, h: 734, ax: 293, ay: 667 },
+      { w: 528, h: 735, ax: 293, ay: 669 },
+      { w: 531, h: 736, ax: 293, ay: 670 },
+      { w: 533, h: 737, ax: 293, ay: 671 },
+      { w: 535, h: 738, ax: 293, ay: 673 },
+      { w: 518, h: 739, ax: 272, ay: 674 },
+      { w: 479, h: 752, ax: 229, ay: 687 },
+      { w: 453, h: 764, ax: 199, ay: 699 },
+      { w: 441, h: 783, ax: 172, ay: 719 },
+      { w: 401, h: 757, ax: 132, ay: 694 },
+      { w: 369, h: 770, ax: 95, ay: 704 },
+    ],
+  },
   catcher: { h0: 1005, frames: [{ w: 762, h: 1005, ax: 380, mitt: [517, 413] }] },
   umpire: { h0: 1177, frames: [{ w: 633, h: 1177, ax: 316 }] },
 };
 
+// 묶음마다 다 받으면 바로 쓴다(못 받은 묶음만 코드로 그린 사람). 경기는 투구 시점(1회초)부터라 그 그림을 먼저 받는다
 let loaded = 0, total = 0, failed = false;
-for (const [name, set] of Object.entries(SETS)) {
+for (const name of ['pitcher_back', 'batter_front', 'catcher', 'umpire', 'pitcher_front', 'batter']) {
+  const set = SETS[name];
+  set.got = 0;
   set.frames.forEach((f, i) => {
     total++;
     const img = new Image();
-    img.onload = () => { loaded++; if (loaded === total) loadField(); };
-    img.onerror = () => { failed = true; loadField(); };
+    img.onload = () => { loaded++; set.got++; if (loaded === total) loadField(); };
+    img.onerror = () => { failed = true; set.bad = true; loadField(); };
     img.src = `${BASE}${name}_${i}.webp`;
     f.img = img;
   });
 }
+const setReady = (...names) => names.every(n => !SETS[n].bad && SETS[n].got === SETS[n].frames.length);
 export const spritesReady = () => !failed && loaded === total;
 
 // ── 시간 보간 도우미 ──
@@ -257,7 +295,7 @@ function pitchState(now, releaseAt, windMs) {
 
 // 공이 손을 떠나는 위치(포즈 단위, 투수 발 기준). 스프라이트를 못 쓰면 null
 export function spriteReleaseOffset(back, throws) {
-  if (!spritesReady()) return null;
+  if (!setReady(back ? 'pitcher_back' : 'pitcher_front')) return null;
   const set = SETS[back ? 'pitcher_back' : 'pitcher_front'];
   const f = set.frames.find(q => q.hand), su = (STAND / set.h0) * (f.sc ?? 1) * (f.k || 1), flip = throws === 'L' ? -1 : 1;
   return [(f.hand[0] - f.ax) * su * flip, (f.hand[1] - (f.ay ?? f.h)) * su + (f.dy ?? 0)];
@@ -284,7 +322,7 @@ function drawPitcherFrame(ctx, f, img, su, flip, alpha, back, player, uni, txt =
 }
 
 export function drawPitcherSprite(ctx, { x, y, scale, back, uni, player, throws, now, releaseAt, windMs }) {
-  if (!spritesReady()) return false;
+  if (!setReady(back ? 'pitcher_back' : 'pitcher_front')) return false;
   const set = SETS[back ? 'pitcher_back' : 'pitcher_front'];
   const st = pitchState(now, releaseAt, windMs);
   const A = set.frames[st.a], B = set.frames[st.b];
@@ -326,9 +364,10 @@ function drawBatterFrame(ctx, f, img, su, alpha) {
   ctx.restore();
 }
 
-export function drawBatterSprite(ctx, { x, y, scale, facing, uni, now, swingAt, pitchStart, travelMs }) {
-  if (!spritesReady()) return false;
-  const set = SETS.batter, su = STAND / set.h0;
+// front: 투수 시점(앞에서 본 그림). 두 묶음은 프레임 순서가 같아서 같은 시각표를 쓴다
+export function drawBatterSprite(ctx, { x, y, scale, facing, uni, now, swingAt, pitchStart, travelMs, front = false }) {
+  if (!setReady(front ? 'batter_front' : 'batter')) return false;
+  const set = SETS[front ? 'batter_front' : 'batter'], su = STAND / set.h0;
   const st = batterState(now, swingAt, pitchStart, travelMs);
   const A = set.frames[st.a], B = set.frames[st.b];
   const idle = st.t < 0 && st.a === 0 && st.b === 0;
@@ -345,7 +384,7 @@ export function drawBatterSprite(ctx, { x, y, scale, facing, uni, now, swingAt, 
 
 // ── 포수 + 심판 (투구 시점). 포수는 제자리, 겨냥 위치는 노란 원으로만 표시 ──
 export function drawCatcherSprite(ctx, V, mitt, now = 0) {
-  if (!spritesReady()) return false;
+  if (!setReady('catcher', 'umpire')) return false;
   const base = V.feetY - V.zh * 0.05;
   const um = SETS.umpire.frames[0], us = (V.zh * 1.35) / um.h;
   ctx.drawImage(um.img, V.cx + V.zw * 0.3 - um.ax * us, base - V.zh * 0.2 - um.h * us, um.w * us, um.h * us);
