@@ -151,13 +151,100 @@ for (const name of ['pitcher_back', 'batter_front', 'catcher', 'umpire', 'pitche
   set.frames.forEach((f, i) => {
     total++;
     const img = new Image();
-    img.onload = () => { loaded++; set.got++; if (loaded === total) loadField(); };
+    img.onload = () => { loaded++; set.got++; if (loaded === total) { loadIdle(); loadField(); } };
     img.onerror = () => { failed = true; set.bad = true; loadField(); };
     img.src = `${BASE}${name}_${i}.webp`;
     f.img = img;
   });
 }
 const setReady = (...names) => names.every(n => !SETS[n].bad && SETS[n].got === SETS[n].frames.length);
+
+// ── 타자가 기다리며 방망이를 흔드는 동작(영상에서 처음과 끝이 이어지는 구간, 1초에 IDLE_FPS장) ──
+// 경기 그림을 다 받은 뒤에 받고, 못 받았으면 준비 자세(스윙 그림 0번)로 서 있는다. 0.8배로 줄여 저장했다(res)
+const IDLE = {
+  batter_idle: { res: 0.8, frames: [
+  { w: 292, h: 587, ax: 119, ay: 585 },
+  { w: 300, h: 602, ax: 119, ay: 601 },
+  { w: 311, h: 619, ax: 119, ay: 618 },
+  { w: 317, h: 632, ax: 118, ay: 629 },
+  { w: 311, h: 639, ax: 106, ay: 637 },
+  { w: 295, h: 640, ax: 87, ay: 638 },
+  { w: 298, h: 636, ax: 90, ay: 634 },
+  { w: 305, h: 629, ax: 96, ay: 627 },
+  { w: 322, h: 616, ax: 115, ay: 614 },
+  { w: 318, h: 605, ax: 116, ay: 603 },
+  { w: 311, h: 590, ax: 117, ay: 588 },
+  { w: 302, h: 578, ax: 117, ay: 576 },
+  { w: 293, h: 565, ax: 117, ay: 563 },
+  { w: 285, h: 558, ax: 117, ay: 556 },
+  { w: 279, h: 554, ax: 117, ay: 552 },
+  { w: 276, h: 556, ax: 117, ay: 554 },
+  { w: 276, h: 567, ax: 117, ay: 565 },
+  { w: 279, h: 580, ax: 117, ay: 578 },
+  { w: 286, h: 598, ax: 118, ay: 596 },
+  { w: 293, h: 612, ax: 118, ay: 610 },
+  { w: 302, h: 623, ax: 118, ay: 621 },
+  { w: 308, h: 629, ax: 116, ay: 627 },
+  { w: 298, h: 629, ax: 99, ay: 627 },
+  { w: 295, h: 626, ax: 94, ay: 624 },
+  { w: 300, h: 618, ax: 95, ay: 616 },
+  { w: 318, h: 607, ax: 114, ay: 605 },
+  { w: 318, h: 598, ax: 116, ay: 596 },
+  { w: 312, h: 591, ax: 117, ay: 589 },
+  { w: 304, h: 587, ax: 117, ay: 585 },
+  { w: 296, h: 587, ax: 117, ay: 585 },
+  { w: 289, h: 587, ax: 116, ay: 586 },
+  { w: 284, h: 588, ax: 116, ay: 587 },
+  { w: 282, h: 589, ax: 116, ay: 587 },
+  { w: 282, h: 588, ax: 116, ay: 587 },
+  { w: 281, h: 587, ax: 116, ay: 585 },
+  { w: 282, h: 587, ax: 116, ay: 585 },
+  { w: 284, h: 588, ax: 117, ay: 586 },
+  { w: 286, h: 589, ax: 117, ay: 587 },
+  ] },
+  batter_idle_front: { res: 0.8, raw: true, frames: [
+  { w: 304, h: 554, ax: 140, ay: 552 },
+  { w: 312, h: 566, ax: 140, ay: 565 },
+  { w: 320, h: 577, ax: 140, ay: 576 },
+  { w: 329, h: 587, ax: 140, ay: 586 },
+  { w: 334, h: 596, ax: 137, ay: 594 },
+  { w: 331, h: 599, ax: 132, ay: 597 },
+  { w: 328, h: 598, ax: 130, ay: 594 },
+  { w: 323, h: 591, ax: 131, ay: 588 },
+  { w: 314, h: 581, ax: 133, ay: 578 },
+  { w: 302, h: 571, ax: 133, ay: 568 },
+  { w: 295, h: 562, ax: 133, ay: 559 },
+  { w: 291, h: 554, ax: 133, ay: 551 },
+  { w: 291, h: 547, ax: 133, ay: 545 },
+  { w: 297, h: 546, ax: 133, ay: 543 },
+  { w: 305, h: 551, ax: 133, ay: 549 },
+  { w: 314, h: 563, ax: 133, ay: 560 },
+  { w: 323, h: 575, ax: 132, ay: 572 },
+  { w: 330, h: 587, ax: 130, ay: 583 },
+  { w: 333, h: 593, ax: 130, ay: 590 },
+  { w: 336, h: 596, ax: 134, ay: 591 },
+  { w: 331, h: 590, ax: 135, ay: 584 },
+  { w: 321, h: 580, ax: 136, ay: 575 },
+  { w: 311, h: 568, ax: 137, ay: 563 },
+  { w: 304, h: 558, ax: 137, ay: 554 },
+  { w: 302, h: 557, ax: 137, ay: 552 },
+  ] },
+};
+let idleStarted = false;
+function loadIdle() {
+  if (idleStarted) return;
+  idleStarted = true;
+  for (const [name, set] of Object.entries(IDLE)) {
+    set.got = 0;
+    set.frames.forEach((f, i) => {
+      const img = new Image();
+      img.onload = () => { set.got++; };
+      img.src = `${BASE}${name}_${i}.webp`;
+      f.img = img;
+    });
+  }
+}
+const idleReady = set => set.got === set.frames.length;
 export const spritesReady = () => !failed && loaded === total;
 
 // ── 시간 보간 도우미 ──
@@ -260,7 +347,7 @@ function loadField() {
     });
   }
 }
-setTimeout(loadField, 8000);                             // 첫 화면 그림이 끝내 안 오더라도 타구 장면 그림은 받는다
+setTimeout(() => { loadIdle(); loadField(); }, 8000);                             // 첫 화면 그림이 끝내 안 오더라도 타구 장면 그림은 받는다
 export const fieldCount = name => FIELD[name]?.length || 0;
 export const fieldReady = () => Object.values(FIELD).every(fr => fr.every(f => f.ok));   // 미리보기에서 다 불러올 때까지 기다리는 용도
 // 그림 한 장(uni가 있으면 팀 색을 입힌다). 없는 그림이거나 아직 못 불러왔으면 null
@@ -357,27 +444,52 @@ function batterState(now, swingAt, pitchStart, travelMs) {
   return { ...frameMix(LOAD_KEYS, u, 0), t: -1 };
 }
 
-function drawBatterFrame(ctx, f, img, su, alpha, raw) {
+function drawBatterFrame(ctx, f, img, su, alpha, raw) {   // su: 그림 1픽셀 → 포즈 단위
   if (alpha <= 0.01) return;
   ctx.save(); ctx.globalAlpha = alpha; ctx.scale(raw ? su : -su, su);   // 옆모습은 왼쪽을 보므로 뒤집어서 +x(투수 쪽)를 보게
   ctx.drawImage(img, -f.ax, -(f.ay ?? f.h));
   ctx.restore();
 }
 
+const IDLE_FPS = 8;
+const IDLE_OUT = 0.12;                                   // 공이 손을 떠난 뒤(투구 진행 비율) 흔들던 자세 → 다리 들기로 넘어가는 구간
+const idleAt = {};                                       // 묶음별: 기다리기 시작한 시각, 마지막으로 그린 흔들기 프레임
+
 // front: 투수 시점(앞에서 본 그림). 두 묶음은 프레임 순서가 같아서 같은 시각표를 쓴다
 export function drawBatterSprite(ctx, { x, y, scale, facing, uni, now, swingAt, pitchStart, travelMs, front = false }) {
-  if (!setReady(front ? 'batter_front' : 'batter')) return false;
-  const set = SETS[front ? 'batter_front' : 'batter'], su = STAND / set.h0;
+  const name = front ? 'batter_front' : 'batter';
+  if (!setReady(name)) return false;
+  const set = SETS[name], su = STAND / set.h0;
+  const iset = IDLE[front ? 'batter_idle_front' : 'batter_idle'];
   const st = batterState(now, swingAt, pitchStart, travelMs);
-  const A = set.frames[st.a], B = set.frames[st.b];
-  const idle = st.t < 0 && st.a === 0 && st.b === 0;
+  const u = st.t < 0 && pitchStart != null && now >= pitchStart ? (now - pitchStart) / Math.max(1, travelMs) : -1;
+  const ia = idleAt[name] || (idleAt[name] = { since: null, i: 0 });
+  let layers;                                            // [묶음, 프레임, 투명도]
+  if (st.t < 0 && u < 0 && idleReady(iset)) {            // 기다리는 중: 방망이 흔들기를 반복(앞뒤 프레임을 겹쳐 부드럽게)
+    if (ia.since == null) ia.since = now;
+    const p = Math.max(0, now - ia.since) / 1000 * IDLE_FPS, n = iset.frames.length, i = Math.floor(p) % n;
+    const [a0, a1] = fade(smooth(p % 1));
+    ia.i = a1 > a0 ? (i + 1) % n : i;
+    layers = [[iset, i, a0], [iset, (i + 1) % n, a1]];
+  } else {
+    if (st.t >= 0 || u >= IDLE_OUT) ia.since = null;      // 다음에 기다릴 땐 흔들기를 처음(준비 자세)부터
+    if (u >= 0 && u < IDLE_OUT && ia.since != null && idleReady(iset)) {   // 흔들던 자세 → 다리 들기
+      const [a0, a1] = fade(smooth(u / IDLE_OUT));
+      layers = [[iset, ia.i, a0], [set, 1, a1]];
+    } else {
+      // 영상 그림은 촘촘해서 겹치지 않고 바로 넘긴다(겹치면 몸·방망이가 두 겹). 마무리 → 준비 자세로 돌아갈 때만 겹친다
+      const [aA, aB] = st.b === 0 && st.a !== 0 ? fade(st.mix) : st.mix < 0.5 ? [1, 0] : [0, 1];
+      layers = [[set, st.a, aA], [set, st.b, aB]];
+    }
+  }
+  const idle = st.t < 0 && u < 0;
   ctx.save(); ctx.translate(x, y); ctx.scale(scale * facing, scale); ctx.translate(BAT_SHIFT, 0);
   shadowAt(ctx, 60);
-  if (idle) ctx.scale(1, 1 + Math.sin(now / 520) * 0.004);   // 기다릴 때 숨쉬기
-  // 영상 그림은 촘촘해서 겹치지 않고 바로 넘긴다(겹치면 몸·방망이가 두 겹). 마무리 → 준비 자세로 돌아갈 때만 겹친다
-  const [aA, aB] = st.b === 0 && st.a !== 0 ? fade(st.mix) : st.mix < 0.5 ? [1, 0] : [0, 1];
-  drawBatterFrame(ctx, A, tinted(A, uni), su, aA, set.raw);
-  drawBatterFrame(ctx, B, tinted(B, uni), su, aB, set.raw);
+  if (idle && !idleReady(iset)) ctx.scale(1, 1 + Math.sin(now / 520) * 0.004);   // 흔들기 그림이 아직 없으면 숨쉬기만
+  for (const [q, k, al] of layers) {
+    const f = q.frames[k];
+    drawBatterFrame(ctx, f, tinted(f, uni), su / (q.res || 1), al, q.raw);
+  }
   ctx.restore();
   return true;
 }

@@ -3,7 +3,9 @@
 사용법: python -I tools/video_batter.py <영상 폴더(assets/raw)> <작업 폴더> [영상 이름 ...(없으면 전부)]
 필요: pip install imageio-ffmpeg "rembg[cpu]"
 결과: assets/sprites/batter_*.webp(타자 시점, 옆에서), batter_front_*.webp(투수 시점, 앞에서), 마지막 줄에 JSON(sprites.js의 SETS에 옮긴다)
-  - 두 묶음 모두 29장, 같은 순서(0 준비, 1~5 다리 들고 내딛기, 6 내딛은 자세, 7~13 스윙, 14 임팩트, 15~24 팔로스루, 25~28 마무리)라 같은 시각표를 쓴다
+  - 기다리는 동작(방망이 흔들기) batter_idle(_front): 처음과 끝 모습이 가장 비슷한 구간(눈으로 고른 게 아니라 화면 차이로 찾음)을 3프레임마다 뽑아
+    반복 재생한다. 나중에 받는 그림이라 RES배 크기로 줄여 저장하고 sprites.js에서 그만큼 키워 그린다
+  - 스윙 두 묶음은 모두 29장, 같은 순서(0 준비, 1~5 다리 들고 내딛기, 6 내딛은 자세, 7~13 스윙, 14 임팩트, 15~24 팔로스루, 25~28 마무리)라 같은 시각표를 쓴다
   - 영상의 프레임 번호(24fps)는 눈으로 보고 정했다
     batter_swing: 1 준비, 43~67 다리 들고 내딛기, 72 내딛은 자세, 74~80 스윙, 81 임팩트(방망이가 투수 쪽을 향함), 82~ 팔로스루
     batter_swing_front: 1 준비, 37~67 다리 들고 내딛기, 69 내딛은 자세, 71~79 스윙(몸 뒤 → 카메라 쪽), 80 임팩트(방망이가 홈플레이트를 가로지름), 81~ 팔로스루
@@ -20,9 +22,11 @@ from rembg import remove, new_session
 
 SRC, WORK = sys.argv[1], sys.argv[2]
 OUT = os.path.join(os.path.dirname(__file__), '..', 'assets', 'sprites')
-VIDEOS = {   # 영상: (스프라이트 이름, 프레임 번호 29개, 임팩트 프레임)
-    'batter_swing': ('batter', [1, 43, 49, 55, 61, 67, 72] + list(range(74, 92)) + [93, 96, 100, 110], 81),
-    'batter_swing_front': ('batter_front', [1, 37, 49, 55, 61, 67, 69, 71, 73, 74, 75, 76, 77, 79] + list(range(80, 91)) + [91, 97, 103, 120], 80),
+VIDEOS = {   # 영상: (스프라이트 이름, 프레임 번호, 임팩트 프레임(기다리는 동작은 None), 저장 배율)
+    'batter_swing': ('batter', [1, 43, 49, 55, 61, 67, 72] + list(range(74, 92)) + [93, 96, 100, 110], 81, 1),
+    'batter_swing_front': ('batter_front', [1, 37, 49, 55, 61, 67, 69, 71, 73, 74, 75, 76, 77, 79] + list(range(80, 91)) + [91, 97, 103, 120], 80, 1),
+    'batter_idle': ('batter_idle', list(range(33, 145, 3)), None, 0.8),          # f33 ≈ f145
+    'batter_idle_front': ('batter_idle_front', list(range(30, 103, 3)), None, 0.8),   # f30 ≈ f103
 }
 ONLY = sys.argv[3:]
 SET_H = 662
@@ -62,9 +66,9 @@ def cutout(path):
 
 
 meta = {}
-for video, (sprite, IDX, contact) in VIDEOS.items():
+for video, (sprite, IDX, contact, RES) in VIDEOS.items():
     if ONLY and video not in ONLY: continue
-    assert len(IDX) == 29 and IDX.index(contact) == 14
+    assert contact is None or (len(IDX) == 29 and IDX.index(contact) == 14)
     d = os.path.join(WORK, video); os.makedirs(d, exist_ok=True)
     if not glob.glob(os.path.join(d, 'f*.png')):
         subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), '-loglevel', 'error', '-i', os.path.join(SRC, video + '.mp4'), os.path.join(d, 'f%03d.png')], check=True)
@@ -75,13 +79,13 @@ for video, (sprite, IDX, contact) in VIDEOS.items():
     top = np.nonzero((a > 128) & (b > r + 60) & (b > g + 30))[0].min()   # 헬멧(파란색) 꼭대기 — 방망이는 머리 위로 솟아 있어서 뺀다
     foot = xs[ys > y1 - (y1 - top) * 0.06]
     ox, oy = (foot.min() + foot.max()) / 2, y1 + 1
-    k = SET_H / (y1 + 1 - top)
+    k = SET_H / (y1 + 1 - top) * RES
     frames = []
     for j, im in enumerate(cuts):
         x0, y0, x1, y1b = im.getbbox()
         c = im.crop((x0, y0, x1, y1b)); w, h = round(c.width * k), round(c.height * k)
         c = c.resize((w, h), Image.LANCZOS)
-        c.save(os.path.join(OUT, f'{sprite}_{j}.webp'), 'WEBP', quality=84, method=6)
+        c.save(os.path.join(OUT, f'{sprite}_{j}.webp'), 'WEBP', quality=84 if RES == 1 else 80, method=6)
         frames.append({'w': w, 'h': h, 'ax': round((ox - x0) * k), 'ay': round((oy - y0) * k)})
         print(sprite, j, IDX[j], frames[-1], os.path.getsize(os.path.join(OUT, f'{sprite}_{j}.webp')), flush=True)
     meta[sprite] = frames
