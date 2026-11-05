@@ -164,12 +164,14 @@ drop_specks(im); im.save(os.path.join(OUT, 'pitcher_front_7.webp'), 'WEBP', qual
 # ── 타구 장면(3D)용 수비수·주자: 작게 줄여서(1피트 = PX_FT 픽셀) 저장한다. 옆모습은 모두 오른쪽을 보게 ──
 # 먼저 tools/fix_fielders.py 로 장갑을 붙인 그림(fixed/)을 만든다
 PX_FT = 50
-FX, FR, RR = 'fixed/%s.png', 'fielder_run/baseball-player/baseball-player-%d.png', 'runner_run/baseball-player/baseball-player-%d.png'
+FX = 'fixed/%s.png'
 FIELD = {   # 이름: (그림 1피트당 픽셀, 오른쪽 보게 뒤집기, 파일들)
-    'fielder': (110, False, [FX % 'fielderA-1', FX % 'fielderA-3', FX % 'fielderA-4', FX % 'fielderA-2']),   # 준비, 땅볼, 뜬공, 서서 보기
-    'frun': (90, False, [FR % i for i in range(1, 6)]),
-    'fthrow': (95, True, [FX % 'throw-1', FX % 'throw-3', FX % 'throw-2', FX % 'throw-4']),            # 내딛기, 던질 준비, 릴리스, 다이빙
-    'runner': (102, False, [RR % i for i in range(1, 5)]),
+    'fielder': (110, False, [FX % ('fielder_A-%d' % i) for i in range(1, 5)]),           # 준비, 땅볼, 뜬공, 서서 보기(정면)
+    'frun': (100, False, [FX % ('fielder_run2-%d' % i) for i in range(1, 5)]),           # 달리기 한 바퀴(다리가 번갈아)
+    'fthrow': (95, True, [FX % 'throw-1', FX % 'throw-3', FX % 'throw-2', FX % 'throw-4']),   # 내딛기, 던질 준비, 릴리스, 다이빙
+    'runner': (99, False, [FX % ('runner_run2-%d' % i) for i in range(1, 5)]),
+    'rbase': (96, False, [FX % ('runner_base-%d' % i) for i in range(1, 5)]),           # 서 있기, 리드, 발 슬라이딩, 머리 슬라이딩
+    'ump': (125, False, [FX % ('umpire_back-%d' % i) for i in range(1, 4)]),            # 뒷모습: 서 있기, 앉기, 콜
 }
 fmeta = {}
 for name, (pxft, flip, files) in FIELD.items():
@@ -188,7 +190,8 @@ for name, (pxft, flip, files) in FIELD.items():
         w, h = im.size
         A = im.getchannel('A').load()
         xs = [x for y in range(int(h * 0.92), h) for x in range(w) if A[x, y] > 128]
-        frames.append({'w': w, 'h': h, 'ax': round((min(xs) + max(xs)) / 2 if xs else w / 2)})
+        top = [x for y in range(0, int(h * 0.12)) for x in range(w) if A[x, y] > 128]   # 머리 가로 위치(옆모습은 머리를 맞춘다)
+        frames.append({'w': w, 'h': h, 'ax': round((min(xs) + max(xs)) / 2 if xs else w / 2), 'hx': round(sum(top) / len(top)) if top else w // 2})
         print(name, i, f, (w, h), 'size', os.path.getsize(os.path.join(OUT, out)))
     fmeta[name] = frames
 print(json.dumps(fmeta))

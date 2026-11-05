@@ -313,35 +313,44 @@ function drawPerson(ctx, x, y, s, u, act, ph, since, dir, helmet, glove) {
 }
 
 // ── 선수 그림(일러스트). 그림이 없으면 false → 코드로 그린 사람 ──
-// 정면 그림은 발 가운데(ax), 옆모습은 그림 가운데를 선수 위치에 맞춘다. 옆모습은 오른쪽을 보므로 dir < 0이면 뒤집는다
-const RUN_F = [0, 3, 1, 4], RUNNER_F = [0, 2, 1, 3];
-function spriteFor(act, ph, since, runner) {
-  const cyc = (seq, set) => [set, seq[((Math.floor(ph / (Math.PI / 2)) % 4) + 4) % 4], true];
-  if (runner) {
-    if (act === 'run' || act === 'drop') return cyc(RUNNER_F, 'runner');
-    return ['runner', act === 'bat' ? 1 : 2, true];
+// view = 카메라에서 본 방향: 'front'(카메라 쪽으로 옴), 'back'(멀어짐), 'side'(옆으로). 옆모습은 오른쪽을 보므로 dir < 0이면 뒤집는다
+// 후보를 차례로 해 보고 그림이 있는 첫 번째를 쓴다(앞·뒷모습 달리기 그림이 아직 없으면 옆모습으로)
+// 기준점: foot = 발 가운데, head = 머리(달릴 땐 머리가 엉덩이보다 앞이라 조금 뒤로), mid = 그림 가운데
+const RUN4 = i => ((Math.floor(i) % 4) + 4) % 4;
+function spriteFor(kind, act, ph, since, view) {
+  const step = RUN4(ph / (Math.PI / 2));
+  const running = act === 'run' || act === 'drop';
+  if (kind === 'u') return [['ump', 0, 'foot']];
+  if (kind === 'r') {
+    if (running) return [...(view !== 'side' ? [[`runner_${view}`, step, 'foot']] : []), ['runner', step, 'head', true]];
+    if (act === 'slide') return [['rbase', 2, 'mid', true]];
+    if (act === 'lead' || act === 'tag') return [['rbase', 1, 'mid', true]];
+    if (act === 'bat') return [['runner', 0, 'head', true]];
+    return [['rbase', 0, 'foot', true]];
   }
+  if (running) return [...(view !== 'side' ? [[`frun_${view}`, step, 'foot']] : []), ['frun', step, 'head', true]];
   switch (act) {
-    case 'run': case 'drop': return cyc(RUN_F, 'frun');
-    case 'throw': return ['fthrow', since < 0.12 ? 0 : since < 0.32 ? 1 : 2, true];
-    case 'dive': return ['fthrow', 3, true];
-    case 'field': return ['fielder', 1, false];
-    case 'catch': return ['fielder', 2, false];
-    case 'ready': case 'set': case 'lead': case 'crouch': case 'cover': case 'receive': return ['fielder', 0, false];
-    default: return ['fielder', 3, false];
+    case 'throw': return [['fthrow', since < 0.12 ? 0 : since < 0.32 ? 1 : 2, 'mid', true]];
+    case 'dive': return [['fthrow', 3, 'mid', true]];
+    case 'field': return [['fielder', 1, 'foot']];
+    case 'catch': return [...(view === 'back' ? [['fback', 1, 'foot']] : []), ['fielder', 2, 'foot']];
+    case 'ready': case 'set': case 'lead': case 'crouch': case 'cover': case 'receive': return [...(view === 'back' ? [['fback', 2, 'foot']] : []), ['fielder', 0, 'foot']];
+    default: return [...(view === 'back' ? [['fback', 0, 'foot']] : []), ['fielder', 3, 'foot']];
   }
 }
-function drawSprite(ctx, x, y, s, u, act, ph, since, dir, runner) {
-  const [set, i, side] = spriteFor(act, ph, since, runner);
-  const sp = fieldSprite(set, i, u);
-  if (!sp) return false;
-  const k = s / FIELD_PX, ax = side ? sp.w / 2 : sp.ax;
-  ctx.save();
-  ctx.translate(x, y);
-  if (side && dir < 0) ctx.scale(-1, 1);
-  ctx.drawImage(sp.img, -ax * k, -sp.h * k, sp.w * k, sp.h * k);
-  ctx.restore();
-  return true;
+function drawSprite(ctx, x, y, s, u, kind, act, ph, since, dir, view) {
+  for (const [set, i, anchor, side] of spriteFor(kind, act, ph, since, view)) {
+    const sp = fieldSprite(set, i, u);
+    if (!sp) continue;
+    const k = s / FIELD_PX, ax = anchor === 'foot' ? sp.ax : anchor === 'head' ? sp.hx - sp.h * 0.1 : sp.w / 2;
+    ctx.save();
+    ctx.translate(x, y);
+    if (side && dir < 0) ctx.scale(-1, 1);
+    ctx.drawImage(sp.img, -ax * k, -sp.h * k, sp.w * k, sp.h * k);
+    ctx.restore();
+    return true;
+  }
+  return false;
 }
 
 // ── 한 장면 그리기 ──
@@ -365,7 +374,9 @@ export function drawPlay3D(ctx, W, H, sc, ms, uni) {
     }
     return 1;
   };
-  const add = (k, u, helmet, glove, plain = false) => {   // plain = 그림 없이 코드로(심판)
+  const ballNow = ballAt(sc, t).p;
+  // kind: 'f' 수비수, 'r' 주자, 'u' 심판
+  const add = (k, u, kind, name) => {
     const p = project(K, [k.x, k.y, 0]);
     if (!p) return;
     const q = project(K, [k.x + k.vx * 0.1, k.y + k.vy * 0.1, 0]);
@@ -374,15 +385,27 @@ export function drawPlay3D(ctx, W, H, sc, ms, uni) {
     if (k.act === 'field' || k.act === 'dive') { const b = project(K, ballAt(sc, t).p); if (b) dir = Math.sign(b.x - p.x) || 1; }
     const speed = Math.hypot(k.vx, k.vy);
     const act = (k.act === 'run' || k.act === 'drop') && speed < 0.5 ? 'stand' : k.act;
+    // 카메라에서 선수 쪽으로 향하는 방향과 움직이는 방향의 각도 → 앞/옆/뒷모습
+    const ex = k.x - K.C[0], ey = k.y - K.C[1], el = Math.hypot(ex, ey) || 1;
+    let view = 'side';
+    if (speed >= 0.5) {
+      const c = (k.vx * ex + k.vy * ey) / (speed * el);
+      view = c > 0.62 ? 'back' : c < -0.62 ? 'front' : 'side';
+    } else if (kind === 'f' && (act === 'watch' || act === 'stand' || act === 'catch' || act === 'camp')) {
+      // 서서 공을 볼 때: 공이 자기보다 한참 뒤(카메라 반대쪽)에 떠 있으면 등을 보인다
+      const bp = ballNow, c = ((bp[0] - k.x) * ex + (bp[1] - k.y) * ey) / el;
+      if (c > 25 && bp[2] > 3) view = 'back';
+    }
+    if (name === 'C' && speed < 0.5) view = 'back';     // 포수는 카메라를 등지고 있다
     ents.push({ d: p.d, x: p.x, y: p.y, s: p.s, wx: k.x, wy: k.y, draw: () => {
       const ph = t * speed / 2.6;
-      if (!plain && drawSprite(ctx, p.x, p.y, p.s, u, act, ph, k.since, dir, helmet)) return;
-      drawPerson(ctx, p.x, p.y, p.s, u, act, ph, k.since, dir, helmet, glove);
+      if (drawSprite(ctx, p.x, p.y, p.s, kind === 'u' ? null : u, kind, act, ph, k.since, dir, view)) return;
+      drawPerson(ctx, p.x, p.y, p.s, u, act, ph, k.since, dir, kind === 'r', kind === 'f');
     } });
   };
-  for (const n of Object.keys(sc.fielders)) add(trackAt(sc.fielders[n], t), uni.field, false, true);
-  for (const r of sc.runners) add(trackAt(r.keys, t), uni.bat, true, false);
-  add({ x: 0, y: -8, act: 'stand', vx: 0, vy: 0, since: 0 }, { pants: '#3b3f48', sock: '#2a2d34', sleeve: '#1d2a44', jersey: '#1d2a44', belt: '#111', cap: '#151a24' }, false, false, true);
+  for (const n of Object.keys(sc.fielders)) add(trackAt(sc.fielders[n], t), uni.field, 'f', n);
+  for (const r of sc.runners) add(trackAt(r.keys, t), uni.bat, 'r');
+  add({ x: 0, y: -8, act: 'stand', vx: 0, vy: 0, since: 0 }, { pants: '#3b3f48', sock: '#2a2d34', sleeve: '#1d2a44', jersey: '#1d2a44', belt: '#111', cap: '#151a24' }, 'u');
   for (const e of ents) shadow(ctx, K, e.wx, e.wy, 1.3, 0.28);
 
   // 공

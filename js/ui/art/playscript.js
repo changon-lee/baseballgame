@@ -52,6 +52,15 @@ function runTo(keys, t0, x, y, speed, after = 'stand', runAct = 'run') {
   key(keys, t0, l.x, l.y, runAct);
   return key(keys, t0 + d / speed, x, y, after);
 }
+// 마지막으로 뛴 구간의 끝 dur초를 슬라이딩으로 바꾸고, 베이스에 누웠다가 일어난다(마지막 key가 도착이어야 한다)
+function slideIn(keys, dur = 0.35, lie = 0.55) {
+  const n = keys.length, a = keys[n - 2], b = keys[n - 1];
+  if (!a || a.act !== 'run' || b.t - a.t < dur + 0.05) return;
+  const u = (b.t - dur - a.t) / (b.t - a.t);
+  keys.splice(n - 1, 0, { t: b.t - dur, x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u, act: 'slide' });
+  const end = b.act; b.act = 'slide';
+  keys.push({ t: b.t + lie, x: b.x, y: b.y, act: end });
+}
 // 도착 시각을 정해 두고 뛴다(그보다 빨리 갈 수 있으면 늦게 출발)
 function arriveAt(keys, tMin, tArr, x, y, speed, after) {
   const l = lastKey(keys), d = hyp(l.x, l.y, x, y);
@@ -275,6 +284,8 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
     // 공은 중계 수비수에게 → 주자가 다 들어간 뒤 내야로
     const cut = ang < 0 ? 'SS' : '2B', other = cut === 'SS' ? '2B' : 'SS';
     const tgtBase = event === 'SINGLE' ? 2 : 3;
+    // 송구가 가는 베이스로 들어가는 주자는 미끄러져 들어간다
+    for (const r of sc.runners) { const l = r.keys[r.keys.length - 1]; if (hyp(l.x, l.y, ...BASES[tgtBase]) < 1) slideIn(r.keys); }
     const fieldSpot = [I.x, I.y];
     const relay = (() => { const b = BASES[tgtBase], k = event === 'SINGLE' ? 0 : 0.55; return [b[0] + (fieldSpot[0] - b[0]) * k, b[1] + (fieldSpot[1] - b[1]) * k]; })();
     act(F[chaser], I.t + 0.3, 'throw');
@@ -325,6 +336,7 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
       if (event === 'SAC_FLY' && i === 2) {
         runTo(r.keys, 0.3, ...base, 14, 'tag');
         const home = runTo(r.keys, T + 0.05, 0, 0, 27, 'stand');
+        slideIn(r.keys);
         sc.watch.push({ kind: 'r', id: sc.runners.indexOf(r), t0: T, t1: home + 0.4 });
         // 홈 송구는 한 발 늦게
         act(F[who], T + 0.25, 'throw');
@@ -364,7 +376,7 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
       receive(pivot, BAG[2], REACT, a1, 'throw');
       // 1루 주자는 2루에서 아웃
       const r1 = R[0];
-      if (r1) { runTo(r1.keys, 0.15, ...BASES[2], Math.min(27, hyp(r1.keys[0].x, r1.keys[0].y, ...BASES[2]) / Math.max(0.5, a1 + 0.2 - 0.15)), 'stand'); runTo(r1.keys, a1 + 0.5, -14, 120, 8, 'stand'); }
+      if (r1) { runTo(r1.keys, 0.15, ...BASES[2], Math.min(27, hyp(r1.keys[0].x, r1.keys[0].y, ...BASES[2]) / Math.max(0.5, a1 + 0.2 - 0.15)), 'stand'); slideIn(r1.keys); runTo(r1.keys, a1 + 0.5, -14, 120, 8, 'stand'); }
       const rel2 = a1 + 0.35;
       const a2 = throwBall(pivot, rel2, BAG[1]);
       act(F[pivot], rel2 + 0.4, 'stand');

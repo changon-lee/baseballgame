@@ -142,10 +142,12 @@ function tinted(f, uni) {
 // 투수·타자 그림과 따로 불러와서, 못 불러온 그림만 코드로 그린 사람으로 대신한다
 export const FIELD_PX = 50;
 const FIELD = {
-  fielder: [{ w: 186, h: 250, ax: 92 }, { w: 177, h: 194, ax: 88 }, { w: 113, h: 331, ax: 56 }, { w: 117, h: 303, ax: 55 }],   // 준비, 땅볼, 뜬공, 서서 보기(정면)
-  frun: [{ w: 237, h: 279, ax: 118 }, { w: 243, h: 281, ax: 120 }, { w: 239, h: 284, ax: 119 }, { w: 236, h: 284, ax: 92 }, { w: 234, h: 284, ax: 83 }],
-  fthrow: [{ w: 234, h: 256, ax: 116 }, { w: 243, h: 263, ax: 118 }, { w: 243, h: 263, ax: 105 }, { w: 320, h: 171, ax: 22 }],   // 내딛기, 던질 준비, 릴리스, 다이빙
-  runner: [{ w: 241, h: 279, ax: 123 }, { w: 247, h: 277, ax: 124 }, { w: 223, h: 286, ax: 74 }, { w: 236, h: 284, ax: 78 }],
+  fielder: [{ w: 186, h: 250, ax: 92, hx: 95 }, { w: 177, h: 194, ax: 88, hx: 88 }, { w: 113, h: 330, ax: 56, hx: 64 }, { w: 117, h: 303, ax: 55, hx: 52 }],   // 준비, 땅볼, 뜬공, 서서 보기(정면)
+  frun: [{ w: 209, h: 276, ax: 105, hx: 148 }, { w: 180, h: 282, ax: 66, hx: 131 }, { w: 213, h: 273, ax: 107, hx: 150 }, { w: 186, h: 283, ax: 70, hx: 134 }],   // 달리기 한 바퀴(다리가 번갈아)
+  fthrow: [{ w: 234, h: 256, ax: 116, hx: 153 }, { w: 243, h: 263, ax: 118, hx: 133 }, { w: 243, h: 263, ax: 105, hx: 165 }, { w: 320, h: 171, ax: 22, hx: 238 }],   // 내딛기, 던질 준비, 릴리스, 다이빙
+  runner: [{ w: 246, h: 272, ax: 116, hx: 188 }, { w: 222, h: 287, ax: 21, hx: 167 }, { w: 242, h: 269, ax: 114, hx: 187 }, { w: 219, h: 287, ax: 20, hx: 162 }],   // 달리기 한 바퀴
+  rbase: [{ w: 75, h: 306, ax: 44, hx: 44 }, { w: 202, h: 249, ax: 99, hx: 158 }, { w: 268, h: 204, ax: 158, hx: 73 }, { w: 340, h: 152, ax: 12, hx: 239 }],   // 서 있기, 리드, 발 슬라이딩, 머리 슬라이딩
+  ump: [{ w: 104, h: 301, ax: 52, hx: 53 }, { w: 163, h: 246, ax: 81, hx: 82 }, { w: 136, h: 312, ax: 53, hx: 74 }],   // 심판 뒷모습: 서 있기, 앉기, 콜
 };
 for (const [name, frames] of Object.entries(FIELD)) {
   frames.forEach((f, i) => {
@@ -155,11 +157,11 @@ for (const [name, frames] of Object.entries(FIELD)) {
     f.img = img;
   });
 }
-// 그림 한 장(팀 색 입힌 것). 아직 못 불러왔으면 null
+// 그림 한 장(uni가 있으면 팀 색을 입힌다). 없는 그림이거나 아직 못 불러왔으면 null
 export function fieldSprite(name, i, uni) {
   const f = FIELD[name]?.[i];
   if (!f || !f.ok) return null;
-  return { img: tinted(f, uni), w: f.w, h: f.h, ax: f.ax };
+  return { img: uni ? tinted(f, uni) : f.img, w: f.w, h: f.h, ax: f.ax, hx: f.hx };
 }
 
 function shadowAt(ctx, w) {
