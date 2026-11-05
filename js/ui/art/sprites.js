@@ -12,30 +12,64 @@ const BAT_SHIFT = 0;                                     // 필요하면 타자 
 // dy/sc = 그 동작일 때 몸 위치·크기 변화(투수가 홈 쪽으로 내딛는 느낌)
 // k = 그림 배율 보정(중간 동작 그림은 더 크게 그려져 있어서 줄인다). 없으면 1
 const SETS = {
-  pitcher_back: {                                        // 셋 → 다리 들기 시작 → 최고점 → 손 빼기 → 착지·팔 젖힘 → 가속 → 릴리스 → 팔로스루
-    h0: 667, txt: 1.3,                                   // txt = 등 이름·번호 글자 배율
+  pitcher_back: {                                       // 뒷모습(영상에서 25장): 셋 → 다리 들기 → … → 릴리스(17) → 팔로스루
+    h0: 668, txt: 1.3, cut: true,
     frames: [
-      { w: 236, h: 667, ax: 138, num: [115, 175], dy: 0, sc: 1 },
-      { w: 219, h: 663, ax: 134, num: [125, 175], dy: 0, sc: 1 },
-      { w: 234, h: 665, ax: 152, num: [135, 175], dy: -1, sc: 1 },
-      { w: 419, h: 660, ax: 240, num: [235, 170], dy: -3, sc: 0.99 },
-      { w: 482, h: 520, ax: 237, num: [245, 145], dy: -6, sc: 0.97, k: 1.15 },
-      { w: 341, h: 522, ax: 169, num: [175, 150], dy: -7, sc: 0.96, k: 1.15 },
-      { w: 350, h: 559, ax: 120, num: [165, 150], hand: [335, 18], dy: -9, sc: 0.95, k: 1.15 },
-      { w: 421, h: 420, ax: 112, dy: -12, sc: 0.93, k: 1.15 },
+      { w: 192, h: 668, ax: 98, ay: 667, num: [116, 169] },
+      { w: 193, h: 669, ax: 105, ay: 668, num: [120, 169] },
+      { w: 205, h: 670, ax: 118, ay: 669, num: [132, 168] },
+      { w: 219, h: 670, ax: 134, ay: 669, num: [147, 168] },
+      { w: 230, h: 669, ax: 148, ay: 668, num: [154, 170] },
+      { w: 222, h: 666, ax: 142, ay: 665, num: [147, 171] },
+      { w: 218, h: 664, ax: 137, ay: 664, num: [145, 169] },
+      { w: 220, h: 658, ax: 138, ay: 657, num: [150, 165] },
+      { w: 212, h: 649, ax: 129, ay: 649, num: [140, 162] },
+      { w: 237, h: 635, ax: 147, ay: 635, num: [156, 161] },
+      { w: 282, h: 620, ax: 173, ay: 620, num: [180, 156] },
+      { w: 318, h: 597, ax: 180, ay: 597, num: [184, 148] },
+      { w: 418, h: 576, ax: 222, ay: 579, num: [227, 139] },
+      { w: 509, h: 552, ax: 231, ay: 556, num: [244, 130] },
+      { w: 479, h: 535, ax: 198, ay: 540, num: [212, 124] },
+      { w: 335, h: 541, ax: 133, ay: 550, num: [139, 139] },
+      { w: 230, h: 539, ax: 114, ay: 554, num: [120, 165] },
+      { w: 273, h: 508, ax: 67, ay: 534, num: [97, 150], hand: [257, 6] },
+      { w: 175, h: 448, ax: 66, ay: 477 },
+      { w: 188, h: 421, ax: 69, ay: 479 },
+      { w: 218, h: 408, ax: 70, ay: 475 },
+      { w: 357, h: 418, ax: 68, ay: 485 },
+      { w: 404, h: 434, ax: 57, ay: 501 },
+      { w: 394, h: 444, ax: 57, ay: 510 },
+      { w: 364, h: 452, ax: 54, ay: 519 },
     ],
   },
-  pitcher_front: {                                       // 정면(카메라 쪽으로 던짐), 순서는 뒷모습과 같다
-    h0: 746,
+  pitcher_front: {                                       // 정면(영상에서 25장), 순서는 뒷모습과 같다
+    h0: 670, cut: true,
     frames: [
-      { w: 247, h: 746, ax: 122, dy: 0, sc: 1 },
-      { w: 245, h: 745, ax: 121, dy: 0, sc: 1 },
-      { w: 246, h: 743, ax: 121, dy: 0, sc: 1 },
-      { w: 347, h: 707, ax: 156, dy: 1, sc: 1.01 },
-      { w: 396, h: 683, ax: 201, dy: 2, sc: 1.03, k: 0.92 },
-      { w: 350, h: 688, ax: 184, dy: 3, sc: 1.04, k: 0.92 },
-      { w: 326, h: 681, ax: 200, hand: [22, 72], dy: 4, sc: 1.05, k: 0.92 },
-      { w: 394, h: 575, ax: 167, dy: 6, sc: 1.07, k: 0.92 },
+      { w: 209, h: 670, ax: 114, ay: 668 },
+      { w: 188, h: 659, ax: 120, ay: 667 },
+      { w: 186, h: 648, ax: 125, ay: 670 },
+      { w: 216, h: 649, ax: 156, ay: 671 },
+      { w: 256, h: 648, ax: 197, ay: 671 },
+      { w: 256, h: 648, ax: 197, ay: 671 },
+      { w: 232, h: 647, ax: 172, ay: 670 },
+      { w: 220, h: 641, ax: 159, ay: 665 },
+      { w: 255, h: 629, ax: 186, ay: 654 },
+      { w: 300, h: 618, ax: 221, ay: 640 },
+      { w: 309, h: 641, ax: 224, ay: 626 },
+      { w: 264, h: 654, ax: 176, ay: 615 },
+      { w: 192, h: 668, ax: 106, ay: 611 },
+      { w: 220, h: 690, ax: 138, ay: 611 },
+      { w: 277, h: 704, ax: 114, ay: 608 },
+      { w: 340, h: 696, ax: 150, ay: 600 },
+      { w: 325, h: 680, ax: 163, ay: 584 },
+      { w: 332, h: 730, ax: 169, ay: 634, hand: [43, 20] },
+      { w: 252, h: 650, ax: 93, ay: 558 },
+      { w: 256, h: 644, ax: 98, ay: 555 },
+      { w: 275, h: 639, ax: 104, ay: 554 },
+      { w: 322, h: 628, ax: 118, ay: 547 },
+      { w: 360, h: 616, ax: 178, ay: 541 },
+      { w: 425, h: 619, ax: 236, ay: 549 },
+      { w: 455, h: 631, ax: 267, ay: 567 },
     ],
   },
   batter: {                                              // 그림은 왼쪽(투수 쪽)을 본다. dx = 투수 쪽으로 내딛기, grip = 방망이 쥔 손
@@ -60,8 +94,8 @@ for (const [name, set] of Object.entries(SETS)) {
   set.frames.forEach((f, i) => {
     total++;
     const img = new Image();
-    img.onload = () => { loaded++; };
-    img.onerror = () => { failed = true; };
+    img.onload = () => { loaded++; if (loaded === total) loadField(); };
+    img.onerror = () => { failed = true; loadField(); };
     img.src = `${BASE}${name}_${i}.webp`;
     f.img = img;
   });
@@ -154,14 +188,21 @@ const FIELD = {
   rbase: [{ w: 75, h: 306, ax: 44, hx: 44 }, { w: 202, h: 249, ax: 99, hx: 158 }, { w: 268, h: 204, ax: 158, hx: 73 }, { w: 340, h: 152, ax: 12, hx: 239 }],   // 서 있기, 리드, 발 슬라이딩, 머리 슬라이딩
   ump: [{ w: 104, h: 301, ax: 52, hx: 53 }, { w: 163, h: 246, ax: 81, hx: 82 }, { w: 136, h: 312, ax: 53, hx: 74 }],   // 심판 뒷모습: 서 있기, 앉기, 콜
 };
-for (const [name, frames] of Object.entries(FIELD)) {
-  frames.forEach((f, i) => {
-    const img = new Image();
-    img.onload = () => { f.ok = true; };
-    img.src = `${BASE}${name}_${i}.webp`;
-    f.img = img;
-  });
+// 투수·타자 그림(첫 화면)을 다 받은 뒤에 불러온다. 같이 받으면 첫 화면이 늦게 뜬다
+let fieldStarted = false;
+function loadField() {
+  if (fieldStarted) return;
+  fieldStarted = true;
+  for (const [name, frames] of Object.entries(FIELD)) {
+    frames.forEach((f, i) => {
+      const img = new Image();
+      img.onload = () => { f.ok = true; };
+      img.src = `${BASE}${name}_${i}.webp`;
+      f.img = img;
+    });
+  }
 }
+setTimeout(loadField, 8000);                             // 첫 화면 그림이 끝내 안 오더라도 타구 장면 그림은 받는다
 export const fieldCount = name => FIELD[name]?.length || 0;
 export const fieldReady = () => Object.values(FIELD).every(fr => fr.every(f => f.ok));   // 미리보기에서 다 불러올 때까지 기다리는 용도
 // 그림 한 장(uni가 있으면 팀 색을 입힌다). 없는 그림이거나 아직 못 불러왔으면 null
@@ -179,8 +220,10 @@ function shadowAt(ctx, w) {
 
 // ── 투수 ──
 // 와인드업 u(0~1): 셋 → … → 릴리스(6). 릴리스 뒤: 팔로스루(7) → (잠시 뒤) 다시 셋.
-const WIND_KEYS = [[0, 0], [0.17, 1], [0.37, 2], [0.53, 3], [0.67, 4], [0.83, 5], [1, 6]];
-const REL = 6, FOL = 7;
+// 영상에서 고르게 뽑은 18장이라 와인드업 시간에 고르게 나눈다. 릴리스 뒤 7장은 점점 느려지며 마무리
+const REL = 17;
+const WIND_KEYS = Array.from({ length: REL + 1 }, (_, i) => [i / REL, i]);
+const AFTER_KEYS = [[0, REL], [40, 18], [90, 19], [160, 20], [250, 21], [370, 22], [520, 23], [700, 24], [950, 24], [1250, 0]];
 function pitchState(now, releaseAt, windMs) {
   if (releaseAt == null) return { a: 0, b: 0, mix: 0, idle: true };
   if (now < releaseAt) {
@@ -189,24 +232,25 @@ function pitchState(now, releaseAt, windMs) {
     return frameMix(WIND_KEYS, u, 0.4);
   }
   const dt = now - releaseAt;
-  return frameMix([[0, REL], [140, FOL], [900, FOL], [1250, 0]], dt, dt < 140 ? 0.25 : 0.5);
+  return frameMix(AFTER_KEYS, dt, dt < 700 ? 0.25 : 0.5);
 }
 
 // 공이 손을 떠나는 위치(포즈 단위, 투수 발 기준). 스프라이트를 못 쓰면 null
 export function spriteReleaseOffset(back, throws) {
   if (!spritesReady()) return null;
   const set = SETS[back ? 'pitcher_back' : 'pitcher_front'];
-  const f = set.frames.find(q => q.hand), su = (STAND / set.h0) * f.sc * (f.k || 1), flip = throws === 'L' ? -1 : 1;
-  return [(f.hand[0] - f.ax) * su * flip, (f.hand[1] - f.h) * su + f.dy];
+  const f = set.frames.find(q => q.hand), su = (STAND / set.h0) * (f.sc ?? 1) * (f.k || 1), flip = throws === 'L' ? -1 : 1;
+  return [(f.hand[0] - f.ax) * su * flip, (f.hand[1] - (f.ay ?? f.h)) * su + (f.dy ?? 0)];
 }
 
 function drawPitcherFrame(ctx, f, img, su, flip, alpha, back, player, uni, txt = 1) {
   if (alpha <= 0.01) return;
   const k = f.k || 1;
   ctx.save(); ctx.globalAlpha = alpha; ctx.scale(flip * su * k, su * k);
-  ctx.drawImage(img, -f.ax, -f.h);
+  const ay = f.ay ?? f.h;                              // 기준점(발) 세로 위치. 영상 그림은 발이 그림 밖에 있을 수도 있다
+  ctx.drawImage(img, -f.ax, -ay);
   if (back && player && f.num) {                       // 등 이름·번호(그림 배율과 상관없이 같은 크기)
-    ctx.translate(f.num[0] - f.ax, f.num[1] - f.h); ctx.scale(flip * txt / k, txt / k);
+    ctx.translate(f.num[0] - f.ax, f.num[1] - ay); ctx.scale(flip * txt / k, txt / k);
     ctx.textAlign = 'center'; ctx.lineJoin = 'round';
     ctx.font = '800 17px "Pretendard Variable",system-ui,sans-serif';
     ctx.fillStyle = uni.num; ctx.fillText(player.name, 0, -30);
@@ -225,13 +269,14 @@ export function drawPitcherSprite(ctx, { x, y, scale, back, uni, player, throws,
   const st = pitchState(now, releaseAt, windMs);
   const A = set.frames[st.a], B = set.frames[st.b];
   const k = st.a === st.b ? 0 : smooth(st.s ?? 0);   // 몸 이동은 구간 전체에 걸쳐 부드럽게
-  const dy = lerp(A.dy, B.dy, k), sc = lerp(A.sc, B.sc, k);
+  const dy = lerp(A.dy ?? 0, B.dy ?? 0, k), sc = lerp(A.sc ?? 1, B.sc ?? 1, k);
   const breathe = st.idle ? 1 + Math.sin(now / 420) * 0.006 : 1;
   const su = (STAND / set.h0) * sc, flip = throws === 'L' ? -1 : 1;
   ctx.save(); ctx.translate(x, y); ctx.scale(scale, scale);
   shadowAt(ctx, 50);
   ctx.translate(0, dy); ctx.scale(1, breathe);
-  const [aA, aB] = fade(st.mix);
+  // 영상 그림(cut)은 촘촘해서 겹치지 않고 바로 넘긴다(겹치면 몸이 두 겹으로 보인다). 마무리 → 셋 자세로 돌아갈 때만 겹친다
+  const [aA, aB] = set.cut && !(st.b === 0 && st.a !== 0) ? (st.mix < 0.5 ? [1, 0] : [0, 1]) : fade(st.mix);
   drawPitcherFrame(ctx, A, tinted(A, uni), su, flip, aA, back, player, uni, set.txt);
   drawPitcherFrame(ctx, B, tinted(B, uni), su, flip, aB, back, player, uni, set.txt);
   ctx.restore();

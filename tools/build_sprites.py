@@ -1,8 +1,7 @@
 """그림 조각(분할된 PNG)을 게임용 스프라이트(WebP)로 만든다.
 
 사용법: python -I tools/build_sprites.py <압축 푼 폴더>
-  <폴더>/pitcher_back/baseball-pitcher/*.png, pitcher_front/baseball-player/*.png,
-  (pitcher_front2 = catcher_front.zip을 푼 것, *_mid = 중간 동작 zip, pitcher_seq_A/B = 뒷모습 투구폼 8동작, pitcher_front_seq_A/B = 정면 8동작) batter_seq_A/B = 타자 스윙 8동작, catcher/baseball-catcher/baseball-catcher-1.png, ump/umpire.png
+  <폴더>/batter_seq_A/B/baseball-player/*.png = 타자 스윙 8동작, catcher/baseball-catcher/baseball-catcher-1.png, ump/umpire.png
   fielder_A/run/throw, runner_run = 타구 장면 수비수·주자(먼저 tools/fix_fielders.py 로 장갑을 붙인다)
 결과: assets/sprites/<이름>.webp + assets/sprites/sprites.json (크기, 발 기준점)
   - 투명 구멍(분할 도구가 뚫은 구멍)은 주변 색으로 메운다
@@ -17,14 +16,9 @@ OUT = os.path.join(os.path.dirname(__file__), '..', 'assets', 'sprites')
 os.makedirs(OUT, exist_ok=True)
 
 # 이름: (파일, 동작) — 조각 번호는 분할 도구가 매긴 순서라 동작 순서와 다르다
-SA, SB = 'pitcher_seq_A/baseball-player/baseball-player-%d.png', 'pitcher_seq_B/baseball-player/baseball-player-%d.png'
-FA, FB = 'pitcher_front_seq_A/baseball-player/baseball-player-%d.png', 'pitcher_front_seq_B/baseball-player/baseball-player-%d.png'
 BA, BB = 'batter_seq_A/baseball-player/baseball-player-%d.png', 'batter_seq_B/baseball-player/baseball-player-%d.png'
 SETS = {
-    # 뒷모습(카메라에서 멀어지며 던짐): 셋 → 다리 들기 시작 → 최고점 → 손 빼기 → 착지·팔 젖힘 → 가속 → 릴리스 → 팔로스루
-    'pitcher_back': [SA % 2, SA % 3, SA % 1, SA % 4, SB % 1, SB % 3, SB % 4, SB % 2],
-    # 정면(카메라 쪽으로 던짐): 셋 → 다리 들기 시작 → 최고점 → 손 빼기 → 착지·팔 젖힘 → 가속 → 릴리스 → 팔로스루
-    'pitcher_front': [FA % 2, FA % 3, FA % 1, FA % 4, FB % 2, FB % 4, FB % 1, FB % 3],
+    # 투수(pitcher_back, pitcher_front)는 영상에서 만든다: tools/video_pitcher.py
     # 준비 → 다리 들기 → 내딛기 → 스윙 시작 → 임팩트 → 임팩트 직후 → 팔로스루 → 마무리 (모두 왼쪽=투수 쪽을 본다, 방망이는 코드로 그림)
     'batter': [BA % 2, BA % 4, BA % 1, BA % 3, BB % 1, BB % 4, BB % 2, BB % 3],
     'catcher': ['catcher/baseball-catcher/baseball-catcher-1.png'],
@@ -33,8 +27,8 @@ SETS = {
 
 
 MAX_HOLE = 2500          # 이보다 작은 구멍만 메운다(분할 도구가 뚫은 구멍)
-BIG_FILL = {('pitcher_front', i) for i in (0, 2, 3, 5, 6)}   # 글러브 속이 통째로 뚫린 그림: 큰 구멍도 메운다
-FLIP = {('pitcher_back', 4), ('pitcher_front', 2)}   # 반대 방향으로 그려진 그림은 뒤집는다(타자 준비, 투수 착지는 글러브 손이 반대)
+BIG_FILL = set()   # (name, i): 글러브 속이 통째로 뚫린 그림이면 큰 구멍도 메운다
+FLIP = set()       # (name, i): 반대 방향으로 그려진 그림은 뒤집는다
 
 
 def fill_holes(im, max_hole):
@@ -118,11 +112,6 @@ with open(os.path.join(OUT, 'sprites.auto.json'), 'w', encoding='utf-8') as fp:
     json.dump(meta, fp, ensure_ascii=False, indent=1)
 
 
-# ── 정면 투구: 분할 도구가 글러브를 떼어 간 그림에 다른 동작의 글러브를 붙인다 ──
-GLOVE_FROM = ('pitcher_front', 5, (160, 145, 250, 268))     # 가슴 앞 글러브(잘라낸 그림 좌표)
-GLOVE_TO = {3: (250, 190), 4: (305, 192), 6: (266, 218)}     # 붙일 곳(글러브 가운데)
-
-
 def drop_specks(im, min_px=300):
     """몸에서 떨어진 작은 조각(분할 찌꺼기)을 지운다."""
     w, h = im.size
@@ -140,25 +129,6 @@ def drop_specks(im, min_px=300):
                         seen.add(n); comp.append(n); q.append(n)
             if len(comp) < min_px:
                 for p in comp: px[p] = (0, 0, 0, 0)
-
-
-name, si, (x0, y0, x1, y1) = GLOVE_FROM
-src = Image.open(os.path.join(OUT, f'{name}_{si}.webp')).convert('RGBA').crop((x0, y0, x1, y1))
-gp = src.load()
-for y in range(src.height):
-    for x in range(src.width):
-        r, g, b, a = gp[x, y]
-        if a < 128 or not (r > b + 35 and r >= g): gp[x, y] = (0, 0, 0, 0)   # 갈색(글러브)·살색만 남긴다
-for i, (cx, cy) in GLOVE_TO.items():
-    path = os.path.join(OUT, f'{name}_{i}.webp')
-    im = Image.open(path).convert('RGBA')
-    im.alpha_composite(src, (cx - src.width // 2, cy - src.height // 2))
-    fill_holes(im, 10**9)
-    drop_specks(im)
-    im.save(path, 'WEBP', quality=88, method=6)
-    print('glove pasted', name, i)
-im = Image.open(os.path.join(OUT, 'pitcher_front_7.webp')).convert('RGBA')
-drop_specks(im); im.save(os.path.join(OUT, 'pitcher_front_7.webp'), 'WEBP', quality=88, method=6)
 
 
 # ── 타구 장면(3D)용 수비수·주자: 작게 줄여서(1피트 = PX_FT 픽셀) 저장한다. 옆모습은 모두 오른쪽을 보게 ──
