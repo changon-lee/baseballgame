@@ -105,8 +105,8 @@ const SETS = {
       { w: 430, h: 649, ax: 184, ay: 646 },
     ],
   },
-  batter_front: {                                        // 투수 시점(앞에서 본 타자). 그림은 홈플레이트가 왼쪽. 순서·기준점은 batter와 같다
-    h0: 662,                                             // 14 임팩트 = 방망이가 몸 뒤에서 카메라 쪽으로 돌아 나와 홈플레이트를 가로지른 순간
+  batter_front: {                                        // 투수 시점(앞에서 본 타자). 순서·기준점은 batter와 같다
+    h0: 662, raw: true,                                  // 정면 그림은 방망이를 왼쪽 어깨에 멘 모습(좌타자처럼 보임)이라 batter와 반대로, 뒤집지 않고 그린다                                             // 14 임팩트 = 방망이가 몸 뒤에서 카메라 쪽으로 돌아 나와 홈플레이트를 가로지른 순간
     frames: [
       { w: 436, h: 730, ax: 191, ay: 728 },
       { w: 360, h: 741, ax: 68, ay: 744 },
@@ -357,9 +357,9 @@ function batterState(now, swingAt, pitchStart, travelMs) {
   return { ...frameMix(LOAD_KEYS, u, 0), t: -1 };
 }
 
-function drawBatterFrame(ctx, f, img, su, alpha) {
+function drawBatterFrame(ctx, f, img, su, alpha, raw) {
   if (alpha <= 0.01) return;
-  ctx.save(); ctx.globalAlpha = alpha; ctx.scale(-su, su);   // 그림은 왼쪽을 보므로 뒤집어서 +x(투수 쪽)를 보게
+  ctx.save(); ctx.globalAlpha = alpha; ctx.scale(raw ? su : -su, su);   // 옆모습은 왼쪽을 보므로 뒤집어서 +x(투수 쪽)를 보게
   ctx.drawImage(img, -f.ax, -(f.ay ?? f.h));
   ctx.restore();
 }
@@ -376,8 +376,8 @@ export function drawBatterSprite(ctx, { x, y, scale, facing, uni, now, swingAt, 
   if (idle) ctx.scale(1, 1 + Math.sin(now / 520) * 0.004);   // 기다릴 때 숨쉬기
   // 영상 그림은 촘촘해서 겹치지 않고 바로 넘긴다(겹치면 몸·방망이가 두 겹). 마무리 → 준비 자세로 돌아갈 때만 겹친다
   const [aA, aB] = st.b === 0 && st.a !== 0 ? fade(st.mix) : st.mix < 0.5 ? [1, 0] : [0, 1];
-  drawBatterFrame(ctx, A, tinted(A, uni), su, aA);
-  drawBatterFrame(ctx, B, tinted(B, uni), su, aB);
+  drawBatterFrame(ctx, A, tinted(A, uni), su, aA, set.raw);
+  drawBatterFrame(ctx, B, tinted(B, uni), su, aB, set.raw);
   ctx.restore();
   return true;
 }
