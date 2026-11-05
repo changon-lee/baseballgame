@@ -3,7 +3,7 @@
 import { toSec, trackAt, ballAt, fenceAt, BASES, polar, FENCE_H } from './playscript.js';
 import { standsImage } from './stadium.js';
 import { drawBall } from './figures.js';
-import { fieldSprite, FIELD_PX } from './sprites.js';
+import { fieldSprite, fieldCount, FIELD_PX } from './sprites.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -316,19 +316,18 @@ function drawPerson(ctx, x, y, s, u, act, ph, since, dir, helmet, glove) {
 // view = 카메라에서 본 방향: 'front'(카메라 쪽으로 옴), 'back'(멀어짐), 'side'(옆으로). 옆모습은 오른쪽을 보므로 dir < 0이면 뒤집는다
 // 후보를 차례로 해 보고 그림이 있는 첫 번째를 쓴다(앞·뒷모습 달리기 그림이 아직 없으면 옆모습으로)
 // 기준점: foot = 발 가운데, head = 머리(달릴 땐 머리가 엉덩이보다 앞이라 조금 뒤로), mid = 그림 가운데
-const RUN4 = i => ((Math.floor(i) % 4) + 4) % 4;
+// 달리기는 i = 'cyc': 그 묶음의 그림 수로 한 바퀴(ph 2π)를 나눠 고른다
 function spriteFor(kind, act, ph, since, view) {
-  const step = RUN4(ph / (Math.PI / 2));
   const running = act === 'run' || act === 'drop';
   if (kind === 'u') return [['ump', 0, 'foot']];
   if (kind === 'r') {
-    if (running) return [...(view !== 'side' ? [[`runner_${view}`, step, 'foot']] : []), ['runner', step, 'head', true]];
+    if (running) return [...(view !== 'side' ? [[`runner_${view}`, 'cyc', 'foot']] : []), ['runner', 'cyc', 'foot', true]];
     if (act === 'slide') return [['rbase', 2, 'mid', true]];
     if (act === 'lead' || act === 'tag') return [['rbase', 1, 'mid', true]];
-    if (act === 'bat') return [['runner', 0, 'head', true]];
+    if (act === 'bat') return [['runner', 0, 'foot', true]];
     return [['rbase', 0, 'foot', true]];
   }
-  if (running) return [...(view !== 'side' ? [[`frun_${view}`, step, 'foot']] : []), ['frun', step, 'head', true]];
+  if (running) return [...(view !== 'side' ? [[`frun_${view}`, 'cyc', 'foot']] : []), ['frun', 'cyc', 'foot', true]];
   switch (act) {
     case 'throw': return [['fthrow', since < 0.12 ? 0 : since < 0.32 ? 1 : 2, 'mid', true]];
     case 'dive': return [['fthrow', 3, 'mid', true]];
@@ -339,8 +338,10 @@ function spriteFor(kind, act, ph, since, view) {
   }
 }
 function drawSprite(ctx, x, y, s, u, kind, act, ph, since, dir, view) {
-  for (const [set, i, anchor, side] of spriteFor(kind, act, ph, since, view)) {
-    const sp = fieldSprite(set, i, u);
+  for (const [set, i0, anchor, side] of spriteFor(kind, act, ph, since, view)) {
+    const n = fieldCount(set);
+    const i = i0 === 'cyc' ? ((Math.floor(ph / (2 * Math.PI) * n) % n) + n) % n : i0;
+    const sp = n && fieldSprite(set, i, u);
     if (!sp) continue;
     const k = s / FIELD_PX, ax = anchor === 'foot' ? sp.ax : anchor === 'head' ? sp.hx - sp.h * 0.1 : sp.w / 2;
     ctx.save();

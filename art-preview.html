@@ -97,7 +97,8 @@ if (scene === 'sprites') {
 if (scene.startsWith('play')) {               // #play-HR-3 : 타구 장면 6컷 (이벤트-시드[-g = 땅볼])
   const [, ev = 'DOUBLE', seed = '3', g] = scene.split('-');
   const { standsReady } = await import('./js/ui/art/stadium.js');
-  while (!standsReady('catcher')) await new Promise(r => setTimeout(r, 50));
+  const { fieldReady } = await import('./js/ui/art/sprites.js');
+  while (!standsReady('catcher') || !fieldReady()) await new Promise(r => setTimeout(r, 50));
   const sc = buildPlay({ event: ev, fly: g !== 'g', contact: { pull: 0.5 }, bats: 'L', bases: [true, false, true], rng: createRng(+seed) });
   const cols = 3, rows = 2, pw = W / cols, ph = H / rows;
   const fr = [0.03, 0.2, 0.4, 0.6, 0.8, 1.0];

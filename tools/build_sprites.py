@@ -162,14 +162,12 @@ drop_specks(im); im.save(os.path.join(OUT, 'pitcher_front_7.webp'), 'WEBP', qual
 
 
 # ── 타구 장면(3D)용 수비수·주자: 작게 줄여서(1피트 = PX_FT 픽셀) 저장한다. 옆모습은 모두 오른쪽을 보게 ──
-# 먼저 tools/fix_fielders.py 로 장갑을 붙인 그림(fixed/)을 만든다
+# 먼저 tools/fix_fielders.py 로 장갑을 붙인 그림(fixed/)을 만든다. 달리기(frun*, runner*)는 영상에서: tools/video_sprites.py
 PX_FT = 50
 FX = 'fixed/%s.png'
 FIELD = {   # 이름: (그림 1피트당 픽셀, 오른쪽 보게 뒤집기, 파일들)
     'fielder': (110, False, [FX % ('fielder_A-%d' % i) for i in range(1, 5)]),           # 준비, 땅볼, 뜬공, 서서 보기(정면)
-    'frun': (100, False, [FX % ('fielder_run2-%d' % i) for i in range(1, 5)]),           # 달리기 한 바퀴(다리가 번갈아)
     'fthrow': (95, True, [FX % 'throw-1', FX % 'throw-3', FX % 'throw-2', FX % 'throw-4']),   # 내딛기, 던질 준비, 릴리스, 다이빙
-    'runner': (99, False, [FX % ('runner_run2-%d' % i) for i in range(1, 5)]),
     'rbase': (96, False, [FX % ('runner_base-%d' % i) for i in range(1, 5)]),           # 서 있기, 리드, 발 슬라이딩, 머리 슬라이딩
     'ump': (125, False, [FX % ('umpire_back-%d' % i) for i in range(1, 4)]),            # 뒷모습: 서 있기, 앉기, 콜
 }

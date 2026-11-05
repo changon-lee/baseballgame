@@ -141,11 +141,16 @@ function tinted(f, uni) {
 // ── 타구 장면(3D)용 수비수·주자 그림: 1피트 = FIELD_PX 픽셀로 줄여 저장. 옆모습은 오른쪽을 본다 ──
 // 투수·타자 그림과 따로 불러와서, 못 불러온 그림만 코드로 그린 사람으로 대신한다
 export const FIELD_PX = 50;
+const rep = (n, f) => Array.from({ length: n }, () => ({ ...f }));   // 영상에서 뽑은 그림은 프레임마다 크기·기준점이 같다
 const FIELD = {
+  frun: rep(8, { w: 207, h: 290, ax: 94 }),   // 달리기(영상에서 8장, 옆모습)
+  frun_front: rep(8, { w: 129, h: 308, ax: 67 }),   // 달리기 앞모습(카메라 쪽으로)
+  frun_back: rep(8, { w: 149, h: 308, ax: 83 }),   // 달리기 뒷모습
+  runner: rep(8, { w: 183, h: 292, ax: 89 }),   // 주자 달리기(옆모습)
+  runner_front: rep(8, { w: 119, h: 305, ax: 59 }),   // 주자 달리기 앞모습
+  runner_back: rep(8, { w: 125, h: 304, ax: 57 }),   // 주자 달리기 뒷모습
   fielder: [{ w: 186, h: 250, ax: 92, hx: 95 }, { w: 177, h: 194, ax: 88, hx: 88 }, { w: 113, h: 330, ax: 56, hx: 64 }, { w: 117, h: 303, ax: 55, hx: 52 }],   // 준비, 땅볼, 뜬공, 서서 보기(정면)
-  frun: [{ w: 209, h: 276, ax: 105, hx: 148 }, { w: 180, h: 282, ax: 66, hx: 131 }, { w: 213, h: 273, ax: 107, hx: 150 }, { w: 186, h: 283, ax: 70, hx: 134 }],   // 달리기 한 바퀴(다리가 번갈아)
   fthrow: [{ w: 234, h: 256, ax: 116, hx: 153 }, { w: 243, h: 263, ax: 118, hx: 133 }, { w: 243, h: 263, ax: 105, hx: 165 }, { w: 320, h: 171, ax: 22, hx: 238 }],   // 내딛기, 던질 준비, 릴리스, 다이빙
-  runner: [{ w: 246, h: 272, ax: 116, hx: 188 }, { w: 222, h: 287, ax: 21, hx: 167 }, { w: 242, h: 269, ax: 114, hx: 187 }, { w: 219, h: 287, ax: 20, hx: 162 }],   // 달리기 한 바퀴
   rbase: [{ w: 75, h: 306, ax: 44, hx: 44 }, { w: 202, h: 249, ax: 99, hx: 158 }, { w: 268, h: 204, ax: 158, hx: 73 }, { w: 340, h: 152, ax: 12, hx: 239 }],   // 서 있기, 리드, 발 슬라이딩, 머리 슬라이딩
   ump: [{ w: 104, h: 301, ax: 52, hx: 53 }, { w: 163, h: 246, ax: 81, hx: 82 }, { w: 136, h: 312, ax: 53, hx: 74 }],   // 심판 뒷모습: 서 있기, 앉기, 콜
 };
@@ -157,6 +162,8 @@ for (const [name, frames] of Object.entries(FIELD)) {
     f.img = img;
   });
 }
+export const fieldCount = name => FIELD[name]?.length || 0;
+export const fieldReady = () => Object.values(FIELD).every(fr => fr.every(f => f.ok));   // 미리보기에서 다 불러올 때까지 기다리는 용도
 // 그림 한 장(uni가 있으면 팀 색을 입힌다). 없는 그림이거나 아직 못 불러왔으면 null
 export function fieldSprite(name, i, uni) {
   const f = FIELD[name]?.[i];
