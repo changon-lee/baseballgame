@@ -3,7 +3,6 @@
 // 좌표: 각 프레임 그림 안의 픽셀. ax = 머리(모자) 가로 중심 — 동작 중 머리는 거의 안 움직이므로 프레임끼리 머리를 맞춘다. 아래 끝 = 발.
 // 동작은 프레임을 끊어 바꾸지 않고, 잠깐 머문 뒤 다음 프레임으로 겹쳐 넘어간다(디졸브) + 몸 위치를 조금씩 옮긴다.
 import { toS } from './view.js';
-import { drawBat } from './figures.js';
 
 const BASE = new URL('../../../assets/sprites/', import.meta.url).href;
 const STAND = 182;                                       // 서 있는 선수 키(포즈 단위)
@@ -72,17 +71,38 @@ const SETS = {
       { w: 455, h: 631, ax: 267, ay: 567 },
     ],
   },
-  batter: {                                              // 그림은 왼쪽(투수 쪽)을 본다. dx = 투수 쪽으로 내딛기, grip = 방망이 쥔 손
-    h0: 662,                                             // 준비 → 다리 들기 → 내딛기 → 스윙 시작 → 임팩트 → 임팩트 직후 → 팔로스루 → 마무리
-    frames: [
-      { w: 379, h: 662, ax: 173, grip: [288, 64], dx: 0 },
-      { w: 397, h: 657, ax: 215, grip: [322, 78], dx: -2 },
-      { w: 427, h: 657, ax: 219, grip: [318, 76], dx: 2 },
-      { w: 261, h: 677, ax: 93, grip: [58, 146], dx: 3 },
-      { w: 343, h: 644, ax: 184, grip: [28, 154], dx: 4 },
-      { w: 347, h: 647, ax: 222, grip: [26, 138], dx: 5 },
-      { w: 292, h: 646, ax: 166, grip: [38, 98], dx: 4 },
-      { w: 220, h: 651, ax: 142, grip: [28, 34], dx: 3 },
+  batter: {                                              // 영상에서 뽑은 29장(방망이까지 그림에 있다, tools/video_batter.py). 그림은 왼쪽(투수 쪽)을 본다
+    h0: 662,                                             // 0 준비, 1~5 다리 들고 내딛기, 6 내딛은 자세, 7~13 스윙, 14 임팩트(방망이가 투수 쪽), 15~24 팔로스루, 25~28 마무리
+    frames: [                                            // 기준점(ax, ay) = 준비 자세의 두 발 가운데. 모든 프레임이 같은 영상 좌표라 내딛는 발이 그대로 움직인다
+      { w: 394, h: 755, ax: 145, ay: 753 },
+      { w: 304, h: 740, ax: 44, ay: 738 },
+      { w: 314, h: 736, ax: 60, ay: 734 },
+      { w: 364, h: 728, ax: 114, ay: 727 },
+      { w: 433, h: 715, ax: 190, ay: 714 },
+      { w: 447, h: 700, ax: 221, ay: 698 },
+      { w: 410, h: 676, ax: 219, ay: 674 },
+      { w: 387, h: 643, ax: 217, ay: 643 },
+      { w: 387, h: 617, ax: 216, ay: 617 },
+      { w: 424, h: 614, ax: 215, ay: 614 },
+      { w: 467, h: 614, ax: 214, ay: 614 },
+      { w: 416, h: 616, ax: 213, ay: 615 },
+      { w: 391, h: 617, ax: 212, ay: 616 },
+      { w: 488, h: 617, ax: 302, ay: 616 },
+      { w: 494, h: 617, ax: 302, ay: 616 },
+      { w: 501, h: 617, ax: 302, ay: 615 },
+      { w: 507, h: 615, ax: 302, ay: 614 },
+      { w: 513, h: 615, ax: 302, ay: 614 },
+      { w: 495, h: 640, ax: 278, ay: 638 },
+      { w: 425, h: 685, ax: 203, ay: 684 },
+      { w: 428, h: 722, ax: 202, ay: 721 },
+      { w: 431, h: 756, ax: 201, ay: 755 },
+      { w: 431, h: 780, ax: 200, ay: 779 },
+      { w: 432, h: 794, ax: 199, ay: 793 },
+      { w: 431, h: 801, ax: 198, ay: 799 },
+      { w: 461, h: 784, ax: 196, ay: 782 },
+      { w: 468, h: 711, ax: 193, ay: 709 },
+      { w: 428, h: 645, ax: 189, ay: 642 },
+      { w: 430, h: 649, ax: 184, ay: 646 },
     ],
   },
   catcher: { h0: 1005, frames: [{ w: 762, h: 1005, ax: 380, mitt: [517, 413] }] },
@@ -284,31 +304,25 @@ export function drawPitcherSprite(ctx, { x, y, scale, back, uni, player, throws,
 }
 
 // ── 타자 ── (facing: +1 = 투수가 화면 오른쪽)
-// 스윙 시각표(ms): 내딛은 자세 → 시작 → 임팩트 → 팔로스루 → 마무리(머묾) → 준비 자세로 돌아옴
+// 스윙 시각표(ms): 스윙 시작 → 임팩트(SWING_CONTACT_MS)까지 7장을 빠르게, 팔로스루는 점점 느리게, 마무리에서 머문 뒤 준비 자세로 돌아온다
 export const SWING_CONTACT_MS = 70;                     // 스윙 시작 → 방망이가 공에 닿는 순간
-const SWING_FRAMES = [[0, 2], [35, 3], [SWING_CONTACT_MS, 4], [170, 5], [330, 6], [560, 7], [850, 7], [1200, 0]];
-// 방망이 각도(투수 쪽 = 0, 위 = -π/2, 뒤 = ±π). 마무리에선 등 뒤로 감겨 아래를 향한다(-3.6)
-const SWING_BAT = [[0, -2.3], [35, -3.0], [SWING_CONTACT_MS, 0.1], [170, -0.6], [330, -2.3], [560, -3.6], [850, -3.6], [1200, -2.05]];
-// 공이 오는 동안(투구 진행 비율): 준비 → 다리 들기 → 내딛기
-const LOAD_KEYS = [[0, 0], [0.3, 1], [0.65, 2]];
+const SWING_FRAMES = [
+  ...Array.from({ length: 8 }, (_, i) => [i * SWING_CONTACT_MS / 7, 7 + i]),   // 0~70ms: 7 → 14(임팩트)
+  [90, 15], [110, 16], [130, 17], [150, 18], [175, 19], [200, 20], [230, 21], [260, 22], [295, 23], [330, 24],
+  [390, 25], [480, 26], [600, 27], [760, 28], [1050, 28], [1350, 0]];
+// 공이 오는 동안(투구 진행 비율): 준비 → 다리 들고 내딛기 → 내딛은 자세(스윙을 안 하면 여기서 멈춘다)
+const LOAD_KEYS = [[0, 0], [0.12, 1], [0.24, 2], [0.36, 3], [0.47, 4], [0.57, 5], [0.65, 6]];
 
 function batterState(now, swingAt, pitchStart, travelMs) {
-  if (swingAt != null && now >= swingAt) {
-    const t = now - swingAt;
-    const fm = frameMix(SWING_FRAMES, t, t < SWING_CONTACT_MS ? 0 : t < 600 ? 0.2 : 0.6);
-    return { ...fm, ang: track(SWING_BAT, t), t, swinging: t < SWING_CONTACT_MS + 60 };
-  }
-  // 공이 오면 다리를 들었다가 내딛는다. 기다릴 때는 방망이를 가볍게 흔든다
+  if (swingAt != null && now >= swingAt) return { ...frameMix(SWING_FRAMES, now - swingAt, 0), t: now - swingAt };
   const u = pitchStart != null && now >= pitchStart ? (now - pitchStart) / Math.max(1, travelMs) : 0;
-  const load = smooth(u / 0.65);
-  const waggle = Math.sin(now / 260) * 0.07 * (1 - load);
-  return { ...frameMix(LOAD_KEYS, u, 0.25), ang: -2.05 - 0.25 * load + waggle, t: -1 };
+  return { ...frameMix(LOAD_KEYS, u, 0), t: -1 };
 }
 
 function drawBatterFrame(ctx, f, img, su, alpha) {
   if (alpha <= 0.01) return;
   ctx.save(); ctx.globalAlpha = alpha; ctx.scale(-su, su);   // 그림은 왼쪽을 보므로 뒤집어서 +x(투수 쪽)를 보게
-  ctx.drawImage(img, -f.ax, -f.h);
+  ctx.drawImage(img, -f.ax, -(f.ay ?? f.h));
   ctx.restore();
 }
 
@@ -317,31 +331,14 @@ export function drawBatterSprite(ctx, { x, y, scale, facing, uni, now, swingAt, 
   const set = SETS.batter, su = STAND / set.h0;
   const st = batterState(now, swingAt, pitchStart, travelMs);
   const A = set.frames[st.a], B = set.frames[st.b];
-  const k = st.a === st.b ? 0 : smooth(st.s);
-  const dx = lerp(A.dx, B.dx, k);
-  const bob = st.t < 0 ? Math.sin(now / 520) * 0.6 : 0;
-  // 방망이를 쥔 손 위치도 두 프레임 사이를 따라간다
-  const gp = f => [-(f.grip[0] - f.ax) * su, (f.grip[1] - f.h) * su];
-  const ga = gp(A), gb = gp(B);
-  const grip = [lerp(ga[0], gb[0], st.mix), lerp(ga[1], gb[1], st.mix) + bob];
+  const idle = st.t < 0 && st.a === 0 && st.b === 0;
   ctx.save(); ctx.translate(x, y); ctx.scale(scale * facing, scale); ctx.translate(BAT_SHIFT, 0);
   shadowAt(ctx, 60);
-  ctx.translate(dx, 0);
-  const batBehind = (st.ang < -1.6 && st.t < 0) || st.t > 300;   // 준비 자세·팔로스루에선 방망이가 몸 뒤
-  if (batBehind) drawBat(ctx, grip, st.ang);
-  ctx.save(); ctx.translate(0, bob);
-  const [aA, aB] = fade(st.mix);
+  if (idle) ctx.scale(1, 1 + Math.sin(now / 520) * 0.004);   // 기다릴 때 숨쉬기
+  // 영상 그림은 촘촘해서 겹치지 않고 바로 넘긴다(겹치면 몸·방망이가 두 겹). 마무리 → 준비 자세로 돌아갈 때만 겹친다
+  const [aA, aB] = st.b === 0 && st.a !== 0 ? fade(st.mix) : st.mix < 0.5 ? [1, 0] : [0, 1];
   drawBatterFrame(ctx, A, tinted(A, uni), su, aA);
   drawBatterFrame(ctx, B, tinted(B, uni), su, aB);
-  ctx.restore();
-  if (st.swinging) {                                     // 스윙 잔상
-    const a0 = track(SWING_BAT, Math.max(0, st.t - 45)), a1 = st.ang;
-    ctx.save(); ctx.globalAlpha = 0.13; ctx.fillStyle = '#f3e2c4';
-    ctx.beginPath(); ctx.arc(grip[0], grip[1], 94, Math.min(a0, a1), Math.max(a0, a1));
-    ctx.arc(grip[0], grip[1], 50, Math.max(a0, a1), Math.min(a0, a1), true); ctx.closePath(); ctx.fill();
-    ctx.restore();
-  }
-  if (!batBehind) drawBat(ctx, grip, st.ang);
   ctx.restore();
   return true;
 }

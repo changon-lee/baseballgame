@@ -1,7 +1,7 @@
 """그림 조각(분할된 PNG)을 게임용 스프라이트(WebP)로 만든다.
 
 사용법: python -I tools/build_sprites.py <압축 푼 폴더>
-  <폴더>/batter_seq_A/B/baseball-player/*.png = 타자 스윙 8동작, catcher/baseball-catcher/baseball-catcher-1.png, ump/umpire.png
+  <폴더>/catcher/baseball-catcher/baseball-catcher-1.png, ump/umpire.png
   fielder_A/run/throw, runner_run = 타구 장면 수비수·주자(먼저 tools/fix_fielders.py 로 장갑을 붙인다)
 결과: assets/sprites/<이름>.webp + assets/sprites/sprites.json (크기, 발 기준점)
   - 투명 구멍(분할 도구가 뚫은 구멍)은 주변 색으로 메운다
@@ -16,11 +16,8 @@ OUT = os.path.join(os.path.dirname(__file__), '..', 'assets', 'sprites')
 os.makedirs(OUT, exist_ok=True)
 
 # 이름: (파일, 동작) — 조각 번호는 분할 도구가 매긴 순서라 동작 순서와 다르다
-BA, BB = 'batter_seq_A/baseball-player/baseball-player-%d.png', 'batter_seq_B/baseball-player/baseball-player-%d.png'
 SETS = {
-    # 투수(pitcher_back, pitcher_front)는 영상에서 만든다: tools/video_pitcher.py
-    # 준비 → 다리 들기 → 내딛기 → 스윙 시작 → 임팩트 → 임팩트 직후 → 팔로스루 → 마무리 (모두 왼쪽=투수 쪽을 본다, 방망이는 코드로 그림)
-    'batter': [BA % 2, BA % 4, BA % 1, BA % 3, BB % 1, BB % 4, BB % 2, BB % 3],
+    # 투수(pitcher_back, pitcher_front)·타자(batter)는 영상에서 만든다: tools/video_pitcher.py, tools/video_batter.py
     'catcher': ['catcher/baseball-catcher/baseball-catcher-1.png'],
     'umpire': ['ump/umpire.png'],
 }

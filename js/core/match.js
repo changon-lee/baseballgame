@@ -21,7 +21,8 @@ export function createMatch({ userTeam, cpuTeam, userLineup, innings, rng, cpuSt
     pitcher: { home: userLineup.starterId, away: cpuStarter.id },
     pitchCount: { home: 0, away: 0 },
     used: { home: new Set(), away: new Set() },
-    log: [],                      // 끝난 타석: { batterId, pitcherId, event, runs, outs }
+    log: [],                      // 끝난 타석: { batterId, pitcherId, event, runs, outs, inning, half, score, bases, pitches }
+    pa: [],                       // 지금 타석에 던진 공: { k: 구종, v: 구속, e: 결과 }
   };
 }
 
@@ -40,16 +41,19 @@ const paEvent = e => (e === 'BALL' ? 'WALK' : e === 'STRIKE' ? 'STRIKEOUT' : e);
 const OUTS_OF = { STRIKEOUT: 1, OUT: 1, SAC_FLY: 1, DOUBLE_PLAY: 2 };
 
 // 공 하나의 결과를 경기에 반영
-function commit(m, event, ps) {
+function commit(m, event, ps, pitch, fly) {
   const mu = matchup(m);
   const { state, runs, paEnded } = applyEvent(m.game, event);
   let log = m.log || [];
+  let pa = [...(m.pa || []), pitch ? { k: pitch.type, v: pitch.speedKmh, e: event } : { e: event }];
   if (paEnded) {
-    const ev = paEvent(event);
-    const outs = Math.min(OUTS_OF[ev] || 0, 3 - m.game.outs);
-    log = [...log, { batterId: mu.batter.id, pitcherId: mu.pitcher.id, event: ev, runs, outs }];
+    const ev = paEvent(event), g = m.game;
+    const outs = Math.min(OUTS_OF[ev] || 0, 3 - g.outs);
+    log = [...log, { batterId: mu.batter.id, pitcherId: mu.pitcher.id, event: ev, runs, outs,
+      inning: g.inning, half: g.half, outsBefore: g.outs, bases: [...g.bases], score: { ...state.score }, pitches: pa, fly: !!fly }];
+    pa = [];
   }
-  return { match: { ...m, game: state, log, pitchCount: { ...m.pitchCount, [ps]: m.pitchCount[ps] + 1 } }, runs, paEnded };
+  return { match: { ...m, game: state, log, pa, pitchCount: { ...m.pitchCount, [ps]: m.pitchCount[ps] + 1 } }, runs, paEnded };
 }
 
 // 스윙(또는 노스윙) → 이벤트
@@ -69,7 +73,7 @@ export function playUserPitch(m, { type, target, gaugePos }, rng) {
   const pitch = computePitch({ pitcher: mu.pitcher, type, target, gaugePos, pitchCount: m.pitchCount[mu.pitchingSide], rng });
   const swing = cpuSwing({ batter: mu.batter, pitch, balls: m.game.balls, strikes: m.game.strikes, rng });
   const d = decide(m, mu.batter, pitch, swing.swing ? swing.timingDiffMs : null, rng);
-  const c = commit(m, d.event, mu.pitchingSide);
+  const c = commit(m, d.event, mu.pitchingSide, pitch, d.fly);
   return { match: c.match, pitch, swing: swing.swing ? swing : null, event: d.event, contact: d.contact, fly: d.fly, runs: c.runs, paEnded: c.paEnded };
 }
 
@@ -82,7 +86,7 @@ export function cpuPitchToUser(m, rng) {
 export function resolveUserSwing(m, pitch, timingDiffMs, rng) {
   const mu = matchup(m);
   const d = decide(m, mu.batter, pitch, timingDiffMs, rng);
-  const c = commit(m, d.event, mu.pitchingSide);
+  const c = commit(m, d.event, mu.pitchingSide, pitch, d.fly);
   return { match: c.match, event: d.event, contact: d.contact, fly: d.fly, runs: c.runs, paEnded: c.paEnded };
 }
 
@@ -102,3 +106,24 @@ export function cpuMaybeChangePitcher(m, rng, side = 'away') {
   if (!pool.length) return m;
   return changePitcher(m, side, pool[Math.floor(rng() * pool.length)].id);
 }
+
+// ── 사람 손 없이 진행(자동 진행·넘기기) ──
+// 공 하나: 양쪽 모두 컴퓨터처럼 던지고 친다. 결과 모양은 playUserPitch와 같다
+export function autoPitch(m, rng) {
+  const mu = matchup(m);
+  const c = cpuChoosePitch({ pitcher: mu.pitcher, balls: m.game.balls, strikes: m.game.strikes, rng });
+  return playUserPitch(m, c, rng);
+}
+// 지친 투수는 양쪽 다 바꾼다
+export const autoChangePitchers = (m, rng) => cpuMaybeChangePitcher(cpuMaybeChangePitcher(m, rng, 'away'), rng, 'home');
+// until(경기) 이 참이 되거나 경기가 끝날 때까지 공을 던진다
+export function simulateUntil(m, rng, until) {
+  let x = m, guard = 0;
+  while (!x.game.over && !until(x) && guard++ < 5000) {
+    x = autoChangePitchers(x, rng);
+    x = autoPitch(x, rng).match;
+  }
+  return x;
+}
+export const simulateInning = (m, rng) => { const inn = m.game.inning; return simulateUntil(m, rng, x => x.game.inning !== inn); };
+export const simulateRest = (m, rng) => simulateUntil(m, rng, () => false);

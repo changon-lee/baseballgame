@@ -175,7 +175,7 @@ button.danger{color:var(--red)}
 .bso em{font-style:normal;color:var(--dim);font-weight:800;width:9px}
 .bso i{display:inline-block;width:8px;height:8px;border-radius:50%;background:#26354b}
 .bso i.b.on{background:var(--green)}.bso i.s.on{background:var(--yellow)}.bso i.o.on{background:var(--red)}
-.board .exit{min-height:0;width:36px;padding:0;font-size:15px;background:#0f1a2c;box-shadow:inset 0 0 0 1px var(--line);border-radius:10px;color:var(--dim)}
+.board .exit,.board .more{min-height:0;width:36px;padding:0;font-size:15px;background:#0f1a2c;box-shadow:inset 0 0 0 1px var(--line);border-radius:10px;color:var(--dim)}
 .board .sub{display:flex;justify-content:space-between;align-items:center;gap:8px;color:var(--dim);margin-top:6px;font-size:12.5px;white-space:nowrap;overflow:hidden}
 .board .mu b{color:var(--fg);font-weight:700}.board .mu small{color:var(--dim2)}.board .mu .vs{font-size:10px;margin:0 3px}
 .board .ttl{color:var(--gold);font-size:11px;font-weight:800;overflow:hidden;text-overflow:ellipsis}
@@ -198,4 +198,18 @@ button.danger{color:var(--red)}
 .end-card .final{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:20px}
 .end-card .final span{color:var(--dim);font-weight:700}.end-card .final b{font-size:34px;font-weight:900}.end-card .final i{font-style:normal;color:var(--dim2)}
 .end-card button{width:100%}
+.end-card button+button{margin-top:8px}
+.menu-card .hint{margin:6px 0 14px;font-size:12px}
+.log-card{max-width:400px;max-height:100%;display:flex;flex-direction:column;padding:18px 14px}
+.log-card .final{margin:4px 0 10px}
+.log-card .log{flex:1;min-height:0;overflow-y:auto;text-align:left;margin:0 -4px 12px;padding:0 4px;-webkit-overflow-scrolling:touch}
+.log-card h3{position:sticky;top:0;margin:10px 0 4px;padding:4px 2px;font-size:13px;font-weight:800;background:#111c2e;z-index:1}
+.log-card h3 span{color:var(--dim);font-weight:600;font-size:11.5px;margin-left:4px}
+.log-card .pa{padding:7px 2px;border-bottom:1px solid var(--line)}
+.log-card .who{font-size:13px}.log-card .who small{color:var(--dim);font-size:11px}
+.log-card .seq{display:flex;flex-wrap:wrap;gap:3px;margin:4px 0}
+.log-card .seq i{font-style:normal;font-size:10.5px;padding:1px 6px;border-radius:6px;background:#26354b;color:#c9d5e6}
+.log-card .seq i.b{background:rgba(61,220,132,.16);color:#8fe8b5}.log-card .seq i.s{background:rgba(255,210,63,.14);color:#f3dc8c}.log-card .seq i.x{background:rgba(31,111,229,.3);color:#cfe0ff}
+.log-card .out{font-size:12.5px;font-weight:700;color:var(--dim)}.log-card .out.g{color:var(--green)}.log-card .out small{color:var(--dim);font-weight:500}
+.board .more svg{width:16px;height:16px;fill:currentColor;display:block;margin:auto}
 .hidden{display:none!important}
