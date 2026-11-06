@@ -137,9 +137,42 @@ function imgQuad(ctx, img, u0, u1, v0, v1, tl, tr, bl, br) {
 const quadFill = (ctx, ps, color) => { ctx.fillStyle = color; ctx.beginPath(); ps.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.closePath(); ctx.fill(); };
 const offscreen = (K, ps) => ps.every(p => p.x < -50) || ps.every(p => p.x > K.W + 50) || ps.every(p => p.y < -50) || ps.every(p => p.y > K.H + 50);
 const SPAN_A = 54;                                        // 외야 관중석 그림이 덮는 각도(±), 폴 옆 꺾인 곳까지
+const DEP = 175, HT = 215, ROW = 675;                     // 관중석: 바깥으로 DEP, 펜스 위로 HT 만큼 올라가는 경사면 / 그림에서 쓰는 높이
+// 파울 지역 옆 관중석: 아랫단(b)·바깥 방향(o)·단면(pr: [바깥 거리, 높이] 세 점 = 아래층·위층)·위아래층 경계의 그림 높이(v)·그림 가로 위치(u, 0..1).
+// 외야 관중석 끝에서 시작해 바깥 방향을 파울 쪽 벽에 수직으로 서서히 돌리고, 그림은 끝에서 거울처럼 되짚어 이어 붙인다.
+// 중계 카메라(홈 뒤 62피트)는 파울 쪽 벽을 늘인 선보다 바깥에 있어서, 외야처럼 가파르면 경사면 뒤쪽이 보인다(= 안 그려져 하늘이 뚫림).
+// 그래서 아래층은 완만하게 멀리 깔고(카메라가 위에서 내려다본다), 그 뒤에 위층을 가파르게 세운다
+const SIDE = (() => {
+  const out = {}, ftU = 1 / (2 * SPAN_A * Math.PI / 180 * (fenceAt(SPAN_A) + 1));   // 외야 그림 1피트 = 그림 가로의 몇 배
+  const sm = v => { const t = clamp(v, 0, 1); return t * t * (3 - 2 * t); };
+  for (const sg of [-1, 1]) {
+    const A = sg < 0 ? AL : AR, B = sg < 0 ? BL : BR, nrm = sg < 0 ? nL : nR;
+    const Q = polar(sg * SPAN_A, fenceAt(sg * SPAN_A) + 1);
+    const L = Math.hypot(B[0] - A[0], B[1] - A[1]), d = [(B[0] - A[0]) / L, (B[1] - A[1]) / L];
+    const off0 = (Q[0] - A[0]) * nrm[0] + (Q[1] - A[1]) * nrm[1];        // 외야 끝이 파울 쪽 벽에서 바깥으로 떨어진 거리
+    const aEnd = Math.atan2(nrm[0], nrm[1]) * 180 / Math.PI;
+    const pts = [];
+    for (const t of range(0, L, 12)) {
+      const k = sm(t / 90), off = off0 + (0.5 - off0) * k, ang = sg * SPAN_A + (aEnd - sg * SPAN_A) * k;
+      const b = [Q[0] + d[0] * t + nrm[0] * (off - off0), Q[1] + d[1] * t + nrm[1] * (off - off0)];
+      const u = t * ftU;
+      const pr = [[0, lerp(FENCE_H, 5, k)], [lerp(DEP / 2, 150, k), lerp(FENCE_H + HT / 2, 60, k)], [lerp(DEP, 260, k), FENCE_H + HT]];
+      pts.push({ b, o: polar(ang, 1), pr, v: lerp(ROW / 2, 440, k), u: sg < 0 ? u : 1 - u });
+    }
+    // 홈 뒤 둥근 벽을 따라 카메라 옆까지 더 이어 간다(카메라가 왼쪽·오른쪽 끝을 비출 때 홈 뒤가 텅 비어 보이지 않게)
+    const aB = Math.atan2(B[0], B[1]) * 180 / Math.PI, side = pts[pts.length - 1].pr;
+    let u = L * ftU;
+    for (const a of range(aB, sg * 150, 6).slice(1)) {
+      const b = polar(a, RB + 0.5), last = pts[pts.length - 1].b;
+      u += Math.hypot(b[0] - last[0], b[1] - last[1]) * ftU;
+      pts.push({ b, o: polar(a, 1), pr: side, v: 440, u: sg < 0 ? u % 1 : 1 - u % 1 });
+    }
+    out[sg] = pts;
+  }
+  return out;
+})();
 function drawStands(ctx, K, crowdTint) {
   const img = standsImage('catcher');
-  const DEP = 175, HT = 215, ROW = 675;
   // 외야: 관중석 그림을 펜스 뒤에 빙 둘러 세운다
   const step = 2;
   for (let a = -SPAN_A; a < SPAN_A - 0.01; a += step) {
@@ -151,23 +184,22 @@ function drawStands(ctx, K, crowdTint) {
     if (!img) quadFill(ctx, [tl, tr, br, bl], crowdTint);
     else imgQuad(ctx, img, (a + SPAN_A) / (2 * SPAN_A) * img.width, (a1 + SPAN_A) / (2 * SPAN_A) * img.width, 0, ROW, tl, tr, bl, br);
   }
-  // 파울 지역 옆 관중석: 아래층 관중 부분을 이어 붙인다
-  for (const [p, q] of [[AL, BL], [BR, AR]]) {
-    const L = Math.hypot(q[0] - p[0], q[1] - p[1]), n = Math.max(1, Math.round(L / 20));
-    const dx = (q[0] - p[0]) / L, dy = (q[1] - p[1]) / L;
-    let ox = dy, oy = -dx;                                // 바깥쪽(홈에서 먼 쪽)
-    const mid = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
-    if ((mid[0] + ox) ** 2 + (mid[1] + oy) ** 2 < mid[0] ** 2 + mid[1] ** 2) { ox = -ox; oy = -oy; }
-    for (let i = 0; i < n; i++) {
-      const b0 = [p[0] + dx * L * i / n, p[1] + dy * L * i / n], b1 = [p[0] + dx * L * (i + 1) / n, p[1] + dy * L * (i + 1) / n];
-      // 카메라가 관중석 뒤쪽(바깥)에 있으면 그리지 않는다(뒷면)
-      const nx = -ox * 75, ny = -oy * 75, nz = 90;          // 관중석 경사면의 안쪽·위 방향
-      if ((K.C[0] - b0[0]) * nx + (K.C[1] - b0[1]) * ny + (K.C[2] - 5) * nz < 0) continue;
-      const P = (b, o, z) => project(K, [b[0] + ox * o, b[1] + oy * o, z]);
-      const tl = P(b0, 90, 75), tr = P(b1, 90, 75), bl = P(b0, 0.5, 5), br = P(b1, 0.5, 5);
+  // 파울 지역 옆 관중석: 외야 관중석 끝(폴 옆 꺾인 곳)에서 같은 높이·경사로 홈 쪽까지 이어 붙인다.
+  // (예전엔 낮은 관중석만 따로 두어서, 좌중간·우중간을 비추면 그 위로 하늘이 뚫려 관중석 조각이 떠 보였다)
+  // 먼 위층을 먼저, 가까운 아래층을 나중에 그린다
+  for (const layer of [1, 0]) for (const sg of [-1, 1]) {
+    const pts = SIDE[sg];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i], p1 = pts[i + 1];
+      const at = (q, j) => { const [o, z] = q.pr[j]; return [q.b[0] + q.o[0] * o, q.b[1] + q.o[1] * o, z]; };
+      // 카메라가 이 경사면 뒤쪽(아래)에 있으면 그리지 않는다
+      const lo = at(p0, layer), hi = at(p0, layer + 1), run = p0.pr[layer + 1][0] - p0.pr[layer][0], rise = hi[2] - lo[2];
+      const n = [-p0.o[0] * rise, -p0.o[1] * rise, run];
+      if ((K.C[0] - lo[0]) * n[0] + (K.C[1] - lo[1]) * n[1] + (K.C[2] - lo[2]) * n[2] < 0) continue;
+      const tl = project(K, at(p0, layer + 1)), tr = project(K, at(p1, layer + 1)), bl = project(K, at(p0, layer)), br = project(K, at(p1, layer));
       if (!tl || !tr || !bl || !br || offscreen(K, [tl, tr, bl, br])) continue;
       if (!img) quadFill(ctx, [tl, tr, br, bl], crowdTint);
-      else { const u = (i % 5) * img.width / 5; imgQuad(ctx, img, u, u + img.width / 5, 440, 675, tl, tr, bl, br); }
+      else imgQuad(ctx, img, p0.u * img.width, p1.u * img.width, layer ? 0 : p0.v, layer ? p0.v : ROW, tl, tr, bl, br);
     }
   }
 }
@@ -212,6 +244,18 @@ function drawGround(ctx, K, bases) {
   fillPoly(ctx, K, PLATE, '#f5f5f0', 0.05);
   [1, 2, 3].forEach(i => fillPoly(ctx, K, baseSq(BASES[i]), bases && bases[i - 1] ? '#ffe27a' : '#fbfbf6', 0.25));
 }
+function drawPoles(ctx, K) {                              // 펜스 위 노란 줄(관중석 아랫단이 덮지 않게 다시) + 파울 폴
+  ctx.strokeStyle = '#f1c40f';
+  for (const [a, b, h, kind] of WALLS) {
+    if (kind !== 'fence') continue;
+    const t0 = project(K, [a[0], a[1], h]), t1 = project(K, [b[0], b[1], h]);
+    if (t0 && t1) { ctx.lineWidth = Math.max(1, t0.s * 0.35); ctx.beginPath(); ctx.moveTo(t0.x, t0.y); ctx.lineTo(t1.x, t1.y); ctx.stroke(); }
+  }
+  for (const p of [poleL, poleR]) {
+    const a = project(K, [p[0], p[1], 0]), b = project(K, [p[0], p[1], 85]);
+    if (a && b) { ctx.strokeStyle = '#f5d33b'; ctx.lineWidth = Math.max(1.5, a.s * 0.8); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
+  }
+}
 function drawWalls(ctx, K) {
   for (const [a, b, h, kind] of WALLS) {
     const pts = [[a[0], a[1], 0], [b[0], b[1], 0], [b[0], b[1], h], [a[0], a[1], h]];
@@ -219,10 +263,6 @@ function drawWalls(ctx, K) {
     ctx.fillStyle = kind === 'fence' ? '#1d5a35' : '#24463a'; ctx.fill();
     const t0 = project(K, [a[0], a[1], h]), t1 = project(K, [b[0], b[1], h]);
     if (t0 && t1) { ctx.strokeStyle = kind === 'fence' ? '#f1c40f' : '#d9dde3'; ctx.lineWidth = Math.max(1, t0.s * 0.35); ctx.beginPath(); ctx.moveTo(t0.x, t0.y); ctx.lineTo(t1.x, t1.y); ctx.stroke(); }
-  }
-  for (const p of [poleL, poleR]) {                       // 파울 폴
-    const a = project(K, [p[0], p[1], 0]), b = project(K, [p[0], p[1], 85]);
-    if (a && b) { ctx.strokeStyle = '#f5d33b'; ctx.lineWidth = Math.max(1.5, a.s * 0.8); ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke(); }
   }
   // 펜스 거리 표시
   ctx.textAlign = 'center';
@@ -361,9 +401,12 @@ export function drawPlay3D(ctx, W, H, sc, ms, uni) {
   const K = cameraAt(sc, t, W, H);
   drawSky(ctx, K);
   drawOuter(ctx, K);                                     // 경기장 바깥(카메라 쪽 관중석)
-  drawStands(ctx, K, '#5b6a80');
+  // 관중석은 땅·벽보다 나중에: 카메라(홈 뒤 높은 곳)는 파울 쪽 관중석 안쪽에 있어서 가까운 관중석이 벽·땅을 가린다.
+  // 관중석은 모두 펜스·벽 꼭대기보다 높고 바깥이라, 나중에 그려도 땅·벽을 잘못 가리는 일은 없다(폴만 다시 위에)
   drawGround(ctx, K, null);
   drawWalls(ctx, K);
+  drawStands(ctx, K, '#5b6a80');
+  drawPoles(ctx, K);
 
   // 선수들
   const ents = [];
