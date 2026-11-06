@@ -8,7 +8,7 @@ import { cpuChoosePitch, cpuSwing } from '../core/ai.js';
 import { startLoop } from './loop.js';
 import { unlockAudio, playSound, vibrate, shake } from './feedback.js';
 import { makeView, toS, zoneRect, ballScreen, ballRadius, pitcherAnchor, batterAnchor, setReleaseOverride } from './art/view.js';
-import { drawPitcherSprite, drawBatterSprite, drawCatcherSprite, catcherMitt, spriteReleaseOffset, SWING_CONTACT_MS } from './art/sprites.js';
+import { drawPitcherSprite, drawBatterSprite, drawCatcherSprite, spriteReleaseOffset, SWING_CONTACT_MS } from './art/sprites.js';
 import { buildBackdrop, standsReady } from './art/stadium.js';
 import { uniformFor } from './art/uniforms.js';
 import { pitcherPoseAt, batterPoseAt } from './art/rig.js';
@@ -25,9 +25,6 @@ const OUTS = ['OUT', 'SAC_FLY', 'DOUBLE_PLAY'];
 // 경기 기록에 쓰는 이름
 const PA_NAME = { WALK: '볼넷', STRIKEOUT: '삼진', SINGLE: '안타', DOUBLE: '2루타', TRIPLE: '3루타', HR: '홈런', OUT: '범타 아웃', SAC_FLY: '희생플라이', DOUBLE_PLAY: '병살타' };
 const PITCH_E = { BALL: '볼', STRIKE: '스트', FOUL: '파울' };
-// 포수: 공이 도착하기 CATCH_MOVE_MS 전부터 미트를 공이 갈 곳으로 옮기고, 존을 지난 공은 CATCH_TAIL_MS 동안 미트로 들어간다
-const CATCH_MOVE_MS = 220, CATCH_TAIL_MS = 90;
-const clamp01 = v => Math.max(0, Math.min(1, v));
 const basesText = b => { const on = [1, 2, 3].filter((n, i) => b[i]); return on.length === 3 ? '만루' : on.length ? on.join('·') + '루' : '주자 없음'; };
 
 // onExit(result): 경기를 끝까지 하면 { home, away, log, starterId }, 중간에 나가면 null
@@ -496,24 +493,10 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
 
     if (V.kind === 'pitcher') {
       const aiming = mode === 'aim' || mode === 'pick' || mode === 'gauge' || (ball && !ball.hitAt);
-      // 포수 미트: 조준하는 동안은 조준한 곳, 공이 오기 직전부터 실제로 공이 갈 곳으로 옮겨서 받는다
-      let glove = aiming ? target : null;
-      if (ball) {
-        const p = ball.pitch.plate, k = clamp01((now - (ball.arrival - CATCH_MOVE_MS)) / (CATCH_MOVE_MS * 0.65));
-        const e = k * k * (3 - 2 * k);
-        glove = { x: target.x + (p.x - target.x) * e, y: target.y + (p.y - target.y) * e };
-      }
-      if (!drawCatcherSprite(ctx, V, aiming ? target : null, now, glove)) drawCatcherAndUmpire(ctx, V, aiming ? target : null, uni.home);
+      if (!drawCatcherSprite(ctx, V, aiming ? target : null, now)) drawCatcherAndUmpire(ctx, V, aiming ? target : null, uni.home);
       drawZone(0.7);
       drawB();
       if (bp && bp.prog <= 1.02) { drawTrail(now); drawBall(ctx, bp.x, bp.y, bp.r, bp.spin); }
-      else if (bp && !ball.hitAt && now < ball.arrival + CATCH_TAIL_MS) {   // 존을 지난 공이 포수 미트로 들어간다
-        const m = catcherMitt(V, ball.pitch.plate.x, ball.pitch.plate.y);
-        if (m) {
-          const q = (now - ball.arrival) / CATCH_TAIL_MS;
-          drawBall(ctx, bp.x + (m[0] - bp.x) * q, bp.y + (m[1] - bp.y) * q, bp.r * (1 - 0.3 * q), bp.spin);
-        }
-      }
       drawP();
     } else {
       drawP();

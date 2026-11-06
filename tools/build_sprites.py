@@ -1,7 +1,7 @@
 """그림 조각(분할된 PNG)을 게임용 스프라이트(WebP)로 만든다.
 
 사용법: python -I tools/build_sprites.py <압축 푼 폴더>
-  <폴더>/ump/umpire.png
+  <폴더>/catcher/baseball-catcher/baseball-catcher-1.png, ump/umpire.png
   fielder_A/run/throw, runner_run = 타구 장면 수비수·주자(먼저 tools/fix_fielders.py 로 장갑을 붙인다)
 결과: assets/sprites/<이름>.webp + assets/sprites/sprites.json (크기, 발 기준점)
   - 투명 구멍(분할 도구가 뚫은 구멍)은 주변 색으로 메운다
@@ -17,7 +17,8 @@ os.makedirs(OUT, exist_ok=True)
 
 # 이름: (파일, 동작) — 조각 번호는 분할 도구가 매긴 순서라 동작 순서와 다르다
 SETS = {
-    # 투수(pitcher_back, pitcher_front)·타자(batter)·포수(catcher)는 영상에서 만든다: tools/video_pitcher.py, video_batter.py, video_catcher.py
+    # 투수(pitcher_back, pitcher_front)·타자(batter)는 영상에서 만든다: tools/video_pitcher.py, tools/video_batter.py
+    'catcher': ['catcher/baseball-catcher/baseball-catcher-1.png'],
     'umpire': ['ump/umpire.png'],
 }
 
