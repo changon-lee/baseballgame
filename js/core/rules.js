@@ -21,15 +21,21 @@ export function applyEvent(prev, type) {
   const b = s.bases;
   let runs = 0, paEnded = false;
 
+  // 타자가 1루로 가고, 밀려나는 주자만 한 베이스씩(볼넷·내야안타)
+  const force = () => {
+    if (b[0] && b[1] && b[2]) runs = 1;
+    else if (b[0] && b[1]) b[2] = true;
+    else if (b[0]) b[1] = true;
+    b[0] = true; paEnded = true;
+  };
   switch (type) {
-    case 'BALL':
-      if (++s.balls >= 4) {
-        if (b[0] && b[1] && b[2]) runs = 1;
-        else if (b[0] && b[1]) b[2] = true;
-        else if (b[0]) b[1] = true;
-        b[0] = true; paEnded = true;
-      }
-      break;
+    case 'BALL': if (++s.balls >= 4) force(); break;
+    case 'INFIELD_SINGLE': force(); break;                                   // 내야안타
+    case 'ERROR': runs = +b[2]; s.bases = [true, b[0], b[1]]; paEnded = true; break;   // 실책: 타자 1루, 주자 모두 한 베이스
+    // 안타 + 홈 보살: 2루 주자가 홈에서 아웃, 3루 주자는 득점, 1루 주자는 2루로
+    case 'SINGLE_HOME_OUT': s.outs++; runs = +b[2]; s.bases = [true, b[0], false]; paEnded = true; break;
+    // 직선타 병살: 타자 아웃 + 뛰어나갔던 앞쪽 주자(가장 낮은 베이스)가 귀루하지 못해 아웃
+    case 'LINE_DP': { s.outs += 2; const i = b.findIndex(Boolean); if (i >= 0) b[i] = false; paEnded = true; break; }
     case 'STRIKE': if (++s.strikes >= 3) { s.outs++; paEnded = true; } break;
     case 'FOUL': if (s.strikes < 2) s.strikes++; break;
     case 'OUT': s.outs++; paEnded = true; break;

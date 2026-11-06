@@ -67,3 +67,15 @@ test('ball above the bat lifts (fly), below sinks (grounder)', () => {
   assert.ok(batOffset({ x: 0, y: 0 }, { x: 0, y: 0.3 }, 50).lift > 0);
   assert.ok(batOffset({ x: 0, y: 0 }, { x: 0, y: -0.3 }, 50).lift < 0);
 });
+
+// ── 다양한 타구 결과가 실제로 나온다 ──
+import { battedBallInfo } from '../js/core/outcome.js';
+test('batted balls produce the new plays sometimes', () => {
+  const rng = createRng(5), seen = {};
+  for (let i = 0; i < 6000; i++) {
+    const r = battedBallInfo({ quality: (i % 10) / 10, power: 50, outs: i % 2, runnerOnFirst: i % 3 === 0, runnerOnSecond: i % 4 === 0, runnerOnThird: false, rng });
+    const k = r.event + (r.style ? ':' + r.style : ''); seen[k] = (seen[k] || 0) + 1;
+  }
+  for (const k of ['INFIELD_SINGLE', 'ERROR:fumble', 'ERROR:throw', 'SINGLE_HOME_OUT', 'SINGLE:home_safe', 'LINE_DP:liner', 'OUT:liner', 'OUT:dive', 'OUT:wall'])
+    assert.ok(seen[k] > 0, `${k} never happened`);
+});

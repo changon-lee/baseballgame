@@ -36,21 +36,24 @@ export function matchup(m) {
   };
 }
 
-// 타석 결과 이름 (볼넷·삼진은 마지막 공 이벤트와 다르다)
-const paEvent = e => (e === 'BALL' ? 'WALK' : e === 'STRIKE' ? 'STRIKEOUT' : e);
-const OUTS_OF = { STRIKEOUT: 1, OUT: 1, SAC_FLY: 1, DOUBLE_PLAY: 2 };
+// 타석 결과 이름 (볼넷·삼진은 마지막 공 이벤트와 다르다). 기록에는 공식 기록 이름으로 남긴다:
+// 내야안타·홈 보살 안타 = 안타, 직선타 병살 = 병살. 원래 장면 이름은 play에 따로 둔다
+const PA_OF = { BALL: 'WALK', STRIKE: 'STRIKEOUT', INFIELD_SINGLE: 'SINGLE', SINGLE_HOME_OUT: 'SINGLE', LINE_DP: 'DOUBLE_PLAY' };
+const paEvent = e => PA_OF[e] || e;
+const OUTS_OF = { STRIKE: 1, OUT: 1, SAC_FLY: 1, DOUBLE_PLAY: 2, LINE_DP: 2, SINGLE_HOME_OUT: 1 };
 
 // 공 하나의 결과를 경기에 반영
-function commit(m, event, ps, pitch, fly) {
+function commit(m, event, ps, pitch, fly, style) {
   const mu = matchup(m);
   const { state, runs, paEnded } = applyEvent(m.game, event);
   let log = m.log || [];
   let pa = [...(m.pa || []), pitch ? { k: pitch.type, v: pitch.speedKmh, e: event } : { e: event }];
   if (paEnded) {
     const ev = paEvent(event), g = m.game;
-    const outs = Math.min(OUTS_OF[ev] || 0, 3 - g.outs);
+    const outs = Math.min(OUTS_OF[event] || 0, 3 - g.outs);
     log = [...log, { batterId: mu.batter.id, pitcherId: mu.pitcher.id, event: ev, runs, outs,
-      inning: g.inning, half: g.half, outsBefore: g.outs, bases: [...g.bases], score: { ...state.score }, pitches: pa, fly: !!fly }];
+      inning: g.inning, half: g.half, outsBefore: g.outs, bases: [...g.bases], score: { ...state.score }, pitches: pa, fly: !!fly,
+      ...(ev !== event && event !== 'BALL' && event !== 'STRIKE' ? { play: event } : {}), ...(style ? { style } : {}) }];
     pa = [];
   }
   return { match: { ...m, game: state, log, pa, pitchCount: { ...m.pitchCount, [ps]: m.pitchCount[ps] + 1 } }, runs, paEnded };
@@ -64,8 +67,8 @@ function decide(m, batter, pitch, timingDiffMs, rng, bat = null) {
   if (contact.kind === 'FOUL') return { event: 'FOUL', contact, fly: false, swung: true };
   const g = m.game;
   const info = battedBallInfo({ quality: contact.quality, pull: contact.pull, power: batter.power, outs: g.outs,
-    runnerOnFirst: g.bases[0], runnerOnThird: g.bases[2], rng, lift: contact.lift || 0 });
-  return { event: info.event, contact, fly: info.fly, swung: true };
+    runnerOnFirst: g.bases[0], runnerOnSecond: g.bases[1], runnerOnThird: g.bases[2], rng, lift: contact.lift || 0 });
+  return { event: info.event, contact, fly: info.fly, style: info.style || null, swung: true };
 }
 
 export function playUserPitch(m, { type, target, gaugePos }, rng) {
@@ -73,8 +76,8 @@ export function playUserPitch(m, { type, target, gaugePos }, rng) {
   const pitch = computePitch({ pitcher: mu.pitcher, type, target, gaugePos, pitchCount: m.pitchCount[mu.pitchingSide], rng });
   const swing = cpuSwing({ batter: mu.batter, pitch, balls: m.game.balls, strikes: m.game.strikes, rng });
   const d = decide(m, mu.batter, pitch, swing.swing ? swing.timingDiffMs : null, rng);
-  const c = commit(m, d.event, mu.pitchingSide, pitch, d.fly);
-  return { match: c.match, pitch, swing: swing.swing ? swing : null, event: d.event, contact: d.contact, fly: d.fly, runs: c.runs, paEnded: c.paEnded };
+  const c = commit(m, d.event, mu.pitchingSide, pitch, d.fly, d.style);
+  return { match: c.match, pitch, swing: swing.swing ? swing : null, event: d.event, contact: d.contact, fly: d.fly, style: d.style, runs: c.runs, paEnded: c.paEnded };
 }
 
 export function cpuPitchToUser(m, rng) {
@@ -87,8 +90,8 @@ export function cpuPitchToUser(m, rng) {
 export function resolveUserSwing(m, pitch, timingDiffMs, rng, bat = null) {
   const mu = matchup(m);
   const d = decide(m, mu.batter, pitch, timingDiffMs, rng, bat);
-  const c = commit(m, d.event, mu.pitchingSide, pitch, d.fly);
-  return { match: c.match, event: d.event, contact: d.contact, fly: d.fly, runs: c.runs, paEnded: c.paEnded };
+  const c = commit(m, d.event, mu.pitchingSide, pitch, d.fly, d.style);
+  return { match: c.match, event: d.event, contact: d.contact, fly: d.fly, style: d.style, runs: c.runs, paEnded: c.paEnded };
 }
 
 export function changePitcher(m, side, pitcherId) {

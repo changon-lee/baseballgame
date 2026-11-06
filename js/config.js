@@ -11,6 +11,7 @@ export const CONFIG = {
   // 밸런스 (tests/balance.test.mjs가 야구다운 범위인지 확인)
   BALANCE: {
     EDGE_PENALTY: 0.35, BREAK_PENALTY: 0.08, WEAK_CONTACT: 0.25,
+    ERROR_RATE: 0.03,              // 아웃이 될 타구 중 실책으로 사는 비율
     AIM_PENALTY: 0.45,             // 배트 가운데에서 벗어난 만큼(0 가운데 ~ 1 끝) 타구질이 떨어진다(제곱)
     HR_Q: 0.78, HR_BASE: 0.10, HR_POWER: 0.55,
     HIT_BASE: 0.05, HIT_Q: 0.40,

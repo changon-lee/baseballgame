@@ -97,11 +97,11 @@ if (scene === 'sprites') {
   document.title = 'sprites-ready';
 }
 if (scene.startsWith('play')) {               // #play-HR-3 : 타구 장면 6컷 (이벤트-시드[-g = 땅볼])
-  const [, ev = 'DOUBLE', seed = '3', g, pull = '0.5'] = scene.split('-');   // #play-DOUBLE-3-f-0.9 : 끝은 당겨친 정도(-1..1, 음수는 m0.9)
+  const [, ev = 'DOUBLE', seed = '3', g, pull = '0.5', style = null] = scene.split('-');   // #play-DOUBLE-3-f-0.9 : 끝은 당겨친 정도(-1..1, 음수는 m0.9)
   const { standsReady } = await import('./js/ui/art/stadium.js');
   const { fieldReady } = await import('./js/ui/art/sprites.js');
   while (!standsReady('catcher') || !fieldReady()) await new Promise(r => setTimeout(r, 50));
-  const sc = buildPlay({ event: ev, fly: g !== 'g', contact: { pull: +pull.replace('m', '-') }, bats: 'L', bases: [true, false, true], rng: createRng(+seed) });
+  const sc = buildPlay({ event: ev, fly: g !== 'g', contact: { pull: +pull.replace('m', '-') }, bats: 'L', bases: style === 'home_safe' || ev === 'SINGLE_HOME_OUT' ? [false, true, false] : [true, false, true], style, rng: createRng(+seed) });
   const cols = 3, rows = 2, pw = W / cols, ph = H / rows;
   const fr = [0.03, 0.2, 0.4, 0.6, 0.8, 1.0];
   fr.forEach((f, i) => {

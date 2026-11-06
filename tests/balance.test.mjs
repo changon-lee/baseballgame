@@ -28,7 +28,7 @@ function plateAppearance(batter, rng) {
 function sim(batter, n, seed) {
   const rng = createRng(seed), c = {};
   for (let i = 0; i < n; i++) { const e = plateAppearance(batter, rng); c[e] = (c[e] || 0) + 1; }
-  const hits = (c.SINGLE || 0) + (c.DOUBLE || 0) + (c.TRIPLE || 0) + (c.HR || 0);
+  const hits = (c.SINGLE || 0) + (c.INFIELD_SINGLE || 0) + (c.DOUBLE || 0) + (c.TRIPLE || 0) + (c.HR || 0);
   return { avg: hits / (n - (c.BB || 0)), hr: (c.HR || 0) / n, k: (c.K || 0) / n, bb: (c.BB || 0) / n };
 }
 

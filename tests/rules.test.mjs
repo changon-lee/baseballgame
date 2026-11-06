@@ -80,3 +80,23 @@ test('non-walk-off hit keeps all runs when game not decided', () => {
   const { runs } = run(bottomLast({ bases: [false, true, true], score: { away: 5, home: 0 } }), ['SINGLE']);
   assert.equal(runs, 2);
 });
+
+// ── 다양한 타구 결과 ──
+test('infield single forces runners only', () => {
+  const { s, runs } = run(setup({ bases: [false, true, true] }), ['INFIELD_SINGLE']);
+  assert.deepEqual(s.bases, [true, true, true]); assert.equal(runs, 0);
+  assert.equal(run(setup({ bases: [true, true, true] }), ['INFIELD_SINGLE']).runs, 1);
+});
+test('error: batter on first, every runner moves up one', () => {
+  const { s, runs } = run(setup({ bases: [true, false, true] }), ['ERROR']);
+  assert.deepEqual(s.bases, [true, true, false]); assert.equal(runs, 1); assert.equal(s.outs, 0);
+});
+test('single with the runner from second thrown out at home', () => {
+  const { s, runs } = run(setup({ bases: [true, true, true], outs: 0 }), ['SINGLE_HOME_OUT']);
+  assert.deepEqual(s.bases, [true, true, false]); assert.equal(runs, 1); assert.equal(s.outs, 1);
+});
+test('line drive double play doubles off the lead-most runner nearest first', () => {
+  const { s } = run(setup({ bases: [true, true, false], outs: 0 }), ['LINE_DP']);
+  assert.deepEqual(s.bases, [false, true, false]); assert.equal(s.outs, 2);
+  assert.deepEqual(run(setup({ bases: [false, true, false] }), ['LINE_DP']).s.bases, [false, false, false]);
+});

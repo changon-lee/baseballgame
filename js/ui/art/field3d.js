@@ -1,6 +1,6 @@
 // 3D 타구 화면: playscript 대본을 중계 카메라처럼 그린다.
 // 경기장·공·선수를 3D 좌표(피트)로 두고, 홈 뒤 높은 곳의 카메라가 공과 수비수를 따라 돌고 당겨서(줌) 비춘다.
-import { toSec, trackAt, ballAt, fenceAt, BASES, polar, FENCE_H } from './playscript.js';
+import { toSec, trackAt, ballAt, fenceAt, BASES, polar, FENCE_H, jumpZ } from './playscript.js';
 import { standsImage } from './stadium.js';
 import { drawBall } from './figures.js';
 import { fieldSprite, fieldCount, FIELD_PX } from './sprites.js';
@@ -291,7 +291,7 @@ function poseOf(act, ph, since) {
       return { ...P, hip: [0, 1.7], neck: [0.2, 3.8], kn: [[-0.95, 1.6], [0.95, 1.6]], ft: [[-0.85, 0], [0.85, 0]], el: [[-0.6, 3], [0.7, 3]], hd: [[-0.3, 2.6], [0.6, 3.1]] };
     case 'field':
       return { ...P, side: true, hip: [-0.3, 2.2], neck: [0.9, 3.6], kn: [[-1.0, 1.3], [0.9, 1.2]], ft: [[-1.4, 0], [1.2, 0]], el: [[0.9, 2.2], [1.3, 2.4]], hd: [[1.4, 0.5], [1.6, 0.6]] };
-    case 'catch':
+    case 'catch': case 'jump':
       return { ...P, el: [[-0.45, 5.7], [0.55, 5.7]], hd: [[-0.2, 6.6], [0.35, 6.7]] };
     case 'camp': case 'watch':
       return { ...P, el: [[-0.7, 4.3], [0.6, 5.0]], hd: [[-0.8, 3.4], [0.45, 5.8]] };
@@ -372,7 +372,7 @@ function spriteFor(kind, act, ph, since, view) {
     case 'throw': return [['fthrow', since < 0.12 ? 0 : since < 0.32 ? 1 : 2, 'mid', true]];
     case 'dive': return [['fthrow', 3, 'mid', true]];
     case 'field': return [['fielder', 1, 'foot']];
-    case 'catch': return [...(view === 'back' ? [['fback', 1, 'foot']] : []), ['fielder', 2, 'foot']];
+    case 'catch': case 'jump': return [...(view === 'back' ? [['fback', 1, 'foot']] : []), ['fielder', 2, 'foot']];
     case 'ready': case 'set': case 'lead': case 'crouch': case 'cover': case 'receive': return [...(view === 'back' ? [['fback', 2, 'foot']] : []), ['fielder', 0, 'foot']];
     default: return [...(view === 'back' ? [['fback', 0, 'foot']] : []), ['fielder', 3, 'foot']];
   }
@@ -421,7 +421,7 @@ export function drawPlay3D(ctx, W, H, sc, ms, uni) {
   const ballNow = ballAt(sc, t).p;
   // kind: 'f' 수비수, 'r' 주자, 'u' 심판
   const add = (k, u, kind, name) => {
-    const p = project(K, [k.x, k.y, 0]);
+    const p = project(K, [k.x, k.y, k.act === 'jump' ? jumpZ(k.since) : 0]);
     if (!p) return;
     const q = project(K, [k.x + k.vx * 0.1, k.y + k.vy * 0.1, 0]);
     let dir = q && Math.abs(q.x - p.x) > 0.01 ? Math.sign(q.x - p.x) : 1;

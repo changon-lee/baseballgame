@@ -7,7 +7,7 @@ const CAP = { power: 99, contact: 99, eye: 99, control: 99, stamina: 99, velo: 1
 // 타석 결과별로 어느 능력치에 경험치가 쌓이는지
 const BAT_XP = {
   SINGLE: { contact: 3 }, DOUBLE: { power: 2, contact: 2 }, TRIPLE: { contact: 3, power: 2 }, HR: { power: 5 },
-  WALK: { eye: 3 }, SAC_FLY: { power: 1 }, OUT: { contact: 0.5 }, STRIKEOUT: { eye: 0.3 }, DOUBLE_PLAY: { contact: 0.3 },
+  WALK: { eye: 3 }, SAC_FLY: { power: 1 }, OUT: { contact: 0.5 }, STRIKEOUT: { eye: 0.3 }, DOUBLE_PLAY: { contact: 0.3 }, ERROR: { contact: 0.5 },
 };
 
 export const createGrowth = () => ({ xp: {}, delta: {} });

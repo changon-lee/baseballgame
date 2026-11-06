@@ -20,12 +20,17 @@ import { drawPlay3D } from './art/field3d.js';
 
 const LABEL = {
   BALL: '볼', STRIKE: '스트라이크', FOUL: '파울', SINGLE: '안타!', DOUBLE: '2루타!', TRIPLE: '3루타!', HR: '홈런!!',
-  SAC_FLY: '희생플라이', DOUBLE_PLAY: '병살타',
+  SAC_FLY: '희생플라이', DOUBLE_PLAY: '병살타', INFIELD_SINGLE: '내야안타!', ERROR: '실책!', SINGLE_HOME_OUT: '안타 · 홈에서 아웃!', LINE_DP: '직선타 병살!',
 };
-const HITS = ['SINGLE', 'DOUBLE', 'TRIPLE', 'HR'];
-const OUTS = ['OUT', 'SAC_FLY', 'DOUBLE_PLAY'];
+// 같은 결과의 다른 장면
+const STYLE_LABEL = { dive: '다이빙 캐치!', wall: '펜스 앞 점프 캐치!', liner: '직선타 아웃', home_safe: '안타! 홈 세이프' };
+const HITS = ['SINGLE', 'DOUBLE', 'TRIPLE', 'HR', 'INFIELD_SINGLE', 'SINGLE_HOME_OUT', 'ERROR'];   // 타자에게 좋은 결과
+const OUTS = ['OUT', 'SAC_FLY', 'DOUBLE_PLAY', 'LINE_DP'];
 // 경기 기록에 쓰는 이름
-const PA_NAME = { WALK: '볼넷', STRIKEOUT: '삼진', SINGLE: '안타', DOUBLE: '2루타', TRIPLE: '3루타', HR: '홈런', OUT: '범타 아웃', SAC_FLY: '희생플라이', DOUBLE_PLAY: '병살타' };
+const PA_NAME = { WALK: '볼넷', STRIKEOUT: '삼진', SINGLE: '안타', DOUBLE: '2루타', TRIPLE: '3루타', HR: '홈런', OUT: '범타 아웃', SAC_FLY: '희생플라이', DOUBLE_PLAY: '병살타', ERROR: '실책 출루' };
+const PLAY_NAME = { INFIELD_SINGLE: '내야안타', SINGLE_HOME_OUT: '안타 (2루 주자 홈에서 아웃)', LINE_DP: '직선타 병살' };
+const STYLE_NAME = { dive: '다이빙 캐치 아웃', wall: '펜스 앞 호수비 아웃', liner: '직선타 아웃', home_safe: '안타 (홈 승부 세이프)', fumble: '실책 출루 (포구 실책)', throw: '실책 출루 (송구 실책)' };
+const paName = l => PLAY_NAME[l.play] || STYLE_NAME[l.style] || (l.event === 'OUT' ? (l.fly ? '뜬공 아웃' : '땅볼 아웃') : PA_NAME[l.event] || l.event);
 const PITCH_E = { BALL: '볼', STRIKE: '스트', FOUL: '파울' };
 // 구종 칩 색(빠른 공은 따뜻한 색, 떨어지는 공은 차가운 색)
 const PITCH_COLORS = { FB: '#ff6b5e', SI: '#ffa94d', CT: '#ffd43b', SL: '#69db7c', CU: '#4dabf7', CH: '#b197fc', FO: '#f783ac' };
@@ -226,9 +231,11 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   function throwCpuPitch() {
     const pitch = cpuPitchToUser(match, rng);
     ball = { pitch, start: pitchAt, wind: CONFIG.WIND_CPU_MS, arrival: pitchAt + pitch.travelMs, result: null, swung: false };
-    // 궤적 안내는 '대략': 실제로 올 곳에서 조금 어긋난 곳을 보여 준다(화면용이라 경기 난수는 쓰지 않는다)
-    const nz = () => (Math.random() + Math.random() + Math.random() - 1.5) * 0.24;
-    ball.guide = { x: pitch.plate.x + nz(), y: pitch.plate.y + nz() };
+    // 궤적 안내는 '대략 이쯤': 타자 선구안이 좋을수록 범위가 좁고 가운데가 정확하다(화면용이라 경기 난수는 쓰지 않는다)
+    // eye 30 → 반지름 0.8(존 반폭 기준, 존의 거의 절반), eye 90 → 0.42. 가운데는 실제 도착점에서 반지름의 0.4배쯤 어긋난다
+    const acc = Math.max(0, Math.min(1, (matchup(match).batter.eye - 30) / 60)), R = 0.8 - 0.38 * acc;
+    const gauss = () => { let u = 0; while (!u) u = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * Math.random()); };
+    ball.guide = { x: pitch.plate.x + gauss() * R * 0.4, y: pitch.plate.y + gauss() * R * 0.4, r: R };
     mode = 'bflight';
     if (auto) {                  // 자동 진행: 컴퓨터 타자처럼 칠지 말지, 타이밍을 정한다
       const mu = matchup(match), b = ball;
@@ -286,7 +293,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     const finish = () => settle(prev, r, userPitched);
     if (['BALL', 'STRIKE', 'FOUL'].includes(r.event)) return finish();
     const batter = matchup(match).batter;
-    play = buildPlay({ event: r.event, fly: r.fly, contact: r.contact, bats: batter.bats, bases: prev.bases, rng });
+    play = buildPlay({ event: r.event, fly: r.fly, style: r.style, contact: r.contact, bats: batter.bats, bases: prev.bases, rng });
     play.sounds.sort((a, b) => a.t - b.t);
     play.start = performance.now() + 320; play.si = 0;
     play.then = finish;
@@ -295,7 +302,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   function settle(prev, r, userPitched) {
     hold = matchup(match);
     match = r.match;
-    let label = LABEL[r.event] || (r.fly ? '뜬공 아웃' : '땅볼 아웃');
+    let label = (r.style && STYLE_LABEL[r.style]) || LABEL[r.event] || (r.fly ? '뜬공 아웃' : '땅볼 아웃');
     if (r.event === 'STRIKE' && prev.strikes === 2) { label = '삼진!'; playSound('strikeout'); }
     else if (r.event === 'STRIKE' && r.contact && r.contact.kind === 'MISS') label = '헛스윙';
     if (r.event === 'BALL' && prev.balls === 3) label = '볼넷';
@@ -351,7 +358,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       <p class="hint">투수가 알아서 던지고, 타자가 알아서 칩니다</p>
       <div class="row2"><button class="ghost" data-act="guide">${prefs.guide ? '궤적 안내 켜짐' : '궤적 안내 꺼짐'}</button>
         <button class="ghost" data-act="hard">${prefs.hard ? '난이도: 어려움' : '난이도: 보통'}</button></div>
-      <p class="hint">${prefs.hard ? '어려움: 배트가 작고 궤적 안내가 안 보여요' : '내가 칠 때 상대 공이 올 길을 대략 보여 줘요'}</p>
+      <p class="hint">${prefs.hard ? '어려움: 배트가 작고 궤적 안내가 안 보여요' : '내가 칠 때 공이 대략 올 범위를 보여 줘요(선구안이 좋을수록 정확)'}</p>
       <button class="ghost" data-act="inning">이번 이닝 넘기기</button>
       <button class="ghost" data-act="game">이번 경기 넘기기</button>
       <button class="ghost" data-act="log">경기 기록 보기</button>
@@ -399,7 +406,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       rows.push(`<div class="pa">
         <div class="who"><b>${nameOf(bat, 'batters', l.batterId)}</b> <small>vs ${nameOf(pit, 'pitchers', l.pitcherId)} · ${l.outsBefore ?? 0}사 ${basesText(l.bases || [])}</small></div>
         <div class="seq">${seq}</div>
-        <div class="out${good ? ' g' : ''}">${l.event === 'OUT' ? (l.fly ? '뜬공 아웃' : '땅볼 아웃') : PA_NAME[l.event] || l.event}${l.runs ? ` · <b>${l.runs}점</b> <small>(${cpuTeam.short} ${l.score.away} : ${l.score.home} ${userTeam.short})</small>` : ''}</div>
+        <div class="out${good ? ' g' : ''}">${paName(l)}${l.runs ? ` · <b>${l.runs}점</b> <small>(${cpuTeam.short} ${l.score.away} : ${l.score.home} ${userTeam.short})</small>` : ''}</div>
       </div>`);
     }
     const g = match.game;
@@ -650,21 +657,20 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     }
     drawMsg();
   }
-  // 궤적 안내: 공이 손을 떠나면 대략 올 길(점선)과 도착할 곳(원)을 보여 준다. 끄거나 어려움이면 안 보인다
+  // 궤적 안내: 공이 손을 떠나면 '이쯤 올 것 같다'는 범위(흐린 원)를 보여 준다. 길은 안 보여 주고(휘는 걸 다 알려 주게 되니까)
+  // 범위 크기는 타자 선구안 따라. 끄거나 어려움이면 안 보인다
   function drawGuide(now) {
     if (!ball || !ball.guide || ball.hitAt || auto || !prefs.guide || prefs.hard || mode !== 'bflight' || now < ball.start) return;
-    const p = { ...ball.pitch, plate: ball.guide }, T = ball.pitch.travelMs;
-    const a = Math.min(1, (now - ball.start) / 140) * (now > ball.arrival ? Math.max(0, 1 - (now - ball.arrival) / 150) : 1);
+    const a = Math.min(1, (now - ball.start) / 220) * (now > ball.arrival ? Math.max(0, 1 - (now - ball.arrival) / 150) : 1);
     if (a <= 0) return;
+    const [cx, cy] = toS(V, ball.guide.x, ball.guide.y), rx = ball.guide.r * V.zw / 2, ry = ball.guide.r * V.zh / 2;
     ctx.save(); ctx.globalAlpha = a;
-    ctx.fillStyle = 'rgba(255,255,255,.55)';
-    for (let k = 0.06; k <= 1.001; k += 0.06) {
-      const q = ballScreen(V, p, ball.start, ball.start + T * k);
-      ctx.beginPath(); ctx.arc(q.x, q.y, Math.max(1.2, q.r * 0.28), 0, Math.PI * 2); ctx.fill();
-    }
-    const end = ballScreen(V, p, ball.start, ball.start + T);
-    ctx.strokeStyle = 'rgba(120,220,255,.9)'; ctx.lineWidth = 2; ctx.setLineDash([5, 4]);
-    ctx.beginPath(); ctx.arc(end.x, end.y, end.r * 2.1, 0, Math.PI * 2); ctx.stroke();
+    ctx.translate(cx, cy); ctx.scale(1, ry / rx);
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rx);
+    g.addColorStop(0, 'rgba(120,220,255,.34)'); g.addColorStop(0.6, 'rgba(120,220,255,.16)'); g.addColorStop(1, 'rgba(120,220,255,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, rx, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(150,230,255,.7)'; ctx.lineWidth = 1.6 * rx / ry; ctx.setLineDash([6, 5]);
+    ctx.beginPath(); ctx.arc(0, 0, rx * 0.92, 0, Math.PI * 2); ctx.stroke();
     ctx.restore();
   }
   // 배트 표시: 노란 타원 = 이 안으로 공이 오면 맞는다(공 반지름 포함). 가운데 막대 = 배트, 안쪽 작은 타원 = 정타
