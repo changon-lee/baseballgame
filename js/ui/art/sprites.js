@@ -523,9 +523,12 @@ export function drawBatterSprite(ctx, { x, y, scale, facing, uni, now, swingAt, 
 export function drawCatcherSprite(ctx, V, mitt, now = 0) {
   if (!setReady('catcher', 'umpire')) return false;
   const base = V.feetY - V.zh * 0.05;
-  const um = SETS.umpire.frames[0], us = (V.zh * 1.35) / um.h;
-  ctx.drawImage(um.img, V.cx + V.zw * 0.3 - um.ax * us, base - V.zh * 0.2 - um.h * us, um.w * us, um.h * us);
-  const c = SETS.catcher.frames[0], cs = (V.zh * 0.86) / c.h;
+  // 타자(V.figH)에 맞춰 포수·심판도 같은 비율로 키운다(예전 타자 키 1.35zh 기준 크기 × k)
+  // 심판은 포수 뒤(카메라에서 더 멀다)라 덜 키운다
+  const k = (V.figH || V.zh * 1.35) / (V.zh * 1.35), ku = 1 + (k - 1) * 0.4;
+  const um = SETS.umpire.frames[0], us = (V.zh * 1.35 * ku) / um.h;
+  ctx.drawImage(um.img, V.cx + V.zw * 0.3 * ku - um.ax * us, base - V.zh * 0.2 * ku - um.h * us, um.w * us, um.h * us);
+  const c = SETS.catcher.frames[0], cs = (V.zh * 0.86 * k) / c.h;
   const breathe = Math.sin(now / 480) * V.zh * 0.004;
   ctx.save(); ctx.translate(V.cx, base); shadowAt(ctx, V.zw * 0.6); ctx.restore();
   ctx.drawImage(c.img, V.cx - c.ax * cs, base - c.h * cs + breathe, c.w * cs, c.h * cs);
