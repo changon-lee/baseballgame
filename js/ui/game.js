@@ -66,11 +66,10 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       </div>
       <div class="sub"><span class="mu"></span>${title ? `<span class="ttl">${title}</span>` : ''}</div>
     </div>
-    <div class="stage"><canvas></canvas><div class="pitch-pick"></div><div class="overlay hidden"></div></div>
-    <div class="controls"></div>
+    <div class="stage"><canvas></canvas><div class="pitch-pick"></div><div class="side-pick"></div><div class="controls"></div><div class="overlay hidden"></div></div>
   </div>`;
   const $ = s => root.querySelector(s);
-  const cv = $('canvas'), stage = $('.stage'), controls = $('.controls'), overlay = $('.overlay'), picker = $('.pitch-pick');
+  const cv = $('canvas'), stage = $('.stage'), controls = $('.controls'), overlay = $('.overlay'), picker = $('.pitch-pick'), sidePick = $('.side-pick');
   const ctx = cv.getContext('2d');
 
   let W = 0, H = 0, DPR = 1, V = null;
@@ -99,7 +98,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     W = r.width; H = r.height; cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
     for (const k in bg) delete bg[k];
     setView();
-    placePicker();
+    placePicker(); placeSidePick();
   }
   const userPitching = () => matchup(match).pitchingSide === mySide;
   function setView() { if (W) V = makeView(userPitching() ? 'pitcher' : 'catcher', W, H); }
@@ -120,7 +119,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     $('.bso').innerHTML = `<div><em>B</em>${dots('b', g.balls, 3)}</div><div><em>S</em>${dots('s', g.strikes, 2)}</div><div><em>O</em>${dots('o', g.outs, 2)}</div>`;
     $('.mu').innerHTML = `<b>${mu.pitcher.name}</b> <small>${match.pitchCount[mu.pitchingSide]}구</small> <span class="vs">vs</span> <small>${g.battingIndex[mu.battingSide] + 1}번</small> <b>${mu.batter.name}</b>`;
   }
-  const setControls = html => { controls.innerHTML = html; };
+  const setControls = html => { controls.innerHTML = html; if (!['aim', 'pick'].includes(mode)) hideBullpenChip(); };
   function showMsg(text, color, ms, sub, then) {
     msg = { text, color, sub };
     later(() => { msg = null; if (then) then(); }, ms);
@@ -145,9 +144,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       later(autoThrow, 700 + rng() * 500);
     } else if (userPitching()) {
       mode = 'aim'; pitchType = null;
-      setControls(`<p>스트라이크존 위를 <b>드래그</b>해서 포수 미트 위치를 정하세요</p>
-        <div class="row"><button class="ghost" data-act="bullpen">투수 교체</button></div>`);
-      controls.querySelector('[data-act=bullpen]').onclick = showBullpen;
+      setControls('<p>스트라이크존 위를 <b>드래그</b>해서 포수 미트 위치를 정하세요</p>');
+      showBullpenChip();
     } else {
       const before = match.pitcher.away;
       match = cpuMaybeChangePitcher(match, rng);
@@ -170,9 +168,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     net.conn.send({ t: 'ready', n: netN });
     if (userPitching()) {
       mode = 'aim'; pitchType = null;
-      setControls(`<p>스트라이크존 위를 <b>드래그</b>해서 포수 미트 위치를 정하세요</p>
-        <div class="row"><button class="ghost" data-act="bullpen">투수 교체</button></div>`);
-      controls.querySelector('[data-act=bullpen]').onclick = showBullpen;
+      setControls('<p>스트라이크존 위를 <b>드래그</b>해서 포수 미트 위치를 정하세요</p>');
+      showBullpenChip();
     } else {
       mode = 'bwait';
       setControls('<p><b>상대 투수</b>가 공을 고르는 중 · 화면을 <b>누른 채 움직여</b> 배트를 공 길에 두고, <b>손을 떼면 스윙!</b></p>');
@@ -222,20 +219,31 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   }
   if (net) net.conn.setHandlers({ onMessage: onNet, onClose: () => netGone('서버와 연결이 끊겼어요') });
 
+  // 투수 교체 칩: 내가 던질 차례(조준·구종 고르기)에 투수 왼쪽에 뜬다(구종 칩은 오른쪽)
+  function showBullpenChip() {
+    if (sidePick.childElementCount) return placeSidePick();
+    sidePick.innerHTML = '<button data-act="bullpen" style="--i:0"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h11l-3-3M17 17H6l3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></i><b>투수 교체</b></button>';
+    sidePick.querySelector('button').onclick = () => { if (['aim', 'pick'].includes(mode)) showBullpen(); };
+    placeSidePick();
+  }
+  function hideBullpenChip() { sidePick.innerHTML = ''; }
+  // 교체할 투수 고르기: 가운데 창
   function showBullpen() {
     const side = mySide;
     const list = availableRelievers(match.teams[side], match.used[side], match.pitcher[side]);
-    mode = 'bullpen';
-    setControls(`<div class="bullpen">${list.map(p => `
-      <button data-p="${p.id}"><b>${p.name}</b> <span>${p.role === 'SP' ? '선발' : '불펜'} · ${p.velo}km · 제구 ${p.control} · 체력 ${p.stamina}</span></button>`).join('') || '<p>남은 투수가 없어요</p>'}
-      <button class="ghost" data-act="cancel">취소</button></div>`);
-    controls.querySelectorAll('[data-p]').forEach(b => {
+    mode = 'bullpen'; hidePicker(); hideBullpenChip();
+    overlay.innerHTML = `<div class="end-card menu-card"><div class="tag">투수 교체</div><div class="bullpen">${list.map(p => `
+      <button data-p="${p.id}"><b>${p.name}</b> <span>${p.role === 'SP' ? '선발' : '불펜'} · ${p.velo}km · 제구 ${p.control} · 체력 ${p.stamina}</span></button>`).join('') || '<p class="hint">남은 투수가 없어요</p>'}</div>
+      <button class="ghost" data-act="cancel">취소</button></div>`;
+    overlay.classList.remove('hidden');
+    overlay.querySelectorAll('[data-p]').forEach(b => {
       b.onclick = () => {
+        closeOverlay();
         if (net) { net.conn.send({ t: 'change', n: netN, pitcherId: b.dataset.p }); mode = 'msg'; setControls('<p>투수 교체 중…</p>'); return; }
         match = changePitcher(match, 'home', b.dataset.p); nextPlay();
       };
     });
-    controls.querySelector('[data-act=cancel]').onclick = nextPlay;
+    overlay.querySelector('[data-act=cancel]').onclick = () => { closeOverlay(); nextPlay(); };
   }
 
   // ── 구종 고르기: 투수 오른쪽, 제구 게이지가 나올 자리에 구종 칩을 세로로 띄운다 ──
@@ -281,6 +289,12 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     const g = gaugeSpot(), w = picker.offsetWidth, h = picker.offsetHeight;
     const x = Math.max(8, Math.min(g.cx + g.R * 0.2, W - w - 10)), y = Math.max(8, Math.min(g.cy - h / 2, H - h - 8));
     picker.style.transform = `translate(${Math.round(x)}px,${Math.round(y)}px)`;
+  }
+  function placeSidePick() {
+    if (!sidePick.childElementCount || !V) return;
+    const pa = pitcherAnchor(V, matchup(match).pitcher.throws), g = gaugeSpot(), w = sidePick.offsetWidth, h = sidePick.offsetHeight;
+    const x = Math.max(8, Math.min(pa.x - pa.scale * 42 - w, W - w - 8)), y = Math.max(8, Math.min(g.cy - h / 2, H - h - 8));
+    sidePick.style.transform = `translate(${Math.round(x)}px,${Math.round(y)}px)`;
   }
 
   function throwUserPitch(ts) { throwWith(gaugePos(ts - gaugeStart, period), lvl()); }
