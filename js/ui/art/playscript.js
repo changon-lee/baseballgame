@@ -104,7 +104,7 @@ export function ballAt(sc, t) {
 // 굴러가는(튀는) 공을 흉내 낸다. 펜스에 맞으면 튕겨 나온다
 function simGround(p0, v0, t0, maxT = 9) {
   const dt = 1 / 60, pts = [];
-  let [x, y, z] = p0, [vx, vy, vz] = v0, rolling = false;
+  let [x, y, z] = p0, [vx, vy, vz] = v0, rolling = false, wallT = null;
   pts.push(x, y, z);
   for (let i = 0; i < maxT / dt; i++) {
     if (!rolling) { vz -= G * dt; z += vz * dt; }
@@ -120,12 +120,15 @@ function simGround(p0, v0, t0, maxT = 9) {
     const r = Math.hypot(x, y), fa = fenceAt(angOf(x, y)) - 1.5;
     if (Math.abs(angOf(x, y)) <= 46 && r >= fa) {
       const vr = (vx * x + vy * y) / r;
-      if (vr > 0) { vx += (-0.3 * vr - vr) * x / r; vy += (-0.3 * vr - vr) * y / r; x *= fa / r; y *= fa / r; }
+      if (vr > 0) {
+        if (wallT === null && vr > 8) wallT = t0 + (i + 1) * dt;   // 담장을 세게 맞힌 순간(소리)
+        vx += (-0.3 * vr - vr) * x / r; vy += (-0.3 * vr - vr) * y / r; x *= fa / r; y *= fa / r;
+      }
     }
     pts.push(x, y, z);
     if (rolling && Math.hypot(vx, vy) < 0.3) break;
   }
-  return { type: 'path', t0, t1: t0 + (pts.length / 3 - 1) * dt, dt, pts };
+  return { type: 'path', t0, t1: t0 + (pts.length / 3 - 1) * dt, dt, pts, wallT };
 }
 // 수비수가 굴러오는 공을 잡을 수 있는 가장 이른 순간
 function intercept(path, f0, speed, tMin, zMax = 4.5) {
@@ -301,6 +304,7 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
     }
     // 외야수가 공을 쫓아가 잡는다(떨어진 뒤에)
     const I = fieldBall(chaser, path, Math.max(landT + 0.08, path.t0 + 0.6));
+    if (path.wallT !== null && path.wallT < I.t) sc.sounds.push({ t: path.wallT, name: 'fence' });
     // 다른 외야수는 뒤를 받쳐 준다
     // 주자들: 정해진 베이스까지
     const dest = { SINGLE: [1, 2, 4, 4], DOUBLE: [2, 3, 4, 4], TRIPLE: [3, 4, 4, 4] }[ev];

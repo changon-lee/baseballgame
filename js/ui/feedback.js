@@ -1,15 +1,111 @@
-// 손맛: 효과음(Web Audio로 직접 합성), 진동(안드로이드만), 화면 흔들림
-let AC = null;
+// 손맛: 효과음·관중 소리, 진동(안드로이드만), 화면 흔들림
+// 소리는 assets/audio 의 녹음(tools/make_audio.py 로 만든다)을 쓰고, 아직 못 불러왔거나 실패하면 Web Audio 로 직접 합성한다.
+// 두 갈래로 나눠 끄고 켤 수 있다: 효과음(방망이·글러브·헛스윙) / 관중·응원(관중 소리·응원 북·환호·탄식)
+let AC = null, SFX = null, AMB = null;
+const DIR = new URL('../../assets/audio/', import.meta.url);
+const FILES = ['bat_crack', 'bat_weak', 'bat_foul', 'mitt_pop', 'glove_catch', 'swing_whoosh', 'fence_hit', 'ball_bounce',
+  'crowd_ooh', 'crowd_aww', 'crowd_cheer', 'crowd_cheer_big', 'jingle_hr', 'cheer_drum_loop', 'crowd_loop'];
+const LOOPS = { crowd_loop: 30, cheer_drum_loop: 7.5 };   // 반복 소리의 원래 길이(초): mp3 앞뒤 빈 소리를 빼고 이만큼만 돈다
+const RAW = {}, BUF = {};
+let fetching = false;
+const opts = { sfx: true, amb: true };
+const amb = { want: false, drum: 0, nodes: {} };
+
+// 파일은 미리 받아 두고(오디오를 깨우기 전에도 된다), 소리로 풀기는 오디오가 생긴 뒤에 한다
+export function preloadAudio() {
+  if (fetching || typeof fetch !== 'function') return;
+  fetching = true;
+  for (const n of FILES) {
+    fetch(new URL(n + '.mp3', DIR))
+      .then(r => (r.ok ? r.arrayBuffer() : null))
+      .then(ab => { if (ab) { RAW[n] = ab; decode(n); } })
+      .catch(() => { /* 없으면 합성 소리로 */ });
+  }
+}
+function decode(n) {
+  if (!AC || !RAW[n] || BUF[n]) return;
+  const ab = RAW[n]; RAW[n] = null;
+  const done = b => { if (b && !BUF[n]) { BUF[n] = b; if (n in LOOPS) syncAmb(); } };
+  try { const p = AC.decodeAudioData(ab, done, () => {}); if (p && p.catch) p.catch(() => {}); } catch (e) { /* 무시 */ }
+}
 
 // 아이폰은 사용자의 첫 터치 안에서 오디오를 깨워야 소리가 난다
 export function unlockAudio() {
   try {
-    if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)();
-    if (AC.state === 'suspended') AC.resume();
+    if (!AC) {
+      AC = new (window.AudioContext || window.webkitAudioContext)();
+      const lim = AC.createDynamicsCompressor();             // 여러 소리가 겹쳐도 찢어지지 않게
+      lim.threshold.value = -8; lim.knee.value = 6; lim.ratio.value = 10; lim.attack.value = 0.003; lim.release.value = 0.2;
+      lim.connect(AC.destination);
+      SFX = AC.createGain(); AMB = AC.createGain();
+      SFX.gain.value = opts.sfx ? 1 : 0; AMB.gain.value = opts.amb ? 1 : 0;
+      SFX.connect(lim); AMB.connect(lim);
+      preloadAudio();
+      for (const n of FILES) decode(n);
+    }
+    if (AC.state === 'suspended' && !document.hidden) AC.resume();
+    syncAmb();
   } catch (e) { AC = null; }
 }
 
-function noise(dur, freq, q, gain, attack = 0.002, type = 'bandpass') {
+// 다른 앱·탭으로 가면 관중 소리도 멈춘다
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    try { if (AC) { if (document.hidden) AC.suspend(); else AC.resume(); } } catch (e) { /* 무시 */ }
+  });
+}
+
+export function setAudioOptions({ sfx = true, amb: a = true } = {}) {
+  opts.sfx = sfx; opts.amb = a;
+  if (!AC) return;
+  SFX.gain.setTargetAtTime(sfx ? 1 : 0, AC.currentTime, 0.05);
+  AMB.gain.setTargetAtTime(a ? 1 : 0, AC.currentTime, 0.15);
+}
+
+// 경기장 분위기: 관중 웅성거림은 늘, 응원 북·박수는 drum(0~1)만큼(우리 팀 공격 때 크게)
+export function setAmbience(on, drum = 0) {
+  if (amb.want === on && amb.drum === drum) return;
+  amb.want = on; amb.drum = drum; syncAmb();
+}
+function leadIn(b) {                                       // mp3 앞에 붙은 빈 소리 길이
+  const d = b.getChannelData(0), lim = Math.min(d.length, 4096);
+  for (let i = 0; i < lim; i++) if (Math.abs(d[i]) > 1e-4) return i / b.sampleRate;
+  return 0;
+}
+function syncAmb() {
+  if (!AC) return;
+  const t = AC.currentTime;
+  for (const [n, len] of Object.entries(LOOPS)) {
+    const level = !amb.want ? 0 : n === 'crowd_loop' ? 0.3 : 0.42 * amb.drum;
+    let node = amb.nodes[n];
+    if (!node && level > 0 && BUF[n]) {
+      const b = BUF[n], s = AC.createBufferSource(), g = AC.createGain(), st = leadIn(b);
+      s.buffer = b; s.loop = true; s.loopStart = st; s.loopEnd = Math.min(b.duration, st + len);
+      g.gain.value = 0;
+      s.connect(g).connect(AMB); s.start(0, st);
+      node = amb.nodes[n] = { s, g };
+    }
+    if (!node) continue;
+    node.g.gain.cancelScheduledValues(t);
+    node.g.gain.setTargetAtTime(level, t, level > node.g.gain.value ? 0.6 : 0.35);
+    if (!amb.want) { try { node.s.stop(t + 2); } catch (e) { /* 무시 */ } delete amb.nodes[n]; }
+  }
+}
+
+// ── 녹음 재생 ──
+function sample(n, gain = 1, rate = 1, bus = SFX) {
+  const b = BUF[n];
+  if (!AC || !b) return false;
+  const s = AC.createBufferSource(), g = AC.createGain();
+  s.buffer = b; s.playbackRate.value = rate; g.gain.value = gain;
+  s.connect(g).connect(bus); s.start();
+  return true;
+}
+const jit = a => 1 + (Math.random() * 2 - 1) * a;          // 매번 살짝 다르게
+const clamp01 = v => Math.max(0, Math.min(1, v));
+
+// ── 합성(녹음이 없을 때) ──
+function noise(dur, freq, q, gain, attack = 0.002, type = 'bandpass', bus = SFX) {
   if (!AC) return;
   const n = Math.max(1, Math.floor(AC.sampleRate * dur)), buf = AC.createBuffer(1, n, AC.sampleRate), d = buf.getChannelData(0);
   for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
@@ -17,27 +113,52 @@ function noise(dur, freq, q, gain, attack = 0.002, type = 'bandpass') {
   const f = AC.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
   const g = AC.createGain(), t = AC.currentTime;
   g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + attack); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  src.connect(f).connect(g).connect(AC.destination); src.start();
+  src.connect(f).connect(g).connect(bus); src.start();
 }
 function tone(freq, dur, gain, type = 'sine', end = 0.5) {
   if (!AC) return;
   const o = AC.createOscillator(), g = AC.createGain(), t = AC.currentTime;
   o.type = type; o.frequency.setValueAtTime(freq, t); o.frequency.exponentialRampToValueAtTime(freq * end, t + dur);
   g.gain.setValueAtTime(gain, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(g).connect(AC.destination); o.start(); o.stop(t + dur);
+  o.connect(g).connect(SFX); o.start(); o.stop(t + dur);
 }
-
-const SOUNDS = {
+const SYNTH = {
   hit: () => { noise(0.09, 2600, 1.2, 1.0); tone(1150, 0.08, 0.5, 'triangle'); tone(420, 0.06, 0.35, 'square', 0.6); },
   foul: () => { noise(0.06, 2000, 1.4, 0.6); tone(800, 0.05, 0.3, 'triangle'); },
   mitt: () => { noise(0.07, 380, 1, 0.9); tone(110, 0.09, 0.6); },
   whiff: () => noise(0.2, 700, 0.7, 0.28, 0.05),
-  homerun: () => { noise(0.1, 2800, 1.2, 1.0); tone(1300, 0.1, 0.6, 'triangle'); },
-  cheer: () => { noise(2.0, 1300, 0.4, 0.55, 0.35); noise(1.6, 600, 0.5, 0.3, 0.3); },
-  ooh: () => noise(0.9, 900, 0.5, 0.3, 0.2),
-  strikeout: () => { tone(660, 0.12, 0.25, 'square', 1); setTimeout(() => tone(880, 0.18, 0.25, 'square', 1), 120); },
+  cheer: () => { noise(2.0, 1300, 0.4, 0.55, 0.35, 'bandpass', AMB); noise(1.6, 600, 0.5, 0.3, 0.3, 'bandpass', AMB); },
+  ooh: () => noise(0.9, 900, 0.5, 0.3, 0.2, 'bandpass', AMB),
 };
-export function playSound(name) { try { SOUNDS[name] && SOUNDS[name](); } catch (e) { /* 소리 실패는 무시 */ } }
+
+// o: { q: 타구 질(0~1), speed: 구속 km/h, gain: 크기 배율 }
+const SOUNDS = {
+  hit: o => {
+    const q = o.q === undefined ? 0.7 : o.q;
+    const ok = q < 0.4 ? sample('bat_weak', 0.85, jit(0.04)) : sample('bat_crack', 0.6 + 0.4 * q, (0.96 + 0.06 * q) * jit(0.02));
+    if (!ok) SYNTH.hit();
+  },
+  homerun: () => { if (!sample('bat_crack', 1, 0.98)) SYNTH.hit(); },
+  foul: () => { if (!sample('bat_foul', 0.85, jit(0.04))) SYNTH.foul(); },
+  mitt: o => {                                             // 포수 미트: 빠른 공일수록 크고 단단하게
+    const k = clamp01(((o.speed || 140) - 115) / 40);
+    if (!sample('mitt_pop', 0.55 + 0.45 * k, (0.97 + 0.06 * k) * jit(0.015))) SYNTH.mitt();
+  },
+  catch: () => { if (!sample('glove_catch', 0.75, jit(0.05))) SYNTH.mitt(); },   // 야수가 잡는 소리
+  whiff: () => { if (!sample('swing_whoosh', 0.7, jit(0.05))) SYNTH.whiff(); },
+  fence: () => { sample('fence_hit', 0.8, jit(0.04)); },
+  bounce: () => { sample('ball_bounce', 0.6, jit(0.06)); },
+  strikeout: () => { tone(660, 0.12, 0.18, 'square', 1); setTimeout(() => tone(880, 0.18, 0.18, 'square', 1), 120); },
+  // 관중(관중·응원 쪽으로 나간다)
+  cheer: o => { if (!sample('crowd_cheer', 0.8 * (o.gain || 1), jit(0.03), AMB)) SYNTH.cheer(); },
+  roar: o => { if (!sample('crowd_cheer_big', o.gain || 1, 1, AMB)) SYNTH.cheer(); },
+  ooh: o => { if (!sample('crowd_ooh', 0.8 * (o.gain || 1), jit(0.04), AMB)) SYNTH.ooh(); },
+  aww: o => { sample('crowd_aww', 0.65 * (o.gain || 1), jit(0.03), AMB); },
+  jingle: () => { sample('jingle_hr', 0.6, 1, AMB); },
+};
+// 확인용: 지금 불러온 소리와 돌고 있는 반복 소리
+export const audioDebug = () => ({ state: AC && AC.state, loaded: Object.keys(BUF), loops: Object.keys(amb.nodes) });
+export function playSound(name, o = {}) { try { if (AC && SOUNDS[name]) SOUNDS[name](o); } catch (e) { /* 소리 실패는 무시 */ } }
 
 // 안드로이드 크롬만 진동. 아이폰은 조용히 아무 일 없음.
 export function vibrate(pattern) {

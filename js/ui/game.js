@@ -8,7 +8,7 @@ import { cpuChoosePitch, cpuSwing } from '../core/ai.js';
 import { batReach } from '../core/batting.js';
 import { loadPrefs, savePrefs, LEVELS, LEVEL_NAME } from './prefs.js';
 import { startLoop } from './loop.js';
-import { unlockAudio, playSound, vibrate, shake } from './feedback.js';
+import { unlockAudio, playSound, vibrate, shake, preloadAudio, setAudioOptions, setAmbience } from './feedback.js';
 import { makeView, toS, zoneRect, ballScreen, ballRadius, pitcherAnchor, batterAnchor, setReleaseOverride, PITCH_PATH } from './art/view.js';
 import { drawPitcherSprite, drawBatterSprite, drawCatcherSprite, spriteReleaseOffset, SWING_CONTACT_MS } from './art/sprites.js';
 import { buildBackdrop, standsReady } from './art/stadium.js';
@@ -73,7 +73,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   let pitchAt = 0, swingAt = null, play = null, msg = null, info = '';
   let timers = [];
   let auto = false;             // 자동 진행: 투구·스윙을 컴퓨터가 대신한다
-  let prefs = loadPrefs();      // 궤적 안내 · 난이도
+  let prefs = loadPrefs();      // 궤적 안내 · 난이도 · 소리
+  setAudioOptions(prefs); preloadAudio();
   // 내가 칠 때 배트를 댈 곳(존 좌표). 화면을 누른 채 움직이면 따라오고, 손을 떼면 그 자리로 스윙한다
   let batAim = { x: 0, y: -0.1 }, batDrag = null, batFlash = null;
   let alive = true;            // exit() 뒤에는 어떤 타이머·입력도 이 경기를 움직이지 않는다
@@ -252,9 +253,9 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     const r = ball.result;
     if (r.swing) swingAt = ball.arrival - SWING_CONTACT_MS;
     const k = r.contact ? r.contact.kind : null;
-    if (k === 'INPLAY' || k === 'FOUL') { playSound(k === 'FOUL' ? 'foul' : 'hit'); ball.hitAt = performance.now(); ball.contact = r.contact; }
-    else if (k === 'MISS') { playSound('whiff'); playSound('mitt'); }
-    else playSound('mitt');
+    if (k === 'INPLAY' || k === 'FOUL') { playSound(k === 'FOUL' ? 'foul' : r.event === 'HR' ? 'homerun' : 'hit', { q: r.contact.quality }); ball.hitAt = performance.now(); ball.contact = r.contact; }
+    else if (k === 'MISS') { playSound('whiff'); playSound('mitt', { speed: r.pitch.speedKmh }); }
+    else playSound('mitt', { speed: r.pitch.speedKmh });
     info = `${r.pitch.speedKmh}km/h ${PITCH_TYPES[r.pitch.type].name}`;
     apply(r, true);
   }
@@ -272,7 +273,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       + (r.contact.aimMiss ? '배트가 공 길에서 벗어났어요' : `${diff < 0 ? '빠름' : '늦음'} ${Math.abs(Math.round(diff))}ms`);
     if (k === 'MISS') { playSound('whiff'); ball.result = r; return; }   // 공은 미트까지 날아간 뒤 판정
     const q = r.contact.quality;
-    playSound(r.event === 'HR' ? 'homerun' : k === 'FOUL' ? 'foul' : 'hit');
+    if (r.event === 'HR') { playSound('homerun'); playSound('roar'); }   // 맞는 순간 관중이 일어난다
+    else playSound(k === 'FOUL' ? 'foul' : 'hit', { q });
     vibrate(k === 'INPLAY' && q > 0.8 ? 70 : 35);
     shake(cv, k === 'INPLAY' ? 4 + q * 8 : 3);
     ball.hitAt = performance.now(); ball.contact = r.contact;
@@ -280,7 +282,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   }
 
   function takePitch() {
-    playSound('mitt');
+    playSound('mitt', { speed: ball.pitch.speedKmh });
     const r = ball.result || resolveUserSwing(match, ball.pitch, null, rng);
     if (!ball.result) info = `${ball.pitch.speedKmh}km/h ${PITCH_TYPES[ball.pitch.type].name}`;
     apply(r, false);
@@ -306,6 +308,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     if (r.event === 'STRIKE' && prev.strikes === 2) { label = '삼진!'; playSound('strikeout'); }
     else if (r.event === 'STRIKE' && r.contact && r.contact.kind === 'MISS') label = '헛스윙';
     if (r.event === 'BALL' && prev.balls === 3) label = '볼넷';
+    crowd(prev, r, userPitched);
     const good = userPitched ? (r.event === 'STRIKE' || OUTS.includes(r.event)) : (HITS.includes(r.event) || r.event === 'BALL');
     const color = r.event === 'FOUL' ? '#ffffff' : good ? '#2ecc71' : '#e74c3c';
     const sub = (r.runs ? `${r.runs}점 득점! · ` : '') + info;
@@ -322,6 +325,29 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     });
   }
 
+  // 홈 관중(우리 팀 팬)의 반응. 홈런은 친 순간·넘어가는 순간에 따로 낸다
+  function crowd(prev, r, userPitched) {
+    const ev = r.event, inplay = r.contact && r.contact.kind === 'INPLAY';
+    if (ev === 'HR') return;
+    if (!userPitched) {                                   // 우리 공격
+      if (r.runs) playSound('roar', { gain: 0.75 });
+      else if (HITS.includes(ev)) playSound('cheer', { gain: 0.85 });
+      else if (ev === 'BALL' && prev.balls === 3) playSound('cheer', { gain: 0.45 });
+      else if (OUTS.includes(ev) && inplay) playSound('aww', { gain: 0.6 });
+    } else {                                              // 상대 공격
+      if (r.runs) playSound('aww', { gain: 0.8 });
+      else if (ev === 'STRIKE' && prev.strikes === 2) playSound('cheer', { gain: 0.7 });
+      else if (ev === 'DOUBLE_PLAY' || ev === 'LINE_DP') playSound('cheer', { gain: 0.8 });
+      else if (OUTS.includes(ev)) playSound('cheer', { gain: 0.4 });
+    }
+  }
+  // 타구 장면 속 소리: 야수가 공을 잡는 소리, 홈런 공이 담장을 넘는 순간(우리 홈런이면 축하 음악, 상대면 탄식)
+  function playCue(name) {
+    if (name === 'mitt') return playSound('catch');
+    if (name === 'cheer') return playSound(shownMu().battingSide === 'home' ? 'jingle' : 'aww');
+    playSound(name);
+  }
+
   function showEnd() {
     mode = 'end'; $('.more').hidden = true;
     const g = match.game;
@@ -333,7 +359,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       <button class="ghost" data-act="log">경기 기록 보기</button></div>`;
     overlay.classList.remove('hidden');
     overlay.querySelector('[data-act=log]').onclick = () => showLog(match.log, '경기 기록', showEnd);
-    if (g.result === 'home') { playSound('cheer'); vibrate([80, 60, 80, 60, 160]); }
+    if (g.result === 'home') { playSound('roar'); playSound('jingle'); vibrate([80, 60, 80, 60, 160]); }
     overlay.querySelector('[data-act=menu]').onclick = () => exit({
       home: g.score.home, away: g.score.away, log: match.log, starterId: lineup.starterId });
     setControls('');
@@ -341,6 +367,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
 
   function exit(result = null) {
     alive = false;
+    setAmbience(false);
     loop.stop(); timers.forEach(clearTimeout); window.removeEventListener('resize', resize);
     document.removeEventListener('visibilitychange', onVisibility);
     root.removeEventListener('pointerdown', onRootDown);
@@ -359,6 +386,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       <div class="row2"><button class="ghost" data-act="guide">${prefs.guide ? '궤적 안내 켜짐' : '궤적 안내 꺼짐'}</button>
         <button class="ghost" data-act="level">난이도: ${LEVEL_NAME[prefs.level]}</button></div>
       <p class="hint">${{ easy: '쉬움: 배트가 크고, 공이 대략 올 길과 범위를 보여 줘요', normal: '보통: 배트가 작아요. 공이 대략 올 길과 범위를 보여 줘요(선구안이 좋을수록 정확)', hard: '어려움: 배트가 더 작고 궤적 안내가 안 보여요' }[prefs.level]}</p>
+      <div class="row2 snd"><button class="ghost" data-act="sfx">효과음 ${prefs.sfx ? '켜짐' : '꺼짐'}</button>
+        <button class="ghost" data-act="amb">관중·응원 ${prefs.amb ? '켜짐' : '꺼짐'}</button></div>
       <button class="ghost" data-act="inning">이번 이닝 넘기기</button>
       <button class="ghost" data-act="game">이번 경기 넘기기</button>
       <button class="ghost" data-act="log">경기 기록 보기</button>
@@ -372,6 +401,9 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     });
     on('guide', () => { prefs = { ...prefs, guide: !prefs.guide }; savePrefs(prefs); closeOverlay(); showMenu(); });
     on('level', () => { prefs = { ...prefs, level: LEVELS[(LEVELS.indexOf(prefs.level) + 1) % LEVELS.length] }; savePrefs(prefs); closeOverlay(); showMenu(); });
+    const sound = (k) => { prefs = { ...prefs, [k]: !prefs[k] }; savePrefs(prefs); setAudioOptions(prefs); closeOverlay(); showMenu(); };
+    on('sfx', () => sound('sfx'));
+    on('amb', () => sound('amb'));
     on('inning', () => skip('inning'));
     on('game', () => { if (confirm('남은 경기를 모두 자동으로 진행할까요?')) skip('game'); });
     on('log', () => showLog(match.log, '경기 기록', closeOverlay));
@@ -567,6 +599,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
 
   function frame(dt, now) {
     if (!W || !V) resize();
+    setAmbience(true, mode === 'end' ? 0 : shownMu().battingSide === 'home' ? 1 : 0.12);   // 응원 북은 우리 공격 때 크게
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     if (mode === 'bwait' && pitchAt && overlayOpen()) pitchAt = Math.max(pitchAt, now + CONFIG.WIND_CPU_MS + 500);
     else if (mode === 'bwait' && pitchAt && now >= pitchAt) throwCpuPitch();
@@ -574,7 +607,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     if (play && now >= play.start) {
       const mu = shownMu(), ms = now - play.start;
       drawPlay3D(ctx, W, H, play, ms, { field: uni[mu.pitchingSide], bat: uni[mu.battingSide] });
-      while (play.si < play.sounds.length && toMs(play.sounds[play.si].t) <= ms) playSound(play.sounds[play.si++].name);
+      while (play.si < play.sounds.length && toMs(play.sounds[play.si].t) <= ms) playCue(play.sounds[play.si++].name);
       if (ms >= play.decisiveMs && !play.landed) {
         play.landed = true;
         if (play.event === 'HR') vibrate([60, 40, 60]);
