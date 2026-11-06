@@ -57,14 +57,14 @@ function commit(m, event, ps, pitch, fly) {
 }
 
 // 스윙(또는 노스윙) → 이벤트
-function decide(m, batter, pitch, timingDiffMs, rng) {
+function decide(m, batter, pitch, timingDiffMs, rng, bat = null) {
   if (timingDiffMs == null) return { event: pitch.isStrike ? 'STRIKE' : 'BALL', contact: null, fly: false, swung: false };
-  const contact = swingResult({ timingDiffMs, batter, pitch, rng });
+  const contact = swingResult({ timingDiffMs, batter, pitch, rng, bat });
   if (contact.kind === 'MISS') return { event: 'STRIKE', contact, fly: false, swung: true };
   if (contact.kind === 'FOUL') return { event: 'FOUL', contact, fly: false, swung: true };
   const g = m.game;
   const info = battedBallInfo({ quality: contact.quality, pull: contact.pull, power: batter.power, outs: g.outs,
-    runnerOnFirst: g.bases[0], runnerOnThird: g.bases[2], rng });
+    runnerOnFirst: g.bases[0], runnerOnThird: g.bases[2], rng, lift: contact.lift || 0 });
   return { event: info.event, contact, fly: info.fly, swung: true };
 }
 
@@ -83,9 +83,10 @@ export function cpuPitchToUser(m, rng) {
   return computePitch({ pitcher: mu.pitcher, ...c, pitchCount: m.pitchCount[mu.pitchingSide], rng });
 }
 
-export function resolveUserSwing(m, pitch, timingDiffMs, rng) {
+// bat: 배트를 댄 곳({ x, y, hard }, 존 좌표). 없으면 위치는 따지지 않는다(자동 진행)
+export function resolveUserSwing(m, pitch, timingDiffMs, rng, bat = null) {
   const mu = matchup(m);
-  const d = decide(m, mu.batter, pitch, timingDiffMs, rng);
+  const d = decide(m, mu.batter, pitch, timingDiffMs, rng, bat);
   const c = commit(m, d.event, mu.pitchingSide, pitch, d.fly);
   return { match: c.match, event: d.event, contact: d.contact, fly: d.fly, runs: c.runs, paEnded: c.paEnded };
 }

@@ -1,21 +1,40 @@
-// 스윙 판정: 타이밍 차이(ms) → 헛스윙/파울/인플레이 + 타구질
-// timingDiffMs = 탭 시각 - 공 도착 시각 (음수 = 빠름). 이 모듈은 시계를 읽지 않는다.
+// 스윙 판정: 타이밍 차이(ms) + 배트를 댄 곳 → 헛스윙/파울/인플레이 + 타구질
+// timingDiffMs = 스윙 시각 - 공 도착 시각 (음수 = 빠름). 이 모듈은 시계를 읽지 않는다.
+// bat = { x, y, hard }: 내가 칠 때 배트를 댄 곳(존 좌표). 공이 배트가 닿는 타원 밖으로 오면 헛스윙.
+//   없으면(컴퓨터 타자) 위치는 따지지 않는다.
 import { CONFIG } from '../config.js';
+import { BALL_R } from './pitch.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export const timingWindowMs = contact => 18 + contact * 0.3;
+// 배트가 공을 맞힐 수 있는 타원(존 좌표, 공 반지름 포함). 배트는 가로로 누워 있어 가로가 넓고, 컨택이 좋을수록 넓다.
+// 일부러 넉넉하게: 보통 난이도·컨택 50이면 존 가로의 3분의 2쯤을 덮는다. 어려움은 0.72배
+export function batReach(contact, hard = false) {
+  const k = hard ? 0.72 : 1;
+  return { rx: (0.42 + contact * 0.003) * k + BALL_R, ry: (0.28 + contact * 0.002) * k + BALL_R };
+}
+// 배트를 댄 곳과 공의 거리: 0 = 배트 가운데, 1 = 타원 끝(넘으면 헛스윙). lift = 공이 배트보다 위(+, 뜬공 쪽)/아래(-, 땅볼 쪽)
+export function batOffset(bat, plate, contact) {
+  const { rx, ry } = batReach(contact, bat.hard);
+  const dx = (plate.x - bat.x) / rx, dy = (plate.y - bat.y) / ry;
+  return { e: Math.hypot(dx, dy), lift: clamp(dy, -1, 1) };
+}
 
-export function swingResult({ timingDiffMs, batter, pitch, rng }) {
+export function swingResult({ timingDiffMs, batter, pitch, rng, bat = null }) {
   const B = CONFIG.BALANCE;
   const w = timingWindowMs(batter.contact);
   const m = Math.max(Math.abs(pitch.plate.x), Math.abs(pitch.plate.y));
   const d = Math.abs(timingDiffMs);
+  const off = bat ? batOffset(bat, pitch.plate, batter.contact) : { e: 0, lift: 0 };
+  if (off.e > 1) return { kind: 'MISS', quality: 0, pull: 0, aimMiss: true, lift: off.lift };   // 배트가 공 길에 없었다
   if (d > w * 5 || m > 1.6) return { kind: 'MISS', quality: 0, pull: 0 };
   const quality = 1 - d / (w * 5)
     - Math.max(0, m - 0.6) * B.EDGE_PENALTY
-    - (Math.abs(pitch.breakX) + Math.abs(pitch.breakY)) * B.BREAK_PENALTY;
-  if (quality < B.WEAK_CONTACT) return { kind: rng() < 0.5 ? 'FOUL' : 'MISS', quality, pull: 0 };
+    - (Math.abs(pitch.breakX) + Math.abs(pitch.breakY)) * B.BREAK_PENALTY
+    - off.e * off.e * B.AIM_PENALTY;
+  const lift = off.lift;
+  if (quality < B.WEAK_CONTACT) return { kind: rng() < 0.5 ? 'FOUL' : 'MISS', quality, pull: 0, lift };
   const pull = clamp(-timingDiffMs / (w * 3), -1, 1);
-  if (Math.abs(pull) > 0.9) return { kind: 'FOUL', quality, pull };
-  return { kind: 'INPLAY', quality, pull };
+  if (Math.abs(pull) > 0.9) return { kind: 'FOUL', quality, pull, lift };
+  return { kind: 'INPLAY', quality, pull, lift };
 }

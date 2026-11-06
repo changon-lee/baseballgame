@@ -5,6 +5,8 @@ import { PITCH_TYPES, gaugePos, sweetWidth, gaugePeriod, energy, aimFromTouch, f
 import { availableRelievers } from '../core/team.js';
 import { createMatch, matchup, playUserPitch, cpuPitchToUser, resolveUserSwing, changePitcher, cpuMaybeChangePitcher, simulateInning, simulateRest } from '../core/match.js';
 import { cpuChoosePitch, cpuSwing } from '../core/ai.js';
+import { batReach } from '../core/batting.js';
+import { loadPrefs, savePrefs } from './prefs.js';
 import { startLoop } from './loop.js';
 import { unlockAudio, playSound, vibrate, shake } from './feedback.js';
 import { makeView, toS, zoneRect, ballScreen, ballRadius, pitcherAnchor, batterAnchor, setReleaseOverride, PITCH_PATH } from './art/view.js';
@@ -66,6 +68,9 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   let pitchAt = 0, swingAt = null, play = null, msg = null, info = '';
   let timers = [];
   let auto = false;             // 자동 진행: 투구·스윙을 컴퓨터가 대신한다
+  let prefs = loadPrefs();      // 궤적 안내 · 난이도
+  // 내가 칠 때 배트를 댈 곳(존 좌표). 화면을 누른 채 움직이면 따라오고, 손을 떼면 그 자리로 스윙한다
+  let batAim = { x: 0, y: -0.1 }, batDrag = null, batFlash = null;
   let alive = true;            // exit() 뒤에는 어떤 타이머·입력도 이 경기를 움직이지 않는다
   const later = (fn, ms) => {
     const id = setTimeout(() => { timers = timers.filter(t => t !== id); if (alive) fn(); }, ms);
@@ -136,7 +141,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       }
       mode = 'bwait';
       pitchAt = performance.now() + CONFIG.WIND_CPU_MS + 700 + rng() * 900;
-      setControls(auto ? '<p><b>자동 진행 중</b> · 타자가 알아서 쳐요 <small>(위 ▶▶ 버튼에서 끄기)</small></p>' : '<p>공이 오면 <b>타이밍에 맞춰 화면을 터치</b>해서 스윙!</p>');
+      setControls(auto ? '<p><b>자동 진행 중</b> · 타자가 알아서 쳐요 <small>(위 ▶▶ 버튼에서 끄기)</small></p>'
+        : '<p>화면을 <b>누른 채 움직여</b> 배트(노란 원)를 공 길에 두고, <b>손을 떼면 스윙!</b></p>');
     }
   }
 
@@ -220,6 +226,9 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   function throwCpuPitch() {
     const pitch = cpuPitchToUser(match, rng);
     ball = { pitch, start: pitchAt, wind: CONFIG.WIND_CPU_MS, arrival: pitchAt + pitch.travelMs, result: null, swung: false };
+    // 궤적 안내는 '대략': 실제로 올 곳에서 조금 어긋난 곳을 보여 준다(화면용이라 경기 난수는 쓰지 않는다)
+    const nz = () => (Math.random() + Math.random() + Math.random() - 1.5) * 0.24;
+    ball.guide = { x: pitch.plate.x + nz(), y: pitch.plate.y + nz() };
     mode = 'bflight';
     if (auto) {                  // 자동 진행: 컴퓨터 타자처럼 칠지 말지, 타이밍을 정한다
       const mu = matchup(match), b = ball;
@@ -246,11 +255,14 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   // 내 스윙
   function userSwing(ts) {
     if (!ball || ball.swung) return;
-    ball.swung = true; swingAt = performance.now() - 30;   // 터치하자마자 방망이가 나가 보이게
+    ball.swung = true; swingAt = performance.now() - 30;   // 손을 떼자마자 방망이가 나가 보이게
     const diff = ts - ball.arrival;
-    const r = resolveUserSwing(match, ball.pitch, diff, rng);
+    const bat = auto ? null : { x: batAim.x, y: batAim.y, hard: prefs.hard };
+    const r = resolveUserSwing(match, ball.pitch, diff, rng, bat);
     const k = r.contact.kind;
-    info = `${ball.pitch.speedKmh}km/h ${PITCH_TYPES[ball.pitch.type].name} · ${diff < 0 ? '빠름' : '늦음'} ${Math.abs(Math.round(diff))}ms`;
+    if (bat) batFlash = { at: performance.now(), hit: k !== 'MISS', x: batAim.x, y: batAim.y };
+    info = `${ball.pitch.speedKmh}km/h ${PITCH_TYPES[ball.pitch.type].name} · `
+      + (r.contact.aimMiss ? '배트가 공 길에서 벗어났어요' : `${diff < 0 ? '빠름' : '늦음'} ${Math.abs(Math.round(diff))}ms`);
     if (k === 'MISS') { playSound('whiff'); ball.result = r; return; }   // 공은 미트까지 날아간 뒤 판정
     const q = r.contact.quality;
     playSound(r.event === 'HR' ? 'homerun' : k === 'FOUL' ? 'foul' : 'hit');
@@ -337,6 +349,9 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       <div class="tag">${g.inning}회${g.half === 'top' ? '초' : '말'} · 진행 메뉴</div>
       <button class="primary" data-act="auto">${auto ? '자동 진행 끄기' : '자동 진행 켜기'}</button>
       <p class="hint">투수가 알아서 던지고, 타자가 알아서 칩니다</p>
+      <div class="row2"><button class="ghost" data-act="guide">${prefs.guide ? '궤적 안내 켜짐' : '궤적 안내 꺼짐'}</button>
+        <button class="ghost" data-act="hard">${prefs.hard ? '난이도: 어려움' : '난이도: 보통'}</button></div>
+      <p class="hint">${prefs.hard ? '어려움: 배트가 작고 궤적 안내가 안 보여요' : '내가 칠 때 상대 공이 올 길을 대략 보여 줘요'}</p>
       <button class="ghost" data-act="inning">이번 이닝 넘기기</button>
       <button class="ghost" data-act="game">이번 경기 넘기기</button>
       <button class="ghost" data-act="log">경기 기록 보기</button>
@@ -348,6 +363,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       // 조준·구종 고르기·타석 대기 중(또는 자동 투구 대기 중)이면 바로 바뀐 방식으로 다시 시작
       if (['aim', 'pick', 'gauge', 'bwait'].includes(mode) || (mode === 'msg' && !msg && !play && !ball)) nextPlay();
     });
+    on('guide', () => { prefs = { ...prefs, guide: !prefs.guide }; savePrefs(prefs); closeOverlay(); showMenu(); });
+    on('hard', () => { prefs = { ...prefs, hard: !prefs.hard }; savePrefs(prefs); closeOverlay(); showMenu(); });
     on('inning', () => skip('inning'));
     on('game', () => { if (confirm('남은 경기를 모두 자동으로 진행할까요?')) skip('game'); });
     on('log', () => showLog(match.log, '경기 기록', closeOverlay));
@@ -430,13 +447,40 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     if (e.target.closest('button') || overlayOpen()) return;
     if (mode === 'bflight' && auto) return;
     if (mode === 'gauge') throwUserPitch(e.timeStamp);
-    else if (mode === 'bflight') userSwing(e.timeStamp);
+    else if ((mode === 'bwait' || mode === 'bflight') && !auto) startBatDrag(e);
     else if (play && !play.landed && performance.now() >= play.start) {   // 타구 장면 건너뛰기: 결과가 정해지는 순간으로
       play.start = performance.now() - play.decisiveMs;
       while (play.si < play.sounds.length && play.sounds[play.si].t <= play.decisive) play.si++;
     }
   }
   root.addEventListener('pointerdown', onRootDown);
+  // 배트 움직이기: 누른 곳이 존 근처면 배트가 그리로 가고, 그다음은 손가락이 움직인 만큼 따라온다(손가락이 배트를 가리지 않게
+  // 화면 아래쪽 어디서 움직여도 된다). 손을 떼는 순간 스윙(공이 날아오는 중일 때만)
+  const BAT_LIM = 1.45;
+  const clampAim = v => Math.max(-BAT_LIM, Math.min(BAT_LIM, v));
+  function startBatDrag(e) {
+    if (!V || V.kind !== 'catcher') return;
+    const r = cv.getBoundingClientRect(), z = zoneRect(V);
+    const px = e.clientX - r.left, py = e.clientY - r.top;
+    if (e.target === cv && Math.abs(px - (z.left + z.width / 2)) < z.width * 0.95 && Math.abs(py - (z.top + z.height / 2)) < z.height * 0.95) {
+      const a = aimFromTouch({ x: px, y: py }, z, 0, V.mirror);
+      batAim = { x: clampAim(a.x), y: clampAim(a.y) };
+    }
+    batDrag = { id: e.pointerId, x: e.clientX, y: e.clientY };
+  }
+  root.addEventListener('pointermove', e => {
+    if (!batDrag || e.pointerId !== batDrag.id || !V) return;
+    const dx = e.clientX - batDrag.x, dy = e.clientY - batDrag.y;
+    batDrag.x = e.clientX; batDrag.y = e.clientY;
+    batAim = { x: clampAim(batAim.x + dx / (V.zw / 2)), y: clampAim(batAim.y - dy / (V.zh / 2)) };
+  });
+  const endBatDrag = (e, swing) => {
+    if (!batDrag || e.pointerId !== batDrag.id) return;
+    batDrag = null;
+    if (swing && alive && mode === 'bflight' && !auto && !overlayOpen()) userSwing(e.timeStamp);
+  };
+  root.addEventListener('pointerup', e => endBatDrag(e, true));
+  root.addEventListener('pointercancel', e => endBatDrag(e, false));
 
   // ── 그리기 ──
   // 제구 게이지: 투수 오른쪽에 ')' 모양 반원. 아래 끝(0) ↔ 위 끝(1)을 공이 오가고, 가장 오른쪽(0.5)이 한가운데.
@@ -576,8 +620,10 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     } else {
       drawP();
       drawZone(0.32);
+      drawGuide(now);
       if (bp && bp.prog <= 1.02) { drawTrail(now); drawBall(ctx, bp.x, bp.y, bp.r, bp.spin); }
       drawB();
+      drawBat(now, mu.batter);
     }
     drawHUD();
     drawGauge(now);
@@ -603,6 +649,41 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       }
     }
     drawMsg();
+  }
+  // 궤적 안내: 공이 손을 떠나면 대략 올 길(점선)과 도착할 곳(원)을 보여 준다. 끄거나 어려움이면 안 보인다
+  function drawGuide(now) {
+    if (!ball || !ball.guide || ball.hitAt || auto || !prefs.guide || prefs.hard || mode !== 'bflight' || now < ball.start) return;
+    const p = { ...ball.pitch, plate: ball.guide }, T = ball.pitch.travelMs;
+    const a = Math.min(1, (now - ball.start) / 140) * (now > ball.arrival ? Math.max(0, 1 - (now - ball.arrival) / 150) : 1);
+    if (a <= 0) return;
+    ctx.save(); ctx.globalAlpha = a;
+    ctx.fillStyle = 'rgba(255,255,255,.55)';
+    for (let k = 0.06; k <= 1.001; k += 0.06) {
+      const q = ballScreen(V, p, ball.start, ball.start + T * k);
+      ctx.beginPath(); ctx.arc(q.x, q.y, Math.max(1.2, q.r * 0.28), 0, Math.PI * 2); ctx.fill();
+    }
+    const end = ballScreen(V, p, ball.start, ball.start + T);
+    ctx.strokeStyle = 'rgba(120,220,255,.9)'; ctx.lineWidth = 2; ctx.setLineDash([5, 4]);
+    ctx.beginPath(); ctx.arc(end.x, end.y, end.r * 2.1, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+  // 배트 표시: 노란 타원 = 이 안으로 공이 오면 맞는다(공 반지름 포함). 가운데 막대 = 배트, 안쪽 작은 타원 = 정타
+  function drawBat(now, batter) {
+    const flash = batFlash && now - batFlash.at < 450 ? batFlash : null;
+    if (auto || (!flash && mode !== 'bwait' && mode !== 'bflight')) return;
+    const { rx, ry } = batReach(batter.contact, prefs.hard);
+    const at = flash || batAim;
+    const [cx, cy] = toS(V, at.x, at.y), RX = rx * V.zw / 2, RY = ry * V.zh / 2;
+    const col = flash ? (flash.hit ? '46,204,113' : '255,107,94') : '255,214,64';
+    const a = flash ? 1 - (now - flash.at) / 450 : batDrag ? 1 : 0.8;
+    ctx.save(); ctx.globalAlpha = a;
+    ctx.fillStyle = `rgba(${col},.12)`; ctx.strokeStyle = `rgba(${col},.95)`; ctx.lineWidth = 2.2;
+    ctx.beginPath(); ctx.ellipse(cx, cy, RX, RY, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = `rgba(${col},.45)`; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.ellipse(cx, cy, RX * 0.4, RY * 0.4, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = `rgba(${col},.95)`; ctx.lineCap = 'round';                    // 배트(가로 막대)
+    ctx.lineWidth = Math.max(4, RY * 0.16); ctx.beginPath(); ctx.moveTo(cx - RX * 0.62, cy); ctx.lineTo(cx + RX * 0.62, cy); ctx.stroke();
+    ctx.restore();
   }
   function drawZone(alpha) {
     const [x0, y0] = toS(V, V.mirror ? 1 : -1, 1);
