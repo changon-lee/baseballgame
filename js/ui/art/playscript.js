@@ -2,6 +2,7 @@
 // 결과(안타/아웃 등)는 이미 정해져 있고, 그 결과가 자연스럽게 나오도록 움직임을 맞춘다.
 // 좌표: 피트. 홈 = (0,0), +y = 중견수 쪽, +x = 1루 쪽, z = 높이. 시간: 실제 초. 화면에선 SPEED배 빠르게 보여준다.
 import { randNormal } from '../../core/rng.js';
+import { groundAdvance } from '../../core/rules.js';
 
 export const SPEED = 1.3;
 export const toMs = t => t * 1000 / SPEED;
@@ -169,13 +170,12 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
     return t;
   };
 
-  // 밀려나는 주자만 한 베이스씩, 나머지는 리드했다가 베이스로(내야안타)
+  // 땅볼 진루(내야안타): 1·2루 주자는 다음 베이스로, 안 밀리는 3루 주자 등은 리드했다가 베이스로
   const forcedRunners = t0 => {
-    let forced = true;
+    const to = groundAdvance(bases);
     R.forEach((r, i) => {
-      forced = forced && !!bases[i];
       if (!r) return;
-      if (forced) { runBases(r, t0, i + 1, i + 2, 23); return; }
+      if (to[i] > i + 1) { runBases(r, t0, i + 1, to[i], 23); return; }
       runTo(r.keys, 0.4, ...baseAlong(i + 1, 20), 12, 'lead');
       runTo(r.keys, 3, ...BASES[i + 1], 14, 'stand');
     });
@@ -601,10 +601,12 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
       sc.outs.push(outT);
     }
     batterTo1B(outT);
-    // 임시 보완: 판정상 베이스에 남는 주자(병살로 아웃되는 1루 주자 제외)는 리드를 나갔다가 베이스로 돌아온다
+    // 땅볼이면 1·2루 주자는 무조건 다음 베이스로 뛴다(규칙 계산 groundAdvance와 같은 진루). 병살 1루 주자는 위에서 2루 아웃
+    const to = groundAdvance(bases);
     R.forEach((r, i) => {
       if (!r || r.keys.length > 1) return;
-      const [lx, ly] = baseAlong(i + 1, 22);
+      if (to[i] > i + 1) { runBases(r, 0.12, i + 1, to[i], 25); return; }
+      const [lx, ly] = baseAlong(i + 1, 18);                 // 안 밀리는 3루 주자 등: 리드했다가 돌아온다
       runTo(r.keys, 0.4, lx, ly, 12, 'lead');
       runTo(r.keys, outT + 0.1, ...BASES[i + 1], 16, 'stand');
     });

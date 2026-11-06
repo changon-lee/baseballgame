@@ -95,20 +95,22 @@ test('sac fly: the catcher holds the ball the moment the throw arrives', () => {
   }
 });
 
-test('ground out / double play: runners who stay on base break off their lead and return, not frozen', () => {
-  for (let seed = 1; seed <= 40; seed++) {
-    for (const [event, bases, staying] of [
-      ['OUT', [true, false, false], [1]], ['OUT', [true, true, true], [1, 2, 3]],
-      ['DOUBLE_PLAY', [true, true, true], [2, 3]], ['DOUBLE_PLAY', [true, true, false], [2]],
-    ]) {
-      const sc = buildPlay({ event, fly: false, bats: 'R', contact: { pull: 0 }, bases, rng: createRng(seed) });
-      const occupied = bases.map((on, i) => on && i + 1);
-      for (const base of staying) {
-        const r = sc.runners[1 + occupied.filter(Boolean).indexOf(base)];
-        const last = r.keys[r.keys.length - 1];
-        assert.ok(near([last.x, last.y], BASES[base], 1), `${event} seed ${seed}: runner on ${base}B ends on the base`);
-        assert.ok(r.keys.length >= 3, `${event} seed ${seed}: runner on ${base}B moves instead of freezing at the lead`);
-      }
+test('ground out / double play: runners on first and second always run to the next base, never back', () => {
+  // [이벤트, 주자, [[출발 베이스, 도착 베이스(4 = 홈)]...]]
+  const cases = [
+    ['OUT', [true, false, false], [[1, 2]]], ['OUT', [false, true, false], [[2, 3]]], ['OUT', [true, true, false], [[1, 2], [2, 3]]],
+    ['OUT', [true, true, true], [[1, 2], [2, 3], [3, 4]]], ['OUT', [false, true, true], [[2, 2], [3, 3]]], ['OUT', [true, false, true], [[1, 2], [3, 3]]],
+    ['DOUBLE_PLAY', [true, true, true], [[2, 3], [3, 4]]], ['DOUBLE_PLAY', [true, true, false], [[2, 3]]],
+  ];
+  for (let seed = 1; seed <= 40; seed++) for (const [event, bases, moves] of cases) {
+    const sc = buildPlay({ event, fly: false, bats: 'R', contact: { pull: 0 }, bases, rng: createRng(seed) });
+    for (const [from, to] of moves) {
+      const r = sc.runners.find(q => q.base === from), last = r.keys[r.keys.length - 1];
+      assert.ok(near([last.x, last.y], BASES[to % 4], 1), `${event} ${bases} seed ${seed}: runner on ${from}B ends on ${to}`);
+      if (to > from) {                                  // 뛰는 주자는 출발 베이스에서 계속 멀어진다(뒤로 안 돌아온다)
+        let d = 0;
+        for (const k of r.keys) { const e = Math.hypot(k.x - BASES[from][0], k.y - BASES[from][1]); assert.ok(e >= d - 0.5, `${event} seed ${seed}: ${from}B runner goes back`); d = Math.max(d, e); }
+      } else assert.ok(r.keys.length >= 3, `${event} seed ${seed}: runner on ${from}B moves instead of freezing`);
     }
   }
 });

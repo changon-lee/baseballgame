@@ -45,7 +45,7 @@ const OUTS_OF = { STRIKE: 1, OUT: 1, SAC_FLY: 1, DOUBLE_PLAY: 2, LINE_DP: 2, SIN
 // 공 하나의 결과를 경기에 반영
 function commit(m, event, ps, pitch, fly, style) {
   const mu = matchup(m);
-  const { state, runs, paEnded } = applyEvent(m.game, event);
+  const { state, runs, paEnded } = applyEvent(m.game, event, { ground: (event === 'OUT' && !fly && style !== 'liner') || event === 'DOUBLE_PLAY' });
   let log = m.log || [];
   let pa = [...(m.pa || []), pitch ? { k: pitch.type, v: pitch.speedKmh, e: event } : { e: event }];
   if (paEnded) {
