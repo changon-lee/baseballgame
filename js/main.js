@@ -50,6 +50,7 @@ function hub() {
       finish: () => { career = finishSeason(career); hubCtx.tab = 'records'; persist(); hub(); },
       lineup: () => showLineup(app, userTeamNow(career), storage, lineup, l => { lineup = l; hub(); }),
       exhibition: () => exhibitionMenu(),
+      versus: () => versusMenu(),
       reset: () => { career = newCareer(); hubCtx.tab = 'home'; persist(); hub(); },
     },
   }));
@@ -98,8 +99,14 @@ function exhibitionMenu() {
   });
 }
 
-// 개발용 주소: #game[-팀] 1이닝 친선 경기, #lineup 타순 화면
+async function versusMenu() {
+  const { showVersus } = await import('./ui/versus.js');
+  showVersus(app, { storage, loadGame, onBack: hub });
+}
+
+// 개발용 주소: #game[-팀] 1이닝 친선 경기, #lineup 타순 화면, #vs 1:1 대결
 if (location.hash.startsWith('#game')) {
   loadGame().then(mod => mod && mod.showGame(app, { userTeam: userTeamNow(career), cpuTeam: getTeam(location.hash.split('-')[1] || 'lg'), lineup, innings: 1 }, hub));
-} else if (location.hash === '#lineup') showLineup(app, userTeamNow(career), storage, lineup, l => { lineup = l; hub(); });
+} else if (location.hash === '#vs') versusMenu();
+else if (location.hash === '#lineup') showLineup(app, userTeamNow(career), storage, lineup, l => { lineup = l; hub(); });
 else hub();

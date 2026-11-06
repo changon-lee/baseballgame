@@ -16,7 +16,7 @@ const teamName = id => getTeam(id).short;
 const pct = x => x.toFixed(3).replace(/^0/, '');
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-// ctx: { career, saveOk, tab, setup:{cycles,innings}, on:{ startSeason, play, auto, autoMany, finish, lineup, exhibition, reset } }
+// ctx: { career, saveOk, tab, setup:{cycles,innings}, on:{ startSeason, play, auto, autoMany, finish, lineup, exhibition, versus, reset } }
 export function showHub(root, ctx) {
   let tab = ctx.tab || 'home';
   const render = () => {
@@ -102,9 +102,10 @@ export function showHub(root, ctx) {
       <div class="actions"><button class="primary big" data-act="start">시즌 시작</button></div>
     </section>
     <section class="card slim">
-      <div class="card-h">친선 경기</div>
-      <p class="hint">기록에 남지 않는 한 경기</p>
-      <div class="actions"><button class="ghost" data-act="exhibition">친선 경기</button><button class="ghost" data-act="lineup">타순 편집</button></div>
+      <div class="card-h">친선 경기 · 1:1 대결</div>
+      <p class="hint">기록에 남지 않는 한 경기. 1:1 대결은 같은 와이파이의 폰 두 대로 겨뤄요</p>
+      <div class="actions"><button class="ghost" data-act="exhibition">친선 경기</button><button class="ghost" data-act="versus">1:1 대결</button></div>
+      <div class="actions" style="margin-top:8px"><button class="ghost" data-act="lineup">타순 편집</button></div>
     </section>`;
   }
 
@@ -205,6 +206,7 @@ export function showHub(root, ctx) {
     act('finish', () => on.finish());
     act('lineup', () => on.lineup());
     act('exhibition', () => on.exhibition());
+    act('versus', () => on.versus());
     act('reset', () => { if (confirm('지금까지의 시즌·성장·기록이 모두 지워져요. 처음부터 할까요?')) on.reset(); });
   }
   render();

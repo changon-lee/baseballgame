@@ -1,9 +1,9 @@
 // 경기 화면: 투구(조준 → 구종 → 게이지), 타격(타이밍 터치), 타구 화면, 투수 교체, 경기 종료
 import { CONFIG } from '../config.js';
 import { createRng } from '../core/rng.js';
-import { PITCH_TYPES, gaugePos, sweetWidth, gaugePeriod, energy, aimFromTouch, fatigue, ZONE_K } from '../core/pitch.js';
+import { PITCH_TYPES, gaugePos, gaugeError, sweetWidth, gaugePeriod, energy, aimFromTouch, fatigue, ZONE_K } from '../core/pitch.js';
 import { availableRelievers } from '../core/team.js';
-import { createMatch, matchup, playUserPitch, cpuPitchToUser, resolveUserSwing, changePitcher, cpuMaybeChangePitcher, simulateInning, simulateRest } from '../core/match.js';
+import { createMatch, matchup, playUserPitch, cpuPitchToUser, resolveUserSwing, changePitcher, cpuMaybeChangePitcher, simulateInning, simulateRest, applyDecision } from '../core/match.js';
 import { cpuChoosePitch, cpuSwing } from '../core/ai.js';
 import { batReach } from '../core/batting.js';
 import { loadPrefs, savePrefs, LEVELS, LEVEL_NAME } from './prefs.js';
@@ -36,11 +36,19 @@ const PITCH_E = { BALL: '볼', STRIKE: '스트', FOUL: '파울' };
 const PITCH_COLORS = { FB: '#ff6b5e', SI: '#ffa94d', CT: '#ffd43b', SL: '#69db7c', CU: '#4dabf7', CH: '#b197fc', FO: '#f783ac' };
 const basesText = b => { const on = [1, 2, 3].filter((n, i) => b[i]); return on.length === 3 ? '만루' : on.length ? on.join('·') + '루' : '주자 없음'; };
 
+// 두 폰(과 서버)이 같은 경기를 보고 있는지 확인용 요약(server.mjs와 같게)
+const checkOf = m => { const g = m.game; return [g.inning, g.half, g.outs, g.balls, g.strikes, g.score.away, g.score.home, g.bases.map(Number).join('')].join('|'); };
+const GRADE = ['<b class="r">타이밍 실패 — 제구가 흔들렸어요</b>', '<b class="y">괜찮은 타이밍</b>', '<b class="g">완벽한 타이밍!</b>'];
+
 // onExit(result): 경기를 끝까지 하면 { home, away, log, starterId }, 중간에 나가면 null
-export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterId, title }, onExit) {
+// net(1:1 대결): { side: 'home'|'away'(내 팀), level(방 난이도), conn(net.js 연결) }. userTeam = 홈팀, cpuTeam = 원정팀, cpuLineup = 원정 타순.
+//   판정은 서버가 하고 이 화면은 받은 결과를 보여 준다. 자동 진행·넘기기는 없다
+export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterId, title, net = null, cpuLineup = null }, onExit) {
   const rng = createRng((Date.now() ^ (Math.random() * 1e9)) >>> 0);
   setReleaseOverride(spriteReleaseOffset);
-  let match = createMatch({ userTeam, cpuTeam, userLineup: lineup, innings, rng, cpuStarterId });
+  let match = createMatch({ userTeam, cpuTeam, userLineup: lineup, innings, rng, cpuStarterId, cpuLineup });
+  const mySide = net ? net.side : 'home';
+  let netN = 0, netIdle = false, netPitch = null, netQ = [];
   const uni = { home: uniformFor(userTeam, 'home'), away: uniformFor(cpuTeam, 'away') };
 
   root.innerHTML = `
@@ -75,6 +83,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   let auto = false;             // 자동 진행: 투구·스윙을 컴퓨터가 대신한다
   let prefs = loadPrefs();      // 궤적 안내 · 난이도 · 소리
   setAudioOptions(prefs); preloadAudio();
+  const lvl = () => (net ? net.level : prefs.level);   // 대결은 방장이 정한 난이도
   // 내가 칠 때 배트를 댈 곳(존 좌표). 화면을 누른 채 움직이면 따라오고, 손을 떼면 그 자리로 스윙한다
   let batAim = { x: 0, y: -0.1 }, batDrag = null, batFlash = null;
   let alive = true;            // exit() 뒤에는 어떤 타이머·입력도 이 경기를 움직이지 않는다
@@ -92,7 +101,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     setView();
     placePicker();
   }
-  const userPitching = () => matchup(match).userRole === 'pitch';
+  const userPitching = () => matchup(match).pitchingSide === mySide;
   function setView() { if (W) V = makeView(userPitching() ? 'pitcher' : 'catcher', W, H); }
   window.addEventListener('resize', resize);
 
@@ -124,6 +133,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     if (match.game.over) return showEnd();
     ball = null; play = null; swingAt = null; pitchAt = 0;
     setView();
+    if (net) return nextNetPlay();
     // 화면이 숨겨진 동안에는 다음 공을 준비하지 않는다(돌아오면 onVisibility가 이어서 진행)
     if (document.hidden) { interrupted = true; mode = 'msg'; return; }
     if (userPitching() && auto) {
@@ -152,13 +162,79 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     }
   }
 
+  // ── 1:1 대결 ──
+  function nextNetPlay() {
+    netIdle = false; netPitch = null;
+    if (netQ.length) return applyChange(netQ.shift());   // 결과 화면을 보는 동안 온 투수 교체
+    netIdle = true;
+    net.conn.send({ t: 'ready', n: netN });
+    if (userPitching()) {
+      mode = 'aim'; pitchType = null;
+      setControls(`<p>스트라이크존 위를 <b>드래그</b>해서 포수 미트 위치를 정하세요</p>
+        <div class="row"><button class="ghost" data-act="bullpen">투수 교체</button></div>`);
+      controls.querySelector('[data-act=bullpen]').onclick = showBullpen;
+    } else {
+      mode = 'bwait';
+      setControls('<p><b>상대 투수</b>가 공을 고르는 중 · 화면을 <b>누른 채 움직여</b> 배트를 공 길에 두고, <b>손을 떼면 스윙!</b></p>');
+    }
+  }
+  function applyChange(m) {
+    netIdle = false;
+    match = changePitcher(match, m.side, m.pitcherId); netN = m.n;
+    if (m.chk && m.chk !== checkOf(match)) console.warn('경기 상태가 서버와 달라요', m.chk, checkOf(match));
+    updateBoard(); mode = 'msg'; ball = null;
+    showMsg(`${match.teams[m.side].short} 투수 교체`, '#9fb3cc', 1300, matchup(match).pitcher.name, nextPlay);
+  }
+  function onNet(m) {
+    if (!alive) return;
+    if (m.t === 'left') return netGone('상대가 대결을 나갔어요');
+    if (m.t === 'change') { if (netIdle) applyChange(m); else netQ.push(m); return; }
+    if (m.t === 'pitch') {
+      if (m.n !== netN) return;
+      if (userPitching()) {                                // 내가 던진 공: 상대 타자가 준비되면 서버가 만들어 보낸다
+        const start = performance.now() + CONFIG.WIND_USER_MS;
+        ball = { pitch: m.pitch, start, wind: CONFIG.WIND_USER_MS, arrival: start + m.pitch.travelMs, result: null };
+        mode = 'flight';
+      } else {                                             // 와인드업 뒤 날아온다
+        netPitch = m.pitch; pitchAt = performance.now() + CONFIG.WIND_CPU_MS; mode = 'bwait';
+        setControls('<p><b>투구!</b> 화면을 <b>누른 채 움직여</b> 배트를 공 길에 두고, <b>손을 떼면 스윙!</b></p>');
+      }
+      return;
+    }
+    if (m.t === 'result') {
+      if (!ball || m.n !== netN + 1) return;
+      netIdle = false; netN = m.n;
+      const r = applyDecision(match, ball.pitch, m.d); r.seed = m.seed; r.chk = m.chk;
+      ball.result = r;
+      if (userPitching()) { if (mode === 'netarrive') arriveUserPitch(); }   // 아직 날아가는 중이면 도착할 때 보여 준다
+      else if (ball.swung) { swingOutcome(r, ball.diff, ball.bat); if (r.contact && r.contact.kind === 'MISS' && mode === 'netwait') takePitch(); }
+      else takePitch();
+    }
+  }
+  function netGone(text) {
+    if (mode === 'end') return;
+    mode = 'end'; timers.forEach(clearTimeout); timers = []; ball = null; play = null; msg = null;
+    overlay.innerHTML = `<div class="end-card"><div class="tag">1:1 대결</div><h1 style="font-size:24px">${text}</h1>
+      <button class="primary" data-act="ok">확인</button></div>`;
+    overlay.classList.remove('hidden');
+    overlay.querySelector('[data-act=ok]').onclick = () => exit();
+    setControls('');
+  }
+  if (net) net.conn.setHandlers({ onMessage: onNet, onClose: () => netGone('서버와 연결이 끊겼어요') });
+
   function showBullpen() {
-    const list = availableRelievers(userTeam, match.used.home, match.pitcher.home);
+    const side = mySide;
+    const list = availableRelievers(match.teams[side], match.used[side], match.pitcher[side]);
     mode = 'bullpen';
     setControls(`<div class="bullpen">${list.map(p => `
       <button data-p="${p.id}"><b>${p.name}</b> <span>${p.role === 'SP' ? '선발' : '불펜'} · ${p.velo}km · 제구 ${p.control} · 체력 ${p.stamina}</span></button>`).join('') || '<p>남은 투수가 없어요</p>'}
       <button class="ghost" data-act="cancel">취소</button></div>`);
-    controls.querySelectorAll('[data-p]').forEach(b => { b.onclick = () => { match = changePitcher(match, 'home', b.dataset.p); nextPlay(); }; });
+    controls.querySelectorAll('[data-p]').forEach(b => {
+      b.onclick = () => {
+        if (net) { net.conn.send({ t: 'change', n: netN, pitcherId: b.dataset.p }); mode = 'msg'; setControls('<p>투수 교체 중…</p>'); return; }
+        match = changePitcher(match, 'home', b.dataset.p); nextPlay();
+      };
+    });
     controls.querySelector('[data-act=cancel]').onclick = nextPlay;
   }
 
@@ -187,7 +263,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       b.onclick = () => {
         if (mode !== 'pick') return;
         pitchType = b.dataset.k; mode = 'gauge'; gaugeStart = performance.now();
-        period = gaugePeriod(matchup(match).fatigue, prefs.level);
+        period = gaugePeriod(matchup(match).fatigue, lvl());
         b.classList.add('on');
         hidePicker();
         setControls(`<p><b>${PITCH_TYPES[pitchType].name}</b> · 게이지가 <b class="g">초록 구간 한가운데</b>일 때 화면을 터치!</p>`);
@@ -207,7 +283,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     picker.style.transform = `translate(${Math.round(x)}px,${Math.round(y)}px)`;
   }
 
-  function throwUserPitch(ts) { throwWith(gaugePos(ts - gaugeStart, period), prefs.level); }
+  function throwUserPitch(ts) { throwWith(gaugePos(ts - gaugeStart, period), lvl()); }
   // 자동 진행: 컴퓨터 투수처럼 구종·위치·게이지를 정해서 던진다
   function autoThrow() {
     if (!auto || mode !== 'msg' || ball || play || msg) return;      // 그사이 자동 진행을 껐거나 넘기기를 했다
@@ -219,6 +295,15 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     throwWith(c.gaugePos);
   }
   function throwWith(gpos, level = 'easy') {
+    if (net) {                                           // 서버로 보내고, 상대 타자가 준비되면 공이 돌아온다
+      const mu = matchup(match), sweet = sweetWidth(mu.pitcher.control, mu.fatigue, level), err = gaugeError(gpos);
+      const q = err > sweet ? 0 : err < sweet * 0.35 ? 2 : 1;
+      net.conn.send({ t: 'throw', n: netN, type: pitchType, target, gaugePos: gpos });
+      netIdle = false; mode = 'netwait';
+      lastGauge = { pos: gpos, sweet, at: performance.now(), q };
+      setControls(`<p>${GRADE[q]} <small>· 상대 타자를 기다리는 중</small></p>`);
+      return;
+    }
     const r = playUserPitch(match, { type: pitchType, target, gaugePos: gpos, level }, rng);
     const start = performance.now() + CONFIG.WIND_USER_MS;
     ball = { pitch: r.pitch, start, wind: CONFIG.WIND_USER_MS, arrival: start + r.pitch.travelMs, result: r };
@@ -230,7 +315,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   }
 
   function throwCpuPitch() {
-    const pitch = cpuPitchToUser(match, rng);
+    const pitch = net ? netPitch : cpuPitchToUser(match, rng);
+    netIdle = false;
     ball = { pitch, start: pitchAt, wind: CONFIG.WIND_CPU_MS, arrival: pitchAt + pitch.travelMs, result: null, swung: false };
     // 궤적 안내는 '대략 이쯤': 타자 선구안이 좋을수록 범위가 좁고 가운데가 정확하다(화면용이라 경기 난수는 쓰지 않는다)
     // eye 30 → 반지름 0.8(존 반폭 기준, 존의 거의 절반), eye 90 → 0.42. 가운데는 실제 도착점에서 반지름의 0.4배쯤 어긋난다
@@ -250,8 +336,9 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
 
   // 내가 던진 공이 도착
   function arriveUserPitch() {
+    if (net && !ball.result) { mode = 'netarrive'; return; }   // 상대 타자의 판정을 기다리며 공을 홈에 멈춰 둔다
     const r = ball.result;
-    if (r.swing) swingAt = ball.arrival - SWING_CONTACT_MS;
+    if (r.swing) swingAt = Math.max(ball.arrival, performance.now()) - SWING_CONTACT_MS;
     const k = r.contact ? r.contact.kind : null;
     if (k === 'INPLAY' || k === 'FOUL') { playSound(k === 'FOUL' ? 'foul' : r.event === 'HR' ? 'homerun' : 'hit', { q: r.contact.quality }); ball.hitAt = performance.now(); ball.contact = r.contact; }
     else if (k === 'MISS') { playSound('whiff'); playSound('mitt', { speed: r.pitch.speedKmh }); }
@@ -265,8 +352,15 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     if (!ball || ball.swung) return;
     ball.swung = true; swingAt = performance.now() - 30;   // 손을 떼자마자 방망이가 나가 보이게
     const diff = ts - ball.arrival;
-    const bat = auto ? null : { x: batAim.x, y: batAim.y, level: prefs.level };
-    const r = resolveUserSwing(match, ball.pitch, diff, rng, bat);
+    const bat = auto ? null : { x: batAim.x, y: batAim.y, level: lvl() };
+    if (net) {                                           // 판정은 서버가: 타이밍과 배트 위치만 보낸다
+      ball.sent = true; ball.diff = diff; ball.bat = bat;
+      net.conn.send({ t: 'swing', n: netN, diff, bat: bat && { x: bat.x, y: bat.y } });
+      return;
+    }
+    swingOutcome(resolveUserSwing(match, ball.pitch, diff, rng, bat), diff, bat);
+  }
+  function swingOutcome(r, diff, bat) {
     const k = r.contact.kind;
     if (bat) batFlash = { at: performance.now(), hit: k !== 'MISS', x: batAim.x, y: batAim.y };
     info = `${ball.pitch.speedKmh}km/h ${PITCH_TYPES[ball.pitch.type].name} · `
@@ -282,9 +376,13 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   }
 
   function takePitch() {
+    if (net && !ball.result) {                           // 안 쳤다고 서버에 알리고 판정을 기다린다
+      if (!ball.sent) { ball.sent = true; net.conn.send({ t: 'take', n: netN }); }
+      mode = 'netwait'; return;
+    }
     playSound('mitt', { speed: ball.pitch.speedKmh });
     const r = ball.result || resolveUserSwing(match, ball.pitch, null, rng);
-    if (!ball.result) info = `${ball.pitch.speedKmh}km/h ${PITCH_TYPES[ball.pitch.type].name}`;
+    if (!ball.swung) info = `${ball.pitch.speedKmh}km/h ${PITCH_TYPES[ball.pitch.type].name}`;
     apply(r, false);
   }
 
@@ -295,7 +393,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     const finish = () => settle(prev, r, userPitched);
     if (['BALL', 'STRIKE', 'FOUL'].includes(r.event)) return finish();
     const batter = matchup(match).batter;
-    play = buildPlay({ event: r.event, fly: r.fly, style: r.style, contact: r.contact, bats: batter.bats, bases: prev.bases, rng });
+    // 대결이면 서버가 준 씨앗으로: 두 폰에서 같은 장면이 나온다
+    play = buildPlay({ event: r.event, fly: r.fly, style: r.style, contact: r.contact, bats: batter.bats, bases: prev.bases, rng: r.seed != null ? createRng(r.seed) : rng });
     play.sounds.sort((a, b) => a.t - b.t);
     play.start = performance.now() + 320; play.si = 0;
     play.then = finish;
@@ -304,6 +403,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   function settle(prev, r, userPitched) {
     hold = matchup(match);
     match = r.match;
+    if (r.chk && r.chk !== checkOf(match)) console.warn('경기 상태가 서버와 달라요', r.chk, checkOf(match));
     let label = (r.style && STYLE_LABEL[r.style]) || LABEL[r.event] || (r.fly ? '뜬공 아웃' : '땅볼 아웃');
     if (r.event === 'STRIKE' && prev.strikes === 2) { label = '삼진!'; playSound('strikeout'); }
     else if (r.event === 'STRIKE' && r.contact && r.contact.kind === 'MISS') label = '헛스윙';
@@ -344,29 +444,31 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   // 타구 장면 속 소리: 야수가 공을 잡는 소리, 홈런 공이 담장을 넘는 순간(우리 홈런이면 축하 음악, 상대면 탄식)
   function playCue(name) {
     if (name === 'mitt') return playSound('catch');
-    if (name === 'cheer') return playSound(shownMu().battingSide === 'home' ? 'jingle' : 'aww');
+    if (name === 'cheer') return playSound(shownMu().battingSide === mySide ? 'jingle' : 'aww');
     playSound(name);
   }
 
   function showEnd() {
     mode = 'end'; $('.more').hidden = true;
     const g = match.game;
-    const res = g.result === 'home' ? '승리' : g.result === 'away' ? '패배' : '무승부';
-    overlay.innerHTML = `<div class="end-card ${g.result === 'home' ? 'win' : ''}">
+    const won = g.result === mySide;
+    const res = won ? '승리' : g.result === 'home' || g.result === 'away' ? '패배' : '무승부';
+    overlay.innerHTML = `<div class="end-card ${won ? 'win' : ''}">
       <div class="tag">경기 종료 · ${g.inning}회</div><h1>${res}</h1>
       <div class="final"><span>${cpuTeam.short}</span><b>${g.score.away}</b><i>:</i><b>${g.score.home}</b><span>${userTeam.short}</span></div>
       <button class="primary" data-act="menu">계속</button>
       <button class="ghost" data-act="log">경기 기록 보기</button></div>`;
     overlay.classList.remove('hidden');
     overlay.querySelector('[data-act=log]').onclick = () => showLog(match.log, '경기 기록', showEnd);
-    if (g.result === 'home') { playSound('roar'); playSound('jingle'); vibrate([80, 60, 80, 60, 160]); }
-    overlay.querySelector('[data-act=menu]').onclick = () => exit({
-      home: g.score.home, away: g.score.away, log: match.log, starterId: lineup.starterId });
+    if (won) { playSound('roar'); playSound('jingle'); vibrate([80, 60, 80, 60, 160]); }
+    overlay.querySelector('[data-act=menu]').onclick = () => (net ? exit() : exit({
+      home: g.score.home, away: g.score.away, log: match.log, starterId: lineup.starterId }));
     setControls('');
   }
 
   function exit(result = null) {
     alive = false;
+    if (net) { net.conn.send({ t: 'leave' }); net.conn.close(); }
     setAmbience(false);
     loop.stop(); timers.forEach(clearTimeout); window.removeEventListener('resize', resize);
     document.removeEventListener('visibilitychange', onVisibility);
@@ -381,19 +483,19 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     const g = match.game;
     overlay.innerHTML = `<div class="end-card menu-card">
       <div class="tag">${g.inning}회${g.half === 'top' ? '초' : '말'} · 진행 메뉴</div>
-      <button class="primary" data-act="auto">${auto ? '자동 진행 끄기' : '자동 진행 켜기'}</button>
-      <p class="hint">투수가 알아서 던지고, 타자가 알아서 칩니다</p>
+      ${net ? '' : `<button class="primary" data-act="auto">${auto ? '자동 진행 끄기' : '자동 진행 켜기'}</button>
+      <p class="hint">투수가 알아서 던지고, 타자가 알아서 칩니다</p>`}
       <div class="row2"><button class="ghost" data-act="guide">${prefs.guide ? '궤적 안내 켜짐' : '궤적 안내 꺼짐'}</button>
-        <button class="ghost" data-act="level">난이도: ${LEVEL_NAME[prefs.level]}</button></div>
-      <p class="hint">${{ easy: '쉬움: 배트가 크고 잘 맞아요. 제구 게이지의 초록 구간이 넓고 느려요', normal: '보통: 배트가 작고, 제구 게이지가 좁고 빨라요. 공이 올 길은 대략 보여 줘요(선구안이 좋을수록 정확)', hard: '어려움: 배트가 더 작고 궤적 안내가 없어요. 제구 게이지가 가장 좁고 빨라요' }[prefs.level]}</p>
+        ${net ? `<button class="ghost" disabled>난이도: ${LEVEL_NAME[lvl()]}</button>` : `<button class="ghost" data-act="level">난이도: ${LEVEL_NAME[prefs.level]}</button>`}</div>
+      <p class="hint">${net ? '1:1 대결은 방을 만든 사람이 정한 난이도로 둘 다 같게 해요. ' : ''}${{ easy: '쉬움: 배트가 크고 잘 맞아요. 제구 게이지의 초록 구간이 넓고 느려요', normal: '보통: 배트가 작고, 제구 게이지가 좁고 빨라요. 공이 올 길은 대략 보여 줘요(선구안이 좋을수록 정확)', hard: '어려움: 배트가 더 작고 궤적 안내가 없어요. 제구 게이지가 가장 좁고 빨라요' }[lvl()]}</p>
       <div class="row2 snd"><button class="ghost" data-act="sfx">효과음 ${prefs.sfx ? '켜짐' : '꺼짐'}</button>
         <button class="ghost" data-act="amb">관중·응원 ${prefs.amb ? '켜짐' : '꺼짐'}</button></div>
-      <button class="ghost" data-act="inning">이번 이닝 넘기기</button>
-      <button class="ghost" data-act="game">이번 경기 넘기기</button>
+      ${net ? '' : `<button class="ghost" data-act="inning">이번 이닝 넘기기</button>
+      <button class="ghost" data-act="game">이번 경기 넘기기</button>`}
       <button class="ghost" data-act="log">경기 기록 보기</button>
       <button class="ghost" data-act="close">닫기</button></div>`;
     overlay.classList.remove('hidden');
-    const on = (a, fn) => { overlay.querySelector(`[data-act=${a}]`).onclick = fn; };
+    const on = (a, fn) => { const el = overlay.querySelector(`[data-act=${a}]`); if (el) el.onclick = fn; };
     on('auto', () => {
       auto = !auto; closeOverlay();
       // 조준·구종 고르기·타석 대기 중(또는 자동 투구 대기 중)이면 바로 바뀐 방식으로 다시 시작
@@ -455,12 +557,13 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
 
   $('.exit').onclick = () => {
     if (mode === 'end') { const b = overlay.querySelector('[data-act=menu]'); return b ? b.click() : showEnd(); }
-    if (confirm('경기를 그만둘까요? (시즌 경기는 기록되지 않고 다시 할 수 있어요)')) exit();
+    if (confirm(net ? '대결을 그만둘까요? 상대 화면에서도 경기가 끝나요' : '경기를 그만둘까요? (시즌 경기는 기록되지 않고 다시 할 수 있어요)')) exit();
   };
 
   // 화면이 가려지면 던지던 공을 취소하고 다시 던진다(순간이동 방지)
   let interrupted = false;
   function onVisibility() {
+    if (net) return;                                     // 대결은 상대가 기다리므로 공을 취소하지 않는다
     if (document.hidden) {
       if (mode === 'flight' || mode === 'bflight' || mode === 'bwait' || mode === 'gauge') { interrupted = true; ball = null; mode = 'msg'; }
     } else if (interrupted) { interrupted = false; nextPlay(); }
@@ -536,7 +639,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     let pos, sw, alpha = 1, q = -1;
     if (mode === 'gauge') {
       const mu = matchup(match);
-      sw = sweetWidth(mu.pitcher.control, mu.fatigue, prefs.level); pos = gaugePos(now - gaugeStart, period);
+      sw = sweetWidth(mu.pitcher.control, mu.fatigue, lvl()); pos = gaugePos(now - gaugeStart, period);
     } else if (lastGauge && now - lastGauge.at < GAUGE_HOLD_MS && V.kind === 'pitcher') {
       ({ pos, sweet: sw, q } = lastGauge); alpha = 1 - Math.max(0, (now - lastGauge.at) / GAUGE_HOLD_MS - 0.5) * 2;
     } else return;
@@ -636,7 +739,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     if (!bg[V.kind] || bg[V.kind].ready !== standsReady(V.kind)) bg[V.kind] = buildBackdrop(V.kind, V, W, H, DPR, userTeam);
     ctx.drawImage(bg[V.kind], 0, 0, W, H);
     const mu = shownMu();
-    const bp = ball && !ball.hitAt && now >= ball.start ? ballScreen(V, ball.pitch, ball.start, now) : null;
+    const bp = ball && !ball.hitAt && now >= ball.start ? ballScreen(V, ball.pitch, ball.start, mode === 'netarrive' ? Math.min(now, ball.arrival) : now) : null;
     const pp = ball ? pitcherPoseAt(now, ball.start, ball.wind) : mode === 'bwait' && pitchAt ? pitcherPoseAt(now, pitchAt, CONFIG.WIND_CPU_MS) : pitcherPoseAt(now, null, 0);
     const pa = pitcherAnchor(V, mu.pitcher.throws), ba = batterAnchor(V, mu.batter.bats === 'S' ? (mu.pitcher.throws === 'L' ? 'R' : 'L') : mu.batter.bats);
     const bpose = batterPoseAt(now, { swingAt, pitchStart: ball ? ball.start : null, travelMs: ball ? ball.pitch.travelMs : 1 });
@@ -651,8 +754,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     const drawB = () => drawBatterSprite(ctx, batterArgs) || drawBatter(ctx, batterArgs);
 
     if (V.kind === 'pitcher') {
-      const aiming = mode === 'aim' || mode === 'pick' || mode === 'gauge' || (ball && !ball.hitAt);
-      if (!drawCatcherSprite(ctx, V, aiming ? target : null, now)) drawCatcherAndUmpire(ctx, V, aiming ? target : null, uni.home);
+      const aiming = mode === 'aim' || mode === 'pick' || mode === 'gauge' || mode === 'netwait' || (ball && !ball.hitAt);
+      if (!drawCatcherSprite(ctx, V, aiming ? target : null, now)) drawCatcherAndUmpire(ctx, V, aiming ? target : null, uni[mu.pitchingSide]);
       drawZone(0.7);
       drawB();
       if (bp && bp.prog <= 1.02) { drawTrail(now); drawBall(ctx, bp.x, bp.y, bp.r, bp.spin); }
@@ -693,7 +796,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   // 궤적 안내: 공이 손을 떠나면 대략의 길(점점 커지는 점)과 '이쯤 올 것 같다'는 범위(점선 원)를 보여 준다
   // 범위 크기는 타자 선구안 따라. 끄거나 어려움이면 안 보인다
   function drawGuide(now) {
-    if (!ball || !ball.guide || ball.hitAt || auto || !prefs.guide || prefs.level === 'hard' || mode !== 'bflight' || now < ball.start) return;
+    if (!ball || !ball.guide || ball.hitAt || auto || !prefs.guide || lvl() === 'hard' || mode !== 'bflight' || now < ball.start) return;
     const a = Math.min(1, (now - ball.start) / 220) * (now > ball.arrival ? Math.max(0, 1 - (now - ball.arrival) / 150) : 1);
     if (a <= 0) return;
     const [cx, cy] = toS(V, ball.guide.x, ball.guide.y), rx = ball.guide.r * V.zw / 2, ry = ball.guide.r * V.zh / 2;
@@ -719,7 +822,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   function drawBat(now, batter) {
     const flash = batFlash && now - batFlash.at < 450 ? batFlash : null;
     if (auto || (!flash && mode !== 'bwait' && mode !== 'bflight')) return;
-    const { rx, ry } = batReach(batter.contact, prefs.level);
+    const { rx, ry } = batReach(batter.contact, lvl());
     const at = flash || batAim;
     const [cx, cy] = toS(V, at.x, at.y), RX = rx * V.zw / 2, RY = ry * V.zh / 2;
     const col = flash ? (flash.hit ? '46,204,113' : '255,107,94') : '255,214,64';

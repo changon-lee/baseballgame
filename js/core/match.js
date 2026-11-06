@@ -10,10 +10,11 @@ const other = s => (s === 'home' ? 'away' : 'home');
 const pitcherOf = (m, side) => m.teams[side].pitchers.find(p => p.id === m.pitcher[side]);
 const batterOf = (m, side) => m.teams[side].batters.find(b => b.id === m.lineups[side].order[m.game.battingIndex[side]]);
 
-export function createMatch({ userTeam, cpuTeam, userLineup, innings, rng, cpuStarterId }) {
+// cpuLineup: 원정팀 타순(1:1 대결에서 상대가 정한 것). 없으면 기본 타순
+export function createMatch({ userTeam, cpuTeam, userLineup, innings, rng, cpuStarterId, cpuLineup = null }) {
   const sps = cpuTeam.pitchers.filter(p => p.role === 'SP');
   const cpuStarter = sps.find(p => p.id === cpuStarterId) || sps[Math.floor(rng() * sps.length)];
-  const lineups = { home: userLineup, away: { ...defaultLineup(cpuTeam), starterId: cpuStarter.id } };
+  const lineups = { home: userLineup, away: { ...(cpuLineup || defaultLineup(cpuTeam)), starterId: cpuStarter.id } };
   return {
     game: createGameState({ innings }),
     teams: { home: userTeam, away: cpuTeam },
@@ -87,12 +88,18 @@ export function cpuPitchToUser(m, rng) {
   return computePitch({ pitcher: mu.pitcher, ...c, pitchCount: m.pitchCount[mu.pitchingSide], rng });
 }
 
+// 1:1 대결: 서버가 판정(decideSwing, 난수 사용)하고, 서버와 두 폰이 같은 판정을 각자 경기에 반영(applyDecision, 난수 없음)한다
+export const decideSwing = (m, pitch, timingDiffMs, rng, bat = null) => decide(m, matchup(m).batter, pitch, timingDiffMs, rng, bat);
+export function applyDecision(m, pitch, d) {
+  const c = commit(m, d.event, matchup(m).pitchingSide, pitch, d.fly, d.style || null);
+  return { match: c.match, pitch, swing: d.swung ? {} : null, event: d.event, contact: d.contact, fly: d.fly, style: d.style || null, runs: c.runs, paEnded: c.paEnded };
+}
+
 // bat: 배트를 댄 곳({ x, y, hard }, 존 좌표). 없으면 위치는 따지지 않는다(자동 진행)
 export function resolveUserSwing(m, pitch, timingDiffMs, rng, bat = null) {
-  const mu = matchup(m);
-  const d = decide(m, mu.batter, pitch, timingDiffMs, rng, bat);
-  const c = commit(m, d.event, mu.pitchingSide, pitch, d.fly, d.style);
-  return { match: c.match, event: d.event, contact: d.contact, fly: d.fly, style: d.style, runs: c.runs, paEnded: c.paEnded };
+  const r = applyDecision(m, pitch, decideSwing(m, pitch, timingDiffMs, rng, bat));
+  delete r.pitch; delete r.swing;
+  return r;
 }
 
 export function changePitcher(m, side, pitcherId) {
