@@ -12,9 +12,10 @@ export function makeView(kind, W, H) {
       feetY: cy + zh * 1.06, figH: zh * 2, batX: 1.9, moundY: H * 0.34, pitX: W / 2, pitY: H * 0.34, pitS: zh * 0.85 / 180 };
   }
   // 투구 시점: 투수는 카메라 바로 앞이라 크게, 멀리 있는 타자·포수·심판은 작게
-  const zw = Math.min(W * 0.33, H * 0.21), zh = zw * 1.2, cy = H * 0.36;
+  // 존은 조금 작게, 타자는 크게: 존이 타자 무릎~가슴 높이쯤에 오도록(예전엔 존 위쪽이 타자 머리보다 높았다)
+  const zw = Math.min(W * 0.27, H * 0.172), zh = zw * 1.2, cy = H * 0.36;
   return { kind, W, H, zw, zh, cx: W / 2, cy, mirror: true, d0: 2, d1: 19,
-    feetY: cy + zh * 1.06, figH: zh * 1.35, batX: 2.3, pitX: W * 0.5, pitY: H * 1.13, pitS: H * 0.56 / 180 };
+    feetY: cy + zh * 1.06, figH: zh * 2.0, batX: 2.6, pitX: W * 0.5, pitY: H * 1.13, pitS: H * 0.56 / 180 };
 }
 
 export const toS = (V, x, y) => [V.cx + (V.mirror ? -x : x) * V.zw / 2, V.cy - y * V.zh / 2];
