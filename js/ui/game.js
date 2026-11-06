@@ -7,7 +7,7 @@ import { createMatch, matchup, playUserPitch, cpuPitchToUser, resolveUserSwing, 
 import { cpuChoosePitch, cpuSwing } from '../core/ai.js';
 import { startLoop } from './loop.js';
 import { unlockAudio, playSound, vibrate, shake } from './feedback.js';
-import { makeView, toS, zoneRect, ballScreen, ballRadius, pitcherAnchor, batterAnchor, setReleaseOverride } from './art/view.js';
+import { makeView, toS, zoneRect, ballScreen, ballRadius, pitcherAnchor, batterAnchor, setReleaseOverride, PITCH_PATH } from './art/view.js';
 import { drawPitcherSprite, drawBatterSprite, drawCatcherSprite, spriteReleaseOffset, SWING_CONTACT_MS } from './art/sprites.js';
 import { buildBackdrop, standsReady } from './art/stadium.js';
 import { uniformFor } from './art/uniforms.js';
@@ -25,6 +25,8 @@ const OUTS = ['OUT', 'SAC_FLY', 'DOUBLE_PLAY'];
 // 경기 기록에 쓰는 이름
 const PA_NAME = { WALK: '볼넷', STRIKEOUT: '삼진', SINGLE: '안타', DOUBLE: '2루타', TRIPLE: '3루타', HR: '홈런', OUT: '범타 아웃', SAC_FLY: '희생플라이', DOUBLE_PLAY: '병살타' };
 const PITCH_E = { BALL: '볼', STRIKE: '스트', FOUL: '파울' };
+// 구종 칩 색(빠른 공은 따뜻한 색, 떨어지는 공은 차가운 색)
+const PITCH_COLORS = { FB: '#ff6b5e', SI: '#ffa94d', CT: '#ffd43b', SL: '#69db7c', CU: '#4dabf7', CH: '#b197fc', FO: '#f783ac' };
 const basesText = b => { const on = [1, 2, 3].filter((n, i) => b[i]); return on.length === 3 ? '만루' : on.length ? on.join('·') + '루' : '주자 없음'; };
 
 // onExit(result): 경기를 끝까지 하면 { home, away, log, starterId }, 중간에 나가면 null
@@ -49,11 +51,11 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       </div>
       <div class="sub"><span class="mu"></span>${title ? `<span class="ttl">${title}</span>` : ''}</div>
     </div>
-    <div class="stage"><canvas></canvas><div class="overlay hidden"></div></div>
+    <div class="stage"><canvas></canvas><div class="pitch-pick"></div><div class="overlay hidden"></div></div>
     <div class="controls"></div>
   </div>`;
   const $ = s => root.querySelector(s);
-  const cv = $('canvas'), stage = $('.stage'), controls = $('.controls'), overlay = $('.overlay');
+  const cv = $('canvas'), stage = $('.stage'), controls = $('.controls'), overlay = $('.overlay'), picker = $('.pitch-pick');
   const ctx = cv.getContext('2d');
 
   let W = 0, H = 0, DPR = 1, V = null;
@@ -77,6 +79,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     W = r.width; H = r.height; cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
     for (const k in bg) delete bg[k];
     setView();
+    placePicker();
   }
   const userPitching = () => matchup(match).userRole === 'pitch';
   function setView() { if (W) V = makeView(userPitching() ? 'pitcher' : 'catcher', W, H); }
@@ -147,18 +150,49 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     controls.querySelector('[data-act=cancel]').onclick = nextPlay;
   }
 
+  // ── 구종 고르기: 투수 오른쪽, 제구 게이지가 나올 자리에 구종 칩을 세로로 띄운다 ──
+  // 칩 = 꺾이는 방향 그림 + 이름 + 대략 구속. 고르면 칩이 빠지고 같은 자리에 게이지가 돈다
+  function pitchIcon(k, throws) {
+    const pp = PITCH_PATH[k] || { x: 0, y: 0 };
+    const dx = (V && V.mirror ? -1 : 1) * (throws === 'L' ? -1 : 1) * pp.x;   // 공이 화면에서 휘는 쪽(ballScreen과 같게)
+    const ex = 12 + Math.max(-7, Math.min(7, dx * 4)), ey = Math.min(20, 13 - pp.y * 2.6);
+    return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5Q12 ${(ey * 0.62).toFixed(1)} ${ex.toFixed(1)} ${ey.toFixed(1)}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="0.1 3.6"/>`
+      + `<circle cx="${ex.toFixed(1)}" cy="${ey.toFixed(1)}" r="2.9" fill="#fff" stroke="currentColor" stroke-width="1.4"/></svg>`;
+  }
+  let pickerToken = 0;
   function showPitchButtons() {
     const p = matchup(match).pitcher;
+    const again = mode === 'pick' && picker.childElementCount && !picker.classList.contains('out');
     mode = 'pick';
-    setControls(`<p>구종을 고르세요 <small>(다시 드래그하면 위치 변경)</small></p>
-      <div class="row">${p.pitches.map(k => `<button data-k="${k}">${PITCH_TYPES[k].name}</button>`).join('')}</div>`);
-    controls.querySelectorAll('[data-k]').forEach(b => {
+    setControls(`<p>오른쪽에서 구종을 고르세요 <small>(다시 드래그하면 위치 변경)</small></p>`);
+    if (again) return placePicker();                    // 위치만 다시 잡은 경우: 칩은 그대로 둔다
+    pickerToken++;
+    picker.classList.remove('out');
+    picker.innerHTML = p.pitches.map((k, i) => `<button data-k="${k}" style="--c:${PITCH_COLORS[k] || '#9fb3cc'};--i:${i}">`
+      + `<i>${pitchIcon(k, p.throws)}</i><b>${PITCH_TYPES[k].name}</b><span>${Math.round(p.velo * PITCH_TYPES[k].speedMul)}</span></button>`).join('');
+    placePicker();
+    picker.querySelectorAll('[data-k]').forEach(b => {
       b.onclick = () => {
+        if (mode !== 'pick') return;
         pitchType = b.dataset.k; mode = 'gauge'; gaugeStart = performance.now();
         period = gaugePeriod(matchup(match).fatigue);
+        b.classList.add('on');
+        hidePicker();
         setControls(`<p><b>${PITCH_TYPES[pitchType].name}</b> · 게이지가 <b class="g">초록 구간 한가운데</b>일 때 화면을 터치!</p>`);
       };
     });
+  }
+  function hidePicker() {
+    if (!picker.childElementCount || picker.classList.contains('out')) return;
+    const tok = ++pickerToken;
+    picker.classList.add('out');
+    setTimeout(() => { if (tok === pickerToken) { picker.innerHTML = ''; picker.classList.remove('out'); } }, 220);
+  }
+  function placePicker() {
+    if (!picker.childElementCount || !V) return;
+    const g = gaugeSpot(), w = picker.offsetWidth, h = picker.offsetHeight;
+    const x = Math.max(8, Math.min(g.cx + g.R * 0.2, W - w - 10)), y = Math.max(8, Math.min(g.cy - h / 2, H - h - 8));
+    picker.style.transform = `translate(${Math.round(x)}px,${Math.round(y)}px)`;
   }
 
   function throwUserPitch(ts) { throwWith(gaugePos(ts - gaugeStart, period)); }
@@ -177,6 +211,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     const start = performance.now() + CONFIG.WIND_USER_MS;
     ball = { pitch: r.pitch, start, wind: CONFIG.WIND_USER_MS, arrival: start + r.pitch.travelMs, result: r };
     mode = 'flight';
+    lastGauge = { pos: gpos, sweet: r.pitch.sweet, at: performance.now(), q: !r.pitch.onTarget ? 0 : r.pitch.err < r.pitch.sweet * 0.35 ? 2 : 1 };
     const grade = !r.pitch.onTarget ? '<b class="r">타이밍 실패 — 제구가 흔들렸어요</b>'
       : r.pitch.err < r.pitch.sweet * 0.35 ? '<b class="g">완벽한 타이밍!</b>' : '<b class="y">괜찮은 타이밍</b>';
     setControls(`<p>${grade}</p>`);
@@ -404,15 +439,55 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   root.addEventListener('pointerdown', onRootDown);
 
   // ── 그리기 ──
+  // 제구 게이지: 투수 오른쪽에 ')' 모양 반원. 아래 끝(0) ↔ 위 끝(1)을 공이 오가고, 가장 오른쪽(0.5)이 한가운데.
+  // 초록 = 제구 성공 구간(sweet), 밝은 초록 = 완벽. 던진 뒤 잠깐(GAUGE_HOLD_MS) 멈춘 자리를 보여 주고 결과 색으로 반짝인다
+  let lastGauge = null;
+  const GAUGE_HOLD_MS = 550, ARC = 1.15;           // ARC: 위아래로 벌어진 각도(라디안, 가운데에서 한쪽으로)
+  // 게이지 자리: 투수 몸 오른쪽(화면 밖으로 나가지 않게). 구종 칩도 여기 뜬다
+  function gaugeSpot() {
+    const pa = pitcherAnchor(V, matchup(match).pitcher.throws);
+    const R = Math.min(H * 0.12, W * 0.2), lw = Math.max(10, R * 0.17);
+    return { R, lw, cx: Math.min(pa.x + pa.scale * 40, W - R - lw - 8), cy: Math.min(pa.y - pa.scale * 120, H - R * Math.sin(ARC) - lw - 8) };
+  }
   function drawGauge(now) {
-    const mu = matchup(match), sw = sweetWidth(mu.pitcher.control, mu.fatigue);
-    const bw = W * 0.82, bx = (W - bw) / 2, by = H - 32, bh = 16;
-    ctx.fillStyle = 'rgba(6,14,26,.85)'; ctx.fillRect(bx - 5, by - 5, bw + 10, bh + 10);
-    ctx.fillStyle = '#22344d'; ctx.fillRect(bx, by, bw, bh);
-    ctx.fillStyle = '#27ae60'; ctx.fillRect(bx + bw * (0.5 - sw / 2), by, bw * sw, bh);
-    ctx.fillStyle = '#8affb8'; ctx.fillRect(bx + bw * (0.5 - sw * 0.35 / 2), by, bw * sw * 0.35, bh);
-    const mx = bx + bw * gaugePos(now - gaugeStart, period);
-    ctx.fillStyle = '#fff'; ctx.fillRect(mx - 2, by - 7, 4, bh + 14);
+    let pos, sw, alpha = 1, q = -1;
+    if (mode === 'gauge') {
+      const mu = matchup(match);
+      sw = sweetWidth(mu.pitcher.control, mu.fatigue); pos = gaugePos(now - gaugeStart, period);
+    } else if (lastGauge && now - lastGauge.at < GAUGE_HOLD_MS && V.kind === 'pitcher') {
+      ({ pos, sweet: sw, q } = lastGauge); alpha = 1 - Math.max(0, (now - lastGauge.at) / GAUGE_HOLD_MS - 0.5) * 2;
+    } else return;
+    const { cx, cy, R, lw } = gaugeSpot();
+    const ang = p => ARC - 2 * ARC * p;              // p = 0 아래, 1 위 (화면은 y가 아래로 커진다)
+    const arc = (p0, p1, color, w) => { ctx.strokeStyle = color; ctx.lineWidth = w; ctx.beginPath(); ctx.arc(cx, cy, R, ang(p1), ang(p0)); ctx.stroke(); };
+    ctx.save(); ctx.globalAlpha = alpha; ctx.lineCap = 'round';
+    arc(0, 1, 'rgba(255,255,255,.28)', lw + 5);     // 테두리
+    arc(0, 1, 'rgba(8,16,30,.9)', lw + 2);           // 바탕(어두운 유리)
+    arc(0, 1, 'rgba(255,99,88,.3)', lw - 2);         // 바깥: 제구 실패
+    ctx.lineCap = 'butt';
+    arc(0.5 - sw, 0.5 + sw, 'rgba(241,196,15,.75)', lw);   // 아깝다
+    arc(0.5 - sw / 2, 0.5 + sw / 2, '#27ae60', lw);  // 성공
+    arc(0.5 - sw * 0.175, 0.5 + sw * 0.175, '#a8ffcb', lw);   // 완벽
+    ctx.lineCap = 'round';
+    const at = p => [cx + Math.cos(ang(p)) * R, cy + Math.sin(ang(p)) * R];
+    const [tx, ty] = at(0.5);                        // 한가운데 눈금
+    ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(tx + lw * 0.75, ty); ctx.lineTo(tx + lw * 1.25, ty); ctx.stroke();
+    if (q >= 0) {                                    // 던진 뒤: 결과 색으로 반짝
+      const t = (now - lastGauge.at) / GAUGE_HOLD_MS, [bx, by] = at(pos);
+      ctx.strokeStyle = ['#ff6b5e', '#2ecc71', '#ffd75e'][q]; ctx.lineWidth = 3; ctx.globalAlpha = alpha * (1 - t);
+      ctx.beginPath(); ctx.arc(bx, by, lw * (0.8 + t * 1.8), 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = alpha;
+    } else {                                         // 움직이는 공 뒤 잔상
+      for (let k = 4; k >= 1; k--) {
+        const [x, y] = at(gaugePos(now - gaugeStart - k * 22, period));
+        ctx.fillStyle = `rgba(255,255,255,${0.16 - k * 0.03})`; ctx.beginPath(); ctx.arc(x, y, lw * 0.5, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    const [bx, by] = at(pos);
+    ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 6;
+    drawBall(ctx, bx, by, lw * 0.62, q >= 0 ? 0 : now / 40);
+    ctx.restore();
   }
   function drawHUD() {
     const mu = shownMu(), p = mu.pitcher, pc = match.pitchCount[mu.pitchingSide];
@@ -505,7 +580,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       drawB();
     }
     drawHUD();
-    if (mode === 'gauge') drawGauge(now);
+    drawGauge(now);
+    if (mode !== 'pick') hidePicker();              // 넘기기·자동 진행 등으로 고르기가 끝났으면 칩을 걷는다
 
     if (ball && ball.hitAt) {                     // 맞은 직후 짧게 튀어나가는 공
       const t = (now - ball.hitAt) / 600;
