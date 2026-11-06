@@ -3,7 +3,7 @@ import { CONFIG } from '../config.js';
 import { createRng } from '../core/rng.js';
 import { PITCH_TYPES, gaugePos, gaugeError, sweetWidth, gaugePeriod, energy, aimFromTouch, fatigue, ZONE_K } from '../core/pitch.js';
 import { availableRelievers } from '../core/team.js';
-import { createMatch, matchup, playUserPitch, cpuPitchToUser, resolveUserSwing, changePitcher, cpuMaybeChangePitcher, simulateInning, simulateRest, applyDecision } from '../core/match.js';
+import { createMatch, matchup, playUserPitch, cpuPitchToUser, resolveUserSwing, changePitcher, cpuMaybeChangePitcher, simulateHalf, simulateInning, simulateRest, applyDecision } from '../core/match.js';
 import { cpuChoosePitch, cpuSwing } from '../core/ai.js';
 import { batReach } from '../core/batting.js';
 import { loadPrefs, savePrefs, LEVELS, LEVEL_NAME } from './prefs.js';
@@ -490,7 +490,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       <p class="hint">${net ? '1:1 대결은 방을 만든 사람이 정한 난이도로 둘 다 같게 해요. ' : ''}${{ easy: '쉬움: 배트가 크고 잘 맞아요. 제구 게이지의 초록 구간이 넓고 느려요', normal: '보통: 배트가 작고, 제구 게이지가 좁고 빨라요. 공이 올 길은 대략 보여 줘요(선구안이 좋을수록 정확)', hard: '어려움: 배트가 더 작고 궤적 안내가 없어요. 제구 게이지가 가장 좁고 빨라요' }[lvl()]}</p>
       <div class="row2 snd"><button class="ghost" data-act="sfx">효과음 ${prefs.sfx ? '켜짐' : '꺼짐'}</button>
         <button class="ghost" data-act="amb">관중·응원 ${prefs.amb ? '켜짐' : '꺼짐'}</button></div>
-      ${net ? '' : `<button class="ghost" data-act="inning">이번 이닝 넘기기</button>
+      ${net ? '' : `<button class="ghost" data-act="half">이번 ${userPitching() ? '수비' : '공격'} 넘기기</button>
+      <button class="ghost" data-act="inning">이번 이닝 넘기기</button>
       <button class="ghost" data-act="game">이번 경기 넘기기</button>`}
       <button class="ghost" data-act="log">경기 기록 보기</button>
       <button class="ghost" data-act="close">닫기</button></div>`;
@@ -506,6 +507,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     const sound = (k) => { prefs = { ...prefs, [k]: !prefs[k] }; savePrefs(prefs); setAudioOptions(prefs); closeOverlay(); showMenu(); };
     on('sfx', () => sound('sfx'));
     on('amb', () => sound('amb'));
+    on('half', () => skip('half'));
     on('inning', () => skip('inning'));
     on('game', () => { if (confirm('남은 경기를 모두 자동으로 진행할까요?')) skip('game'); });
     on('log', () => showLog(match.log, '경기 기록', closeOverlay));
@@ -517,10 +519,10 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     timers.forEach(clearTimeout); timers = [];
     ball = null; play = null; msg = null; hold = null; swingAt = null; pitchAt = 0; mode = 'msg';
     const from = match.log.length, g0 = match.game;
-    match = kind === 'inning' ? simulateInning(match, rng) : simulateRest(match, rng);
+    match = kind === 'half' ? simulateHalf(match, rng) : kind === 'inning' ? simulateInning(match, rng) : simulateRest(match, rng);
     updateBoard(); setView();
     setControls('');
-    const title = kind === 'inning' ? `${g0.inning}회 결과` : '남은 경기 결과';
+    const title = kind === 'half' ? `${g0.inning}회${g0.half === 'top' ? '초' : '말'} 결과` : kind === 'inning' ? `${g0.inning}회 결과` : '남은 경기 결과';
     showLog(match.log.slice(from), title, () => { closeOverlay(); if (match.game.over) showEnd(); else nextPlay(); });
   }
   // 경기 기록: 이닝별로, 타석마다 그때 상황(아웃·주자) → 공 하나하나(구종·구속·판정) → 결과·점수

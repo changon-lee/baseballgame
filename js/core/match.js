@@ -137,5 +137,7 @@ export function simulateUntil(m, rng, until) {
   }
   return x;
 }
+// 이번 공격(또는 수비)만: 초/말이 바뀌면 멈춘다
+export const simulateHalf = (m, rng) => { const { inning, half } = m.game; return simulateUntil(m, rng, x => x.game.inning !== inning || x.game.half !== half); };
 export const simulateInning = (m, rng) => { const inn = m.game.inning; return simulateUntil(m, rng, x => x.game.inning !== inn); };
 export const simulateRest = (m, rng) => simulateUntil(m, rng, () => false);
