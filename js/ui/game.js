@@ -43,7 +43,21 @@ const GRADE = ['<b class="r">타이밍 실패 — 제구가 흔들렸어요</b>'
 // onExit(result): 경기를 끝까지 하면 { home, away, log, starterId }, 중간에 나가면 null
 // net(1:1 대결): { side: 'home'|'away'(내 팀), level(방 난이도), conn(net.js 연결) }. userTeam = 홈팀, cpuTeam = 원정팀, cpuLineup = 원정 타순.
 //   판정은 서버가 하고 이 화면은 받은 결과를 보여 준다. 자동 진행·넘기기는 없다
+// 폰에서 경기를 시작하면 전체 화면으로 바꾼다(안드로이드 크롬 등). 터치한 직후에만 허락되고,
+// 아이폰 사파리처럼 이 기능이 없는 브라우저나 컴퓨터(마우스)에서는 아무 일도 하지 않는다
+function goFullscreen() {
+  const d = document, el = d.documentElement;
+  if (d.fullscreenElement || d.webkitFullscreenElement || !window.matchMedia || !matchMedia('(pointer: coarse)').matches) return;
+  const req = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (!req) return;
+  try {
+    const p = req.call(el, { navigationUI: 'hide' });
+    if (p && p.then) p.then(() => { try { screen.orientation.lock('portrait').catch(() => {}); } catch (e) { /* 세로 고정 못 함 */ } }).catch(() => {});
+  } catch (e) { /* 허락 안 됨 */ }
+}
+
 export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterId, title, net = null, cpuLineup = null }, onExit) {
+  goFullscreen();
   const rng = createRng((Date.now() ^ (Math.random() * 1e9)) >>> 0);
   setReleaseOverride(spriteReleaseOffset);
   let match = createMatch({ userTeam, cpuTeam, userLineup: lineup, innings, rng, cpuStarterId, cpuLineup });
@@ -589,6 +603,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
 
   // ── 입력 ──
   const zoneTouch = e => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+  cv.addEventListener('pointerup', goFullscreen);   // 시작할 때 못 바꿨으면 터치를 뗄 때(터치는 손을 뗄 때만 허락된다). 이미 전체 화면이면 그냥 넘어간다
   cv.addEventListener('pointerdown', e => {
     unlockAudio();
     if (mode === 'aim' || mode === 'pick') {
