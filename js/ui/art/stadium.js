@@ -28,11 +28,11 @@ function lightTower(ctx, x, y, s) {
 function speckle(ctx, x0, y0, w, h, rng, n, colors, size = 1.3) {
   for (let i = 0; i < n; i++) { ctx.fillStyle = colors[i % colors.length]; ctx.fillRect(x0 + rng() * w, y0 + rng() * h, size, size); }
 }
-// 사진에서 뽑은 잔디·흙 결(밝기만, 128 = 그대로). 코드로 그린 색 위에 overlay로 입힌다. 멀수록(위) 결을 잘게
+// 사진에서 뽑은 흙 결(밝기만, 128 = 그대로). 코드로 그린 색 위에 overlay로 입힌다. 멀수록(위) 결을 잘게
 const TEX = {};
 let texLeft = 0;
 if (typeof Image !== 'undefined') {
-  for (const k of ['grass_tex', 'dirt_tex']) {
+  for (const k of ['dirt_tex']) {
     const img = new Image(); texLeft++;
     img.onload = () => { TEX[k] = img; texLeft--; };
     img.onerror = () => { texLeft--; };
@@ -63,7 +63,6 @@ function grass(ctx, W, H, top, vx, spread, rng) {
   }
   for (let y = top + 10; y < H; y += 22) { ctx.fillStyle = 'rgba(0,0,0,.035)'; ctx.fillRect(0, y, W, 9); }  // 가로 무늬
   speckle(ctx, 0, top, W, H - top, rng, Math.floor(W * (H - top) / 60), ['rgba(0,40,0,.18)', 'rgba(140,220,120,.10)']);
-  texture(ctx, 'grass_tex', top, H, 1, 0.6, 0.18);
 }
 function dirtEllipse(ctx, x, y, rx, ry, rng, a0 = 0, a1 = Math.PI * 2) {
   const g = ctx.createRadialGradient(x, y - ry * 0.3, ry * 0.2, x, y, Math.max(rx, ry));

@@ -249,7 +249,7 @@ function drawOuter(ctx, K) {
   } else ctx.fillStyle = '#2c333f';
   ctx.fill();
 }
-// 사진에서 뽑은 잔디·흙 결을 바닥에 입힌다: 바닥을 칸으로 나눠 칸마다 무늬를 원근(아핀)에 맞춰 overlay로 칠한다.
+// 사진에서 뽑은 흙 결을 바닥에 입힌다: 바닥을 칸으로 나눠 칸마다 무늬를 원근(아핀)에 맞춰 overlay로 칠한다.
 // 아주 멀어서 무늬가 자글거릴 칸은 점점 흐리게, 카메라 뒤로 넘어간 칸은 건너뛴다
 const CELL = 45, TEX_FT = 55;                             // 칸 크기(피트), 무늬 한 장(512px)이 덮는 길이(피트)
 function groundGrain(ctx, K, k, clipPts, x0, x1, y0, y1, alpha) {
@@ -283,13 +283,11 @@ function drawGround(ctx, K, bases) {
     for (let x = -330; x < 330; x += 30) if (polyPath(ctx, K, [[x, 0], [x + 15, 0], [x + 15, 430], [x, 430]])) ctx.fill();
     ctx.restore();
   }
-  groundGrain(ctx, K, 'grass_tex', RING, -450, 450, -90, 450, 0.65);   // 흙은 그 위에 덮어 칠한다
   fillPoly(ctx, K, TRACK, '#a07a52');
   fillPoly(ctx, K, DIRT, '#b98a5e');
   groundGrain(ctx, K, 'dirt_tex', DIRT, -100, 100, -40, 160, 0.8);
   groundGrain(ctx, K, 'dirt_tex', TRACK, -450, 450, 150, 450, 0.8);
   fillPoly(ctx, K, INGRASS, '#3f9049');
-  groundGrain(ctx, K, 'grass_tex', INGRASS, -60, 60, 10, 120, 0.65);
   fillPoly(ctx, K, circle(0, 60.5, 9, 20), '#c2946a');
   fillPoly(ctx, K, circle(0, 0, 13, 24), '#b98a5e');
   LINES.forEach(q => fillPoly(ctx, K, q, 'rgba(255,255,255,.92)', 0.02));
