@@ -3,7 +3,7 @@ import { CONFIG } from '../config.js';
 import { createRng } from '../core/rng.js';
 import { PITCH_TYPES, gaugePos, gaugeError, sweetWidth, gaugePeriod, energy, aimFromTouch, fatigue, ZONE_K } from '../core/pitch.js';
 import { availableRelievers } from '../core/team.js';
-import { createMatch, matchup, playUserPitch, cpuPitchToUser, resolveUserSwing, changePitcher, cpuMaybeChangePitcher, simulateHalf, simulateInning, simulateRest, applyDecision } from '../core/match.js';
+import { createMatch, matchup, playUserPitch, cpuPitchToUser, resolveUserSwing, changePitcher, cpuMaybeChangePitcher, simulateHalf, simulateInning, lastPitch, simulateRest, applyDecision } from '../core/match.js';
 import { cpuChoosePitch, cpuSwing } from '../core/ai.js';
 import { batReach } from '../core/batting.js';
 import { loadPrefs, savePrefs, LEVELS, LEVEL_NAME } from './prefs.js';
@@ -326,7 +326,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     mode = 'bflight';
     if (auto) {                  // 자동 진행: 컴퓨터 타자처럼 칠지 말지, 타이밍을 정한다
       const mu = matchup(match), b = ball;
-      const sw = cpuSwing({ batter: mu.batter, pitch, balls: match.game.balls, strikes: match.game.strikes, rng });
+      const sw = cpuSwing({ batter: mu.batter, pitch, balls: match.game.balls, strikes: match.game.strikes, rng, prev: lastPitch(match) });
       if (sw.swing) {
         const ts = b.arrival + sw.timingDiffMs;
         later(() => { if (auto && ball === b && mode === 'bflight') userSwing(ts); }, Math.max(0, ts - performance.now()));

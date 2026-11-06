@@ -9,11 +9,12 @@ import { cpuChoosePitch, cpuSwing } from '../js/core/ai.js';
 const pitcher = { throws: 'R', role: 'SP', velo: 145, control: 50, stamina: 999, pitches: ['FB', 'SL', 'CH'] };
 
 function plateAppearance(batter, rng) {
-  let balls = 0, strikes = 0;
+  let balls = 0, strikes = 0, prev = null;
   for (;;) {
     const c = cpuChoosePitch({ pitcher, balls, strikes, rng });
     const p = computePitch({ pitcher, ...c, pitchCount: 0, rng });
-    const s = cpuSwing({ batter, pitch: p, balls, strikes, rng });
+    const s = cpuSwing({ batter, pitch: p, balls, strikes, rng, prev });
+    prev = { k: p.type, v: p.speedKmh };
     if (!s.swing) { if (p.isStrike) strikes++; else balls++; }
     else {
       const r = swingResult({ timingDiffMs: s.timingDiffMs, batter, pitch: p, rng });
