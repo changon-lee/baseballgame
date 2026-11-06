@@ -39,6 +39,7 @@ if (typeof Image !== 'undefined') {
     img.src = new URL(`../../../assets/stadium/${k}.webp`, import.meta.url).href;
   }
 }
+export const groundTexture = k => TEX[k] || null;
 function texture(ctx, k, y0, y1, alpha, near, far) {
   const img = TEX[k];
   if (!img || y1 <= y0) return;
@@ -62,7 +63,7 @@ function grass(ctx, W, H, top, vx, spread, rng) {
   }
   for (let y = top + 10; y < H; y += 22) { ctx.fillStyle = 'rgba(0,0,0,.035)'; ctx.fillRect(0, y, W, 9); }  // 가로 무늬
   speckle(ctx, 0, top, W, H - top, rng, Math.floor(W * (H - top) / 60), ['rgba(0,40,0,.18)', 'rgba(140,220,120,.10)']);
-  texture(ctx, 'grass_tex', top, H, 0.9, 0.45, 0.12);
+  texture(ctx, 'grass_tex', top, H, 1, 0.6, 0.18);
 }
 function dirtEllipse(ctx, x, y, rx, ry, rng, a0 = 0, a1 = Math.PI * 2) {
   const g = ctx.createRadialGradient(x, y - ry * 0.3, ry * 0.2, x, y, Math.max(rx, ry));
@@ -70,7 +71,7 @@ function dirtEllipse(ctx, x, y, rx, ry, rng, a0 = 0, a1 = Math.PI * 2) {
   ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, a0, a1); ctx.fill();
   ctx.save(); ctx.clip();
   speckle(ctx, x - rx, y - ry, rx * 2, ry * 2, rng, Math.floor(rx * ry / 8), ['rgba(80,45,20,.22)', 'rgba(255,230,190,.16)'], 1.2);
-  texture(ctx, 'dirt_tex', y - ry, y + ry, 0.9, 0.3 * Math.min(1, ry / 40) + 0.1, 0.1);
+  texture(ctx, 'dirt_tex', y - ry, y + ry, 1, 0.5 * Math.min(1, ry / 40) + 0.1, 0.15);
   ctx.restore();
 }
 function adBoards(ctx, W, y, h, team) {
@@ -100,7 +101,7 @@ function plate(ctx, x, y, w, flip) {
 // 관중석 일러스트(assets/stadium). 불러오기 전/실패하면 코드로 그린 관중석을 쓴다.
 const STANDS = {};
 if (typeof Image !== 'undefined') {
-  for (const k of ['catcher', 'pitcher']) {
+  for (const k of ['catcher', 'pitcher', 'field']) {   // field: 타구 장면(3D) 관중석(멀리서 봐도 사람이 너무 커 보이지 않는 그림)
     const img = new Image();
     img.onload = () => { STANDS[k] = img; };
     img.src = new URL(`../../../assets/stadium/${k}.webp`, import.meta.url).href;

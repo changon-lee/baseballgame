@@ -1,7 +1,7 @@
 // 3D 타구 화면: playscript 대본을 중계 카메라처럼 그린다.
 // 경기장·공·선수를 3D 좌표(피트)로 두고, 홈 뒤 높은 곳의 카메라가 공과 수비수를 따라 돌고 당겨서(줌) 비춘다.
 import { toSec, trackAt, ballAt, fenceAt, BASES, polar, FENCE_H, jumpZ } from './playscript.js';
-import { standsImage } from './stadium.js';
+import { standsImage, groundTexture } from './stadium.js';
 import { drawBall } from './figures.js';
 import { fieldSprite, fieldCount, FIELD_PX } from './sprites.js';
 
@@ -160,7 +160,7 @@ function texQuad3(ctx, K, img, P, UV, color) {
 const quadFill = (ctx, ps, color) => { ctx.fillStyle = color; ctx.beginPath(); ps.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.closePath(); ctx.fill(); };
 const offscreen = (K, ps) => ps.every(p => p.x < -50) || ps.every(p => p.x > K.W + 50) || ps.every(p => p.y < -50) || ps.every(p => p.y > K.H + 50);
 const SPAN_A = 54;                                        // 외야 관중석 그림이 덮는 각도(±), 폴 옆 꺾인 곳까지
-const DEP = 175, HT = 215, ROW = 675, TOP = 250;          // 관중석: 바깥으로 DEP, 펜스 위로 HT 만큼 올라가는 경사면 / 그림에서 쓰는 줄(TOP~ROW: 전광판 아래 관중만)
+const DEP = 175, HT = 215, ROW = 675;                     // 관중석: 바깥으로 DEP, 펜스 위로 HT 만큼 올라가는 경사면 / 그림에서 쓰는 높이
 // 파울 지역 옆 관중석: 아랫단(b)·바깥 방향(o)·단면(pr: [바깥 거리, 높이] 세 점 = 아래층·위층)·위아래층 경계의 그림 높이(v)·그림 가로 위치(u, 0..1).
 // 외야 관중석 끝에서 시작해 바깥 방향을 파울 쪽 벽에 수직으로 서서히 돌리고, 그림은 끝에서 거울처럼 되짚어 이어 붙인다.
 // 중계 카메라(홈 뒤 62피트)는 파울 쪽 벽을 늘인 선보다 바깥에 있어서, 외야처럼 가파르면 경사면 뒤쪽이 보인다(= 안 그려져 하늘이 뚫림).
@@ -195,7 +195,7 @@ const SIDE = (() => {
   return out;
 })();
 function drawStands(ctx, K, crowdTint) {
-  const img = standsImage('catcher');
+  const img = standsImage('field');
   // 외야: 관중석 그림을 펜스 뒤에 빙 둘러 세운다
   const step = 2;
   for (let a = -SPAN_A; a < SPAN_A - 0.01; a += step) {
@@ -205,7 +205,7 @@ function drawStands(ctx, K, crowdTint) {
     const bl = project(K, [...polar(a, R0), FENCE_H]), br = project(K, [...polar(a1, R1), FENCE_H]);
     if (!tl || !tr || !bl || !br || offscreen(K, [tl, tr, bl, br])) continue;
     if (!img) quadFill(ctx, [tl, tr, br, bl], crowdTint);
-    else imgQuad(ctx, img, (a + SPAN_A) / (2 * SPAN_A) * img.width, (a1 + SPAN_A) / (2 * SPAN_A) * img.width, TOP, ROW, tl, tr, bl, br);
+    else imgQuad(ctx, img, (a + SPAN_A) / (2 * SPAN_A) * img.width, (a1 + SPAN_A) / (2 * SPAN_A) * img.width, 0, ROW, tl, tr, bl, br);
   }
   // 파울 지역 옆 관중석: 외야 관중석 끝(폴 옆 꺾인 곳)에서 같은 높이·경사로 홈 쪽까지 이어 붙인다.
   // (예전엔 낮은 관중석만 따로 두어서, 좌중간·우중간을 비추면 그 위로 하늘이 뚫려 관중석 조각이 떠 보였다)
@@ -221,7 +221,7 @@ function drawStands(ctx, K, crowdTint) {
       if ((K.C[0] - lo[0]) * n[0] + (K.C[1] - lo[1]) * n[1] + (K.C[2] - lo[2]) * n[2] < 0) continue;
       // 위아래로 몇 조각 나눠 그린다(가까이서 크게 보일 때 그림이 덜 일그러지게)
       const T0 = at(p0, layer + 1), T1 = at(p1, layer + 1), B0 = at(p0, layer), B1 = at(p1, layer);
-      const u0 = p0.u * (img ? img.width : 1), u1 = p1.u * (img ? img.width : 1), v0 = layer ? TOP : p0.v, v1 = layer ? p0.v : ROW;
+      const u0 = p0.u * (img ? img.width : 1), u1 = p1.u * (img ? img.width : 1), v0 = layer ? 0 : p0.v, v1 = layer ? p0.v : ROW;
       const N = 3, mix = (a, b, k) => [lerp(a[0], b[0], k), lerp(a[1], b[1], k), lerp(a[2], b[2], k)];
       for (let j = 0; j < N; j++) {
         const k0 = j / N, k1 = (j + 1) / N, va = lerp(v0, v1, k0), vb = lerp(v0, v1, k1);
@@ -233,7 +233,7 @@ function drawStands(ctx, K, crowdTint) {
 // 카메라 가까운 쪽 관중석: 아래층 관중 그림을 무늬로 깔고, 카메라를 따라 움직이게 한다
 let crowdPat = null;
 function drawOuter(ctx, K) {
-  const img = standsImage('catcher');
+  const img = standsImage('field');
   if (img && !crowdPat) {
     const c = document.createElement('canvas'); c.width = Math.round(img.width * 0.35); c.height = Math.round(235 * 0.35);
     const x = c.getContext('2d');
@@ -249,6 +249,29 @@ function drawOuter(ctx, K) {
   } else ctx.fillStyle = '#2c333f';
   ctx.fill();
 }
+// 사진에서 뽑은 잔디·흙 결을 바닥에 입힌다: 바닥을 칸으로 나눠 칸마다 무늬를 원근(아핀)에 맞춰 overlay로 칠한다.
+// 아주 멀어서 무늬가 자글거릴 칸은 점점 흐리게, 카메라 뒤로 넘어간 칸은 건너뛴다
+const CELL = 45, TEX_FT = 55;                             // 칸 크기(피트), 무늬 한 장(512px)이 덮는 길이(피트)
+function groundGrain(ctx, K, k, clipPts, x0, x1, y0, y1, alpha) {
+  const img = groundTexture(k);
+  if (!img || !polyPath(ctx, K, clipPts)) return;
+  ctx.save(); ctx.clip(); ctx.globalCompositeOperation = 'overlay';
+  const pat = ctx.createPattern(img, 'repeat'), tp = 512 / TEX_FT;
+  if (!pat.setTransform) { ctx.restore(); return; }
+  for (let x = x0; x < x1; x += CELL) for (let y = y0; y < y1; y += CELL) {
+    const a = project(K, [x, y, 0]), b = project(K, [x + CELL, y, 0]), c = project(K, [x, y + CELL, 0]), d = project(K, [x + CELL, y + CELL, 0]);
+    if (!a || !b || !c || !d || offscreen(K, [a, b, c, d])) continue;
+    const du = CELL * tp, m = new DOMMatrix([(b.x - a.x) / du, (b.y - a.y) / du, (c.x - a.x) / du, (c.y - a.y) / du, 0, 0]);
+    const px = Math.sqrt(Math.abs(m.a * m.d - m.b * m.c));      // 무늬 한 칸이 화면에서 몇 픽셀인지
+    const f = Math.min(1, Math.max(0, (px - 0.12) / 0.3));
+    if (f <= 0) continue;
+    m.e = a.x - m.a * x * tp - m.c * y * tp; m.f = a.y - m.b * x * tp - m.d * y * tp;
+    pat.setTransform(m);
+    ctx.globalAlpha = alpha * f; ctx.fillStyle = pat;
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(d.x, d.y); ctx.lineTo(c.x, c.y); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+}
 function drawGround(ctx, K, bases) {
   fillPoly(ctx, K, RING, '#3a8a45');
   // 잔디 깎은 무늬(페어 지역만)
@@ -260,9 +283,13 @@ function drawGround(ctx, K, bases) {
     for (let x = -330; x < 330; x += 30) if (polyPath(ctx, K, [[x, 0], [x + 15, 0], [x + 15, 430], [x, 430]])) ctx.fill();
     ctx.restore();
   }
+  groundGrain(ctx, K, 'grass_tex', RING, -450, 450, -90, 450, 0.65);   // 흙은 그 위에 덮어 칠한다
   fillPoly(ctx, K, TRACK, '#a07a52');
   fillPoly(ctx, K, DIRT, '#b98a5e');
+  groundGrain(ctx, K, 'dirt_tex', DIRT, -100, 100, -40, 160, 0.8);
+  groundGrain(ctx, K, 'dirt_tex', TRACK, -450, 450, 150, 450, 0.8);
   fillPoly(ctx, K, INGRASS, '#3f9049');
+  groundGrain(ctx, K, 'grass_tex', INGRASS, -60, 60, 10, 120, 0.65);
   fillPoly(ctx, K, circle(0, 60.5, 9, 20), '#c2946a');
   fillPoly(ctx, K, circle(0, 0, 13, 24), '#b98a5e');
   LINES.forEach(q => fillPoly(ctx, K, q, 'rgba(255,255,255,.92)', 0.02));
