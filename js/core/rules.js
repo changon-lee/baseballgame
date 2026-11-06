@@ -44,6 +44,11 @@ export function applyEvent(prev, type) {
 
   const side = battingSide(s);
   if (s.outs >= 3) runs = 0;
+  // 끝내기: 장외 홈런 외에는 결승점까지만 인정 (공식 규칙 7.01(g)(3), 9.06(f))
+  if (type !== 'HR' && s.half === 'bottom' && s.inning >= s.innings) {
+    const needed = s.score.away - s.score.home + 1;
+    if (needed > 0 && runs > needed) runs = needed;
+  }
   s.score[side] += runs;
   if (paEnded) { s.balls = 0; s.strikes = 0; s.battingIndex[side] = (s.battingIndex[side] + 1) % 9; }
 

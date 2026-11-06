@@ -83,3 +83,32 @@ test('double play: lead runner beaten at second, batter beaten at first', () => 
     assert.ok(arrive(sc.runners[0].keys, 1) > o2, `seed ${seed}: batter at 1B after ball`);
   }
 });
+
+test('sac fly: the catcher holds the ball the moment the throw arrives', () => {
+  for (let seed = 1; seed <= 100; seed++) {
+    const sc = buildPlay({ event: 'SAC_FLY', fly: true, bats: 'R', contact: { pull: 0 }, bases: [false, false, true], rng: createRng(seed) });
+    const throws = sc.ball.filter(s => s.type === 'throw');
+    const last = throws[throws.length - 1];
+    const catcherHold = sc.ball.find(s => s.type === 'hold' && s.who === 'C' && s.t0 >= last.t0);
+    assert.ok(catcherHold, `seed ${seed}: catcher holds the ball`);
+    assert.ok(Math.abs(catcherHold.t0 - last.t1) < 1e-6, `seed ${seed}: throw ends ${last.t1} but catcher holds at ${catcherHold.t0}`);
+  }
+});
+
+test('ground out / double play: runners who stay on base break off their lead and return, not frozen', () => {
+  for (let seed = 1; seed <= 40; seed++) {
+    for (const [event, bases, staying] of [
+      ['OUT', [true, false, false], [1]], ['OUT', [true, true, true], [1, 2, 3]],
+      ['DOUBLE_PLAY', [true, true, true], [2, 3]], ['DOUBLE_PLAY', [true, true, false], [2]],
+    ]) {
+      const sc = buildPlay({ event, fly: false, bats: 'R', contact: { pull: 0 }, bases, rng: createRng(seed) });
+      const occupied = bases.map((on, i) => on && i + 1);
+      for (const base of staying) {
+        const r = sc.runners[1 + occupied.filter(Boolean).indexOf(base)];
+        const last = r.keys[r.keys.length - 1];
+        assert.ok(near([last.x, last.y], BASES[base], 1), `${event} seed ${seed}: runner on ${base}B ends on the base`);
+        assert.ok(r.keys.length >= 3, `${event} seed ${seed}: runner on ${base}B moves instead of freezing at the lead`);
+      }
+    }
+  }
+});

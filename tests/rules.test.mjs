@@ -58,3 +58,25 @@ test('applyEvent does not mutate input', () => {
   applyEvent(s0, 'DOUBLE');
   assert.deepEqual(s0.bases, [true, false, false]);
 });
+
+const bottomLast = (o = {}) => setup({ inning: 3, half: 'bottom', ...o });
+test('walk-off single counts only the winning run (tie, runners on 2nd and 3rd)', () => {
+  const { s, runs } = run(bottomLast({ bases: [false, true, true] }), ['SINGLE']);
+  assert.equal(runs, 1); assert.deepEqual(s.score, { away: 0, home: 1 }); assert.ok(s.over); assert.equal(s.result, 'home');
+});
+test('walk-off double with loaded bases, down by one, counts two runs', () => {
+  const { s, runs } = run(bottomLast({ bases: [true, true, true], score: { away: 1, home: 0 } }), ['DOUBLE']);
+  assert.equal(runs, 2); assert.deepEqual(s.score, { away: 1, home: 2 });
+});
+test('walk-off triple counts only the winning run', () => {
+  const { runs } = run(bottomLast({ bases: [true, true, true] }), ['TRIPLE']);
+  assert.equal(runs, 1);
+});
+test('walk-off home run still scores everyone', () => {
+  const { s, runs } = run(bottomLast({ bases: [true, true, true] }), ['HR']);
+  assert.equal(runs, 4); assert.deepEqual(s.score, { away: 0, home: 4 });
+});
+test('non-walk-off hit keeps all runs when game not decided', () => {
+  const { runs } = run(bottomLast({ bases: [false, true, true], score: { away: 5, home: 0 } }), ['SINGLE']);
+  assert.equal(runs, 2);
+});

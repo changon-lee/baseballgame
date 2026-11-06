@@ -342,7 +342,7 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
         act(F[who], T + 0.25, 'throw');
         const rel = T + 0.6, arr = throwBall(who, rel, [0.5, 2]);
         act(F[who], rel + 0.45, 'stand');
-        receive('C', [0.5, 2], 0.6, Math.max(arr, home + 0.3), 'stand');
+        receive('C', [0.5, 2], 0.6, arr, 'stand');
         sc.decisive = Math.max(home, arr) + 0.3;
         return;
       }
@@ -396,6 +396,13 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
       sc.outs.push(outT);
     }
     batterTo1B(outT);
+    // 임시 보완: 판정상 베이스에 남는 주자(병살로 아웃되는 1루 주자 제외)는 리드를 나갔다가 베이스로 돌아온다
+    R.forEach((r, i) => {
+      if (!r || r.keys.length > 1) return;
+      const [lx, ly] = baseAlong(i + 1, 22);
+      runTo(r.keys, 0.4, lx, ly, 12, 'lead');
+      runTo(r.keys, outT + 0.1, ...BASES[i + 1], 16, 'stand');
+    });
     sc.decisive = outT + 0.35;
   }
 
