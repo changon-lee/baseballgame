@@ -15,10 +15,11 @@ export function battedBallInfo({ quality: q, power, outs, runnerOnFirst, runnerO
     if (r < 0.03 + q * 0.25 * (0.5 + power / 100)) return { event: 'DOUBLE', fly: true };
     const fly = rng() < 0.5 + lift * 0.3;
     if (!fly && rng() < 0.2) return { event: 'INFIELD_SINGLE', fly: false };          // 느린 땅볼을 1루에서 살았다
-    if (runnerOnSecond && outs < 2) {                                                 // 2루 주자가 홈으로: 홈 승부
+    if (runnerOnSecond) {                                                             // 2루 주자가 홈으로: 홈 승부
+      // 2아웃에 3루 주자가 있으면 홈 아웃이 득점 판정을 꼬이게 하니 그때만 아웃은 뺀다
       const h = rng();
-      if (h < 0.15) return { event: 'SINGLE_HOME_OUT', fly };
-      if (h < 0.4) return { event: 'SINGLE', fly, style: 'home_safe' };
+      if (h < 0.2 && (outs < 2 || !runnerOnThird)) return { event: 'SINGLE_HOME_OUT', fly };
+      if (h < 0.45) return { event: 'SINGLE', fly, style: 'home_safe' };
     }
     return { event: 'SINGLE', fly };
   }

@@ -316,7 +316,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       if (match.game.over) return showEnd();
       if (halfOver) {
         play = null; ball = null;
-        return showMsg('공수교대', '#9fb3cc', 1200, `${g.inning}회${g.half === 'top' ? '초 · 내가 투수' : '말 · 내가 타자'}`, nextPlay);
+        return showMsg('공수교대', '#9fb3cc', 1200, `${g.inning}회${g.half === 'top' ? '초' : '말'}`, nextPlay);
       }
       nextPlay();
     });
@@ -657,19 +657,28 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     }
     drawMsg();
   }
-  // 궤적 안내: 공이 손을 떠나면 '이쯤 올 것 같다'는 범위(흐린 원)를 보여 준다. 길은 안 보여 주고(휘는 걸 다 알려 주게 되니까)
+  // 궤적 안내: 공이 손을 떠나면 대략의 길(점점 커지는 점)과 '이쯤 올 것 같다'는 범위(점선 원)를 보여 준다
   // 범위 크기는 타자 선구안 따라. 끄거나 어려움이면 안 보인다
   function drawGuide(now) {
     if (!ball || !ball.guide || ball.hitAt || auto || !prefs.guide || prefs.hard || mode !== 'bflight' || now < ball.start) return;
     const a = Math.min(1, (now - ball.start) / 220) * (now > ball.arrival ? Math.max(0, 1 - (now - ball.arrival) / 150) : 1);
     if (a <= 0) return;
     const [cx, cy] = toS(V, ball.guide.x, ball.guide.y), rx = ball.guide.r * V.zw / 2, ry = ball.guide.r * V.zh / 2;
+    // 대략의 길: 손에서 범위 가운데로 가는 점들. 멀수록(타자 쪽일수록) 점이 커지고 흐려서 '대충 이쪽'만 알려 준다
+    const p = { ...ball.pitch, plate: ball.guide }, T = ball.pitch.travelMs;
+    ctx.save(); ctx.globalAlpha = a;
+    for (let k = 0.08; k <= 0.93; k += 0.07) {
+      const q = ballScreen(V, p, ball.start, ball.start + T * k);
+      ctx.fillStyle = `rgba(150,230,255,${0.5 - k * 0.32})`;
+      ctx.beginPath(); ctx.arc(q.x, q.y, Math.max(2, q.r * 0.5 + rx * 0.5 * k * k), 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
     ctx.save(); ctx.globalAlpha = a;
     ctx.translate(cx, cy); ctx.scale(1, ry / rx);
     const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rx);
     g.addColorStop(0, 'rgba(120,220,255,.34)'); g.addColorStop(0.6, 'rgba(120,220,255,.16)'); g.addColorStop(1, 'rgba(120,220,255,0)');
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, rx, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = 'rgba(150,230,255,.7)'; ctx.lineWidth = 1.6 * rx / ry; ctx.setLineDash([6, 5]);
+    ctx.strokeStyle = 'rgba(170,235,255,.95)'; ctx.lineWidth = 2.2 * rx / ry; ctx.setLineDash([7, 5]);
     ctx.beginPath(); ctx.arc(0, 0, rx * 0.92, 0, Math.PI * 2); ctx.stroke();
     ctx.restore();
   }
@@ -705,6 +714,6 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   const loop = startLoop(frame);
   resize();
   updateBoard();
-  showMsg('플레이볼!', '#f1c40f', 1100, `1회초 · 내가 투수 (${matchup(match).pitcher.name})`, nextPlay);
+  showMsg('플레이볼!', '#f1c40f', 1100, '1회초', nextPlay);
   return { exit };
 }

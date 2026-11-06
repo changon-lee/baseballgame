@@ -147,7 +147,9 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
   let ang = clamp(hand * pull * 35 + randNormal(rng) * 7, -42, 42);
   const ev = event === 'SINGLE_HOME_OUT' ? 'SINGLE' : event;                    // 홈 보살도 타구는 안타
   const hit = ['SINGLE', 'DOUBLE', 'TRIPLE', 'HR'].includes(ev);
-  const homePlay = ev === 'SINGLE' && bases[1] && (event === 'SINGLE_HOME_OUT' || style === 'home_safe');
+  // 2루 주자가 있는 단타는 외야수가 늘 홈으로 던진다: 보살(out) / 간발의 세이프(close) / 늦은 송구(late)
+  const homePlay = ev === 'SINGLE' && bases[1];
+  const homeMode = event === 'SINGLE_HOME_OUT' ? 'out' : style === 'home_safe' ? 'close' : 'late';
   const sc = { event, hit, fly: !!fly, ball: [], fielders: {}, runners: [], sounds: [], watch: [], decisive: 0, end: 0, distM: 0, landT: null, outs: [] };
   const F = sc.fielders;
   for (const n of Object.keys(SPOTS)) F[n] = [{ t: 0, x: SPOTS[n][0], y: SPOTS[n][1], act: n === 'C' ? 'crouch' : n === 'P' ? 'pitch' : 'ready' }];
@@ -302,18 +304,18 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
       // 홈 승부: 외야수가 홈으로 바로 던진다. 보살이면 공이 먼저, 세이프면 주자가 간발의 차로 먼저
       const r = R[1], t3 = runBases(r, 0.12, 2, 3, 26.5, 'run'), tNat = t3 + 90 / 26.5;
       const plate = [0.6, 2.2], dur = hyp(I.x, I.y, ...plate) / armSpeed(chaser) + 0.1;
-      const out = event === 'SINGLE_HOME_OUT';
-      const rel = Math.max(I.t + 0.6, (out ? tNat - 0.35 : tNat + 0.18) - dur);
+      const out = homeMode === 'out';
+      const rel = Math.max(I.t + 0.6, (out ? tNat - 0.35 : homeMode === 'close' ? tNat + 0.18 : tNat + 0.7) - dur);
       act(F[chaser], rel - 0.3, 'throw');
       const A = throwBall(chaser, rel, plate);
       act(F[chaser], rel + 0.45, 'stand');
       const tHome = out ? Math.max(tNat, A + 0.3) : Math.min(tNat, A - 0.15);
       arriveAt(r.keys, t3, tHome, 0, 0, 27, 'stand');
-      slideIn(r.keys);
+      if (homeMode !== 'late') slideIn(r.keys);
       receive('C', plate, 0.6, A, 'tag');
       act(F.C, tHome + 0.5, 'stand');
       if (out) { sc.outs.push(tHome); runTo(r.keys, tHome + 0.9, -22, -14, 8, 'stand'); }
-      else sc.sounds.push({ t: tHome, name: 'ooh' });
+      else if (homeMode === 'close') sc.sounds.push({ t: tHome, name: 'ooh' });
       sc.watch.push({ kind: 'r', id: sc.runners.indexOf(r), t0: I.t + 0.4, t1: tHome + 0.5 });
       sc.decisive = Math.max(lastSafe + 0.3, tHome + 0.45);
     } else {

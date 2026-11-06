@@ -131,8 +131,8 @@ test('infield single: batter beats the throw to first', () => {
     assert.ok(arrive(sc.runners[0].keys, 1) < thr.t1, `seed ${seed}`);
   }
 });
-test('home play: thrown out means the ball beats the runner, safe means the runner beats it', () => {
-  for (let seed = 1; seed <= 40; seed++) for (const [event, style] of [['SINGLE_HOME_OUT', null], ['SINGLE', 'home_safe']]) {
+test('runner from second on a single: the throw always goes home; out, close or late', () => {
+  for (let seed = 1; seed <= 40; seed++) for (const [event, style] of [['SINGLE_HOME_OUT', null], ['SINGLE', 'home_safe'], ['SINGLE', null]]) {
     const sc = buildPlay({ event, style, fly: seed % 2 === 0, bats: 'L', contact: { pull: 0.3 }, bases: [false, true, false], rng: createRng(seed) });
     const r2 = sc.runners.find(r => r.base === 2), home = arrive(r2.keys.slice(1), 0);
     const thr = sc.ball.filter(s => s.type === 'throw').pop();

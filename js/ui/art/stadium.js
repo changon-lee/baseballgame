@@ -111,7 +111,6 @@ export function buildBackdrop(kind, V, W, H, dpr, homeTeam) {
     // 중앙 전광판
     ctx.fillStyle = '#0a0f18'; ctx.fillRect(W / 2 - 34, 4, 68, wallY * 0.3);
     ctx.fillStyle = '#16304f'; ctx.fillRect(W / 2 - 31, 6, 62, wallY * 0.3 - 4);
-    ctx.fillStyle = '#7fd1ff'; ctx.font = 'bold 9px system-ui,sans-serif'; ctx.textAlign = 'center'; ctx.fillText(homeTeam.short + ' 홈', W / 2, 6 + wallY * 0.15 + 2); ctx.textAlign = 'left';
     adBoards(ctx, W, wallY - 13, 11, homeTeam);
     ctx.fillStyle = '#1d4a2a'; ctx.fillRect(0, wallY - 2, W, 7); ctx.fillStyle = '#f1c40f'; ctx.fillRect(0, wallY - 2, W, 1.5);   // 펜스 + 노란 선
     ctx.fillStyle = '#7a5a3c'; ctx.fillRect(0, wallY + 5, W, 4);                                     // 워닝 트랙
@@ -136,8 +135,6 @@ export function buildBackdrop(kind, V, W, H, dpr, homeTeam) {
     if (art) {
       const bottom = wallY + H * 0.065 + 2;
       drawStands(ctx, art, W, bottom);
-      ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.font = `900 ${Math.floor(H * 0.018)}px system-ui,sans-serif`; ctx.textAlign = 'center';
-      ctx.fillText(homeTeam.short + ' 홈구장', W / 2, bottom - H * 0.012); ctx.textAlign = 'left';
       grass(ctx, W, H, bottom, W / 2, W * 0.42, rng);
     } else {
     const sky = ctx.createLinearGradient(0, 0, 0, wallY); sky.addColorStop(0, '#060c18'); sky.addColorStop(1, '#17243b');
@@ -149,8 +146,6 @@ export function buildBackdrop(kind, V, W, H, dpr, homeTeam) {
     ctx.strokeStyle = 'rgba(255,255,255,.07)'; ctx.lineWidth = 1;
     for (let x = -H; x < W + H; x += 9) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + wallY + H * 0.065, wallY + H * 0.065); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x, wallY + H * 0.065); ctx.lineTo(x + wallY + H * 0.065, 0); ctx.stroke(); }
     for (let x = 0; x < W; x += W / 6) { ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fillRect(x, wallY + H * 0.03, 1.5, H * 0.035); }
-    ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.font = `900 ${Math.floor(H * 0.022)}px system-ui,sans-serif`; ctx.textAlign = 'center';
-    ctx.fillText(homeTeam.short + ' 홈구장', W / 2, wallY + H * 0.055); ctx.textAlign = 'left';
     ctx.fillStyle = '#f1c40f'; ctx.fillRect(0, wallY + H * 0.065, W, 2);
     grass(ctx, W, H, wallY + H * 0.065 + 2, W / 2, W * 0.42, rng);
     }
