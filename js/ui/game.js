@@ -187,7 +187,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       b.onclick = () => {
         if (mode !== 'pick') return;
         pitchType = b.dataset.k; mode = 'gauge'; gaugeStart = performance.now();
-        period = gaugePeriod(matchup(match).fatigue);
+        period = gaugePeriod(matchup(match).fatigue, prefs.level);
         b.classList.add('on');
         hidePicker();
         setControls(`<p><b>${PITCH_TYPES[pitchType].name}</b> · 게이지가 <b class="g">초록 구간 한가운데</b>일 때 화면을 터치!</p>`);
@@ -207,7 +207,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     picker.style.transform = `translate(${Math.round(x)}px,${Math.round(y)}px)`;
   }
 
-  function throwUserPitch(ts) { throwWith(gaugePos(ts - gaugeStart, period)); }
+  function throwUserPitch(ts) { throwWith(gaugePos(ts - gaugeStart, period), prefs.level); }
   // 자동 진행: 컴퓨터 투수처럼 구종·위치·게이지를 정해서 던진다
   function autoThrow() {
     if (!auto || mode !== 'msg' || ball || play || msg) return;      // 그사이 자동 진행을 껐거나 넘기기를 했다
@@ -218,8 +218,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     target = c.target; pitchType = c.type;
     throwWith(c.gaugePos);
   }
-  function throwWith(gpos) {
-    const r = playUserPitch(match, { type: pitchType, target, gaugePos: gpos }, rng);
+  function throwWith(gpos, level = 'easy') {
+    const r = playUserPitch(match, { type: pitchType, target, gaugePos: gpos, level }, rng);
     const start = performance.now() + CONFIG.WIND_USER_MS;
     ball = { pitch: r.pitch, start, wind: CONFIG.WIND_USER_MS, arrival: start + r.pitch.travelMs, result: r };
     mode = 'flight';
@@ -273,7 +273,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       + (r.contact.aimMiss ? '배트가 공 길에서 벗어났어요' : `${diff < 0 ? '빠름' : '늦음'} ${Math.abs(Math.round(diff))}ms`);
     if (k === 'MISS') { playSound('whiff'); ball.result = r; return; }   // 공은 미트까지 날아간 뒤 판정
     const q = r.contact.quality;
-    if (r.event === 'HR') { playSound('homerun'); playSound('roar'); }   // 맞는 순간 관중이 일어난다
+    if (r.event === 'HR') playSound('homerun', { crowd: true });   // 맞는 순간 관중이 일어난다(받은 녹음 전체)
     else playSound(k === 'FOUL' ? 'foul' : 'hit', { q });
     vibrate(k === 'INPLAY' && q > 0.8 ? 70 : 35);
     shake(cv, k === 'INPLAY' ? 4 + q * 8 : 3);
@@ -385,7 +385,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       <p class="hint">투수가 알아서 던지고, 타자가 알아서 칩니다</p>
       <div class="row2"><button class="ghost" data-act="guide">${prefs.guide ? '궤적 안내 켜짐' : '궤적 안내 꺼짐'}</button>
         <button class="ghost" data-act="level">난이도: ${LEVEL_NAME[prefs.level]}</button></div>
-      <p class="hint">${{ easy: '쉬움: 배트가 크고, 공이 대략 올 길과 범위를 보여 줘요', normal: '보통: 배트가 작아요. 공이 대략 올 길과 범위를 보여 줘요(선구안이 좋을수록 정확)', hard: '어려움: 배트가 더 작고 궤적 안내가 안 보여요' }[prefs.level]}</p>
+      <p class="hint">${{ easy: '쉬움: 배트가 크고 잘 맞아요. 제구 게이지의 초록 구간이 넓고 느려요', normal: '보통: 배트가 작고, 제구 게이지가 좁고 빨라요. 공이 올 길은 대략 보여 줘요(선구안이 좋을수록 정확)', hard: '어려움: 배트가 더 작고 궤적 안내가 없어요. 제구 게이지가 가장 좁고 빨라요' }[prefs.level]}</p>
       <div class="row2 snd"><button class="ghost" data-act="sfx">효과음 ${prefs.sfx ? '켜짐' : '꺼짐'}</button>
         <button class="ghost" data-act="amb">관중·응원 ${prefs.amb ? '켜짐' : '꺼짐'}</button></div>
       <button class="ghost" data-act="inning">이번 이닝 넘기기</button>
@@ -536,7 +536,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     let pos, sw, alpha = 1, q = -1;
     if (mode === 'gauge') {
       const mu = matchup(match);
-      sw = sweetWidth(mu.pitcher.control, mu.fatigue); pos = gaugePos(now - gaugeStart, period);
+      sw = sweetWidth(mu.pitcher.control, mu.fatigue, prefs.level); pos = gaugePos(now - gaugeStart, period);
     } else if (lastGauge && now - lastGauge.at < GAUGE_HOLD_MS && V.kind === 'pitcher') {
       ({ pos, sweet: sw, q } = lastGauge); alpha = 1 - Math.max(0, (now - lastGauge.at) / GAUGE_HOLD_MS - 0.5) * 2;
     } else return;

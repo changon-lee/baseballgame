@@ -26,13 +26,17 @@ export function gaugePos(elapsedMs, periodMs) {
 export const gaugeError = pos => Math.abs(pos - 0.5) * 2;
 export const fatigue = (pitchCount, stamina) => clamp((pitchCount - stamina * 0.5) / (stamina * 0.9), 0, 1);
 export const energy = (pitchCount, stamina) => 1 - clamp(pitchCount / (stamina * 1.4), 0, 1);
-export const sweetWidth = (control, f) => (0.07 + control / 100 * 0.12) * (1 - 0.6 * f);
-export const gaugePeriod = f => CONFIG.GAUGE_PERIOD_MS * (1 - 0.25 * f);
+// 내가 던질 때 난이도별 제구 게이지: 성공 구간 폭(sweet)과 왕복 시간(period) 배율. 컴퓨터 투수는 늘 easy 기준
+// 성공 구간을 지나가는 시간(제구 50, 안 지침): 쉬움 약 59ms, 보통 약 37ms, 어려움 약 26ms
+export const GAUGE_LEVEL = { easy: { sweet: 1, period: 1 }, normal: { sweet: 0.75, period: 0.85 }, hard: { sweet: 0.6, period: 0.75 } };
+const gl = level => GAUGE_LEVEL[level] || GAUGE_LEVEL.easy;
+export const sweetWidth = (control, f, level = 'easy') => (0.07 + control / 100 * 0.12) * (1 - 0.6 * f) * gl(level).sweet;
+export const gaugePeriod = (f, level = 'easy') => CONFIG.GAUGE_PERIOD_MS * (1 - 0.25 * f) * gl(level).period;
 export const isStrike = p => Math.abs(p.x) <= ZONE_K + BALL_R && Math.abs(p.y) <= ZONE_K + BALL_R / 1.2;
 
-export function computePitch({ pitcher, type, target, gaugePos: gpos, pitchCount, rng }) {
+export function computePitch({ pitcher, type, target, gaugePos: gpos, pitchCount, rng, level = 'easy' }) {
   const f = fatigue(pitchCount, pitcher.stamina);
-  const sweet = sweetWidth(pitcher.control, f);
+  const sweet = sweetWidth(pitcher.control, f, level);
   const err = gaugeError(gpos);
   const onTarget = err <= sweet;
   const t = PITCH_TYPES[type];

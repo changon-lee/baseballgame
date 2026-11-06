@@ -54,3 +54,11 @@ test('isStrike field matches plate', () => {
   assert.equal(p.isStrike, isStrike(p.plate));
   assert.equal(p.isStrike, true);
 });
+test('gauge gets narrower and faster on harder levels (easy = old gauge)', () => {
+  assert.equal(sweetWidth(50, 0), sweetWidth(50, 0, 'easy'));
+  assert.ok(sweetWidth(50, 0, 'hard') < sweetWidth(50, 0, 'normal') && sweetWidth(50, 0, 'normal') < sweetWidth(50, 0, 'easy'));
+  assert.ok(gaugePeriod(0, 'hard') < gaugePeriod(0, 'normal') && gaugePeriod(0, 'normal') < gaugePeriod(0, 'easy'));
+  const gpos = 0.5 + sweetWidth(50, 0, 'easy') * 0.45;   // 쉬움이면 성공, 어려움이면 실패하는 자리
+  const p = l => computePitch({ pitcher: P({ control: 50 }), type: 'FB', target: { x: 0, y: 0 }, gaugePos: gpos, pitchCount: 0, rng: createRng(1), level: l });
+  assert.ok(p('easy').onTarget); assert.ok(!p('hard').onTarget);
+});

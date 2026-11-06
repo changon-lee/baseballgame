@@ -81,15 +81,10 @@ crack = seg(bat, 0.08, 0.47)                                # 뒤에 섞인 함�
 c0 = int(np.argmax(np.abs(crack) > np.abs(crack).max() * 0.2))   # 맞는 순간이 파일 맨 앞에 오게
 crack = fade(crack[max(0, c0 - int(0.002 * SR)):], 0.001, 0.12)
 save('bat_crack', crack)
-# 빗맞음: 높은 소리를 깎고 낮춰서 둔탁하게, 짧게
-weak = filt(resample(crack, 0.78), 'low', 1600)
-weak = fade(weak[:int(0.22 * SR)], 0.001, 0.09)
-th = np.sin(2 * np.pi * 140 * np.arange(int(0.12 * SR)) / SR) * env(int(0.12 * SR), 0.001, 0.04)
-weak[:len(th)] += th * np.abs(weak).max() * 0.6
-save('bat_weak', weak)
-# 파울(스치듯): 얇고 짧게
-foul = fade(filt(resample(crack, 1.12), 'high', 900)[:int(0.16 * SR)], 0.001, 0.07)
-save('bat_foul', foul)
+# 홈런: 받은 녹음 전체('딱' + 뒤따르는 함성)를 그대로, 맞는 순간부터
+full = bat[int(0.08 * SR):]
+f0 = int(np.argmax(np.abs(full) > np.abs(full).max() * 0.2))
+save('bat_hr', fade(full[max(0, f0 - int(0.002 * SR)):], 0.001, 0.6))
 
 glove = load('glove_catch.wav')
 g0 = int(np.argmax(np.abs(glove) > np.abs(glove).max() * 0.05))

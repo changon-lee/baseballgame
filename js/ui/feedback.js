@@ -3,7 +3,7 @@
 // 두 갈래로 나눠 끄고 켤 수 있다: 효과음(방망이·글러브·헛스윙) / 관중·응원(관중 소리·응원 북·환호·탄식)
 let AC = null, SFX = null, AMB = null;
 const DIR = new URL('../../assets/audio/', import.meta.url);
-const FILES = ['bat_crack', 'bat_weak', 'bat_foul', 'mitt_pop', 'glove_catch', 'swing_whoosh', 'fence_hit', 'ball_bounce',
+const FILES = ['bat_crack', 'bat_hr', 'mitt_pop', 'glove_catch', 'swing_whoosh', 'fence_hit', 'ball_bounce',
   'crowd_ooh', 'crowd_aww', 'crowd_cheer', 'crowd_cheer_big', 'jingle_hr', 'cheer_drum_loop', 'crowd_loop'];
 const LOOPS = { crowd_loop: 30, cheer_drum_loop: 7.5 };   // 반복 소리의 원래 길이(초): mp3 앞뒤 빈 소리를 빼고 이만큼만 돈다
 const RAW = {}, BUF = {};
@@ -133,13 +133,11 @@ const SYNTH = {
 
 // o: { q: 타구 질(0~1), speed: 구속 km/h, gain: 크기 배율 }
 const SOUNDS = {
-  hit: o => {
-    const q = o.q === undefined ? 0.7 : o.q;
-    const ok = q < 0.4 ? sample('bat_weak', 0.85, jit(0.04)) : sample('bat_crack', 0.6 + 0.4 * q, (0.96 + 0.06 * q) * jit(0.02));
-    if (!ok) SYNTH.hit();
-  },
-  homerun: () => { if (!sample('bat_crack', 1, 0.98)) SYNTH.hit(); },
-  foul: () => { if (!sample('bat_foul', 0.85, jit(0.04))) SYNTH.foul(); },
+  // 방망이 소리는 받은 녹음(bat_crack) 그대로. 잘 맞을수록 크게만 한다
+  hit: o => { const q = o.q === undefined ? 0.7 : o.q; if (!sample('bat_crack', 0.55 + 0.45 * q)) SYNTH.hit(); },
+  // 우리 홈런(crowd): 받은 녹음 전체('딱' + 함성). 관중 소리를 껐거나 상대 홈런이면 '딱'만
+  homerun: o => { if (o.crowd && opts.amb && sample('bat_hr', 1)) return; if (!sample('bat_crack', 1)) SYNTH.hit(); },
+  foul: () => { if (!sample('bat_crack', 0.6)) SYNTH.foul(); },
   mitt: o => {                                             // 포수 미트: 빠른 공일수록 크고 단단하게
     const k = clamp01(((o.speed || 140) - 115) / 40);
     if (!sample('mitt_pop', 0.55 + 0.45 * k, (0.97 + 0.06 * k) * jit(0.015))) SYNTH.mitt();

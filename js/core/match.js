@@ -71,9 +71,10 @@ function decide(m, batter, pitch, timingDiffMs, rng, bat = null) {
   return { event: info.event, contact, fly: info.fly, style: info.style || null, swung: true };
 }
 
-export function playUserPitch(m, { type, target, gaugePos }, rng) {
+// level: 제구 게이지 난이도(내가 던질 때). 자동 진행은 컴퓨터와 같은 easy
+export function playUserPitch(m, { type, target, gaugePos, level = 'easy' }, rng) {
   const mu = matchup(m);
-  const pitch = computePitch({ pitcher: mu.pitcher, type, target, gaugePos, pitchCount: m.pitchCount[mu.pitchingSide], rng });
+  const pitch = computePitch({ pitcher: mu.pitcher, type, target, gaugePos, pitchCount: m.pitchCount[mu.pitchingSide], rng, level });
   const swing = cpuSwing({ batter: mu.batter, pitch, balls: m.game.balls, strikes: m.game.strikes, rng });
   const d = decide(m, mu.batter, pitch, swing.swing ? swing.timingDiffMs : null, rng);
   const c = commit(m, d.event, mu.pitchingSide, pitch, d.fly, d.style);
