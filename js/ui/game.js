@@ -6,7 +6,7 @@ import { availableRelievers } from '../core/team.js';
 import { createMatch, matchup, playUserPitch, cpuPitchToUser, resolveUserSwing, changePitcher, cpuMaybeChangePitcher, simulateInning, simulateRest } from '../core/match.js';
 import { cpuChoosePitch, cpuSwing } from '../core/ai.js';
 import { batReach } from '../core/batting.js';
-import { loadPrefs, savePrefs } from './prefs.js';
+import { loadPrefs, savePrefs, LEVELS, LEVEL_NAME } from './prefs.js';
 import { startLoop } from './loop.js';
 import { unlockAudio, playSound, vibrate, shake } from './feedback.js';
 import { makeView, toS, zoneRect, ballScreen, ballRadius, pitcherAnchor, batterAnchor, setReleaseOverride, PITCH_PATH } from './art/view.js';
@@ -23,13 +23,13 @@ const LABEL = {
   SAC_FLY: '희생플라이', DOUBLE_PLAY: '병살타', INFIELD_SINGLE: '내야안타!', ERROR: '실책!', SINGLE_HOME_OUT: '안타 · 홈에서 아웃!', LINE_DP: '직선타 병살!',
 };
 // 같은 결과의 다른 장면
-const STYLE_LABEL = { dive: '다이빙 캐치!', wall: '펜스 앞 점프 캐치!', liner: '직선타 아웃', home_safe: '안타! 홈 세이프' };
+const STYLE_LABEL = { dive: '다이빙 캐치!', wall: '펜스 앞 점프 캐치!', liner: '직선타 아웃', home_safe: '안타! 홈 세이프', bloop: '텍사스 안타!', pop: '내야 뜬공 아웃', foul: '파울플라이 아웃' };
 const HITS = ['SINGLE', 'DOUBLE', 'TRIPLE', 'HR', 'INFIELD_SINGLE', 'SINGLE_HOME_OUT', 'ERROR'];   // 타자에게 좋은 결과
 const OUTS = ['OUT', 'SAC_FLY', 'DOUBLE_PLAY', 'LINE_DP'];
 // 경기 기록에 쓰는 이름
 const PA_NAME = { WALK: '볼넷', STRIKEOUT: '삼진', SINGLE: '안타', DOUBLE: '2루타', TRIPLE: '3루타', HR: '홈런', OUT: '범타 아웃', SAC_FLY: '희생플라이', DOUBLE_PLAY: '병살타', ERROR: '실책 출루' };
 const PLAY_NAME = { INFIELD_SINGLE: '내야안타', SINGLE_HOME_OUT: '안타 (2루 주자 홈에서 아웃)', LINE_DP: '직선타 병살' };
-const STYLE_NAME = { dive: '다이빙 캐치 아웃', wall: '펜스 앞 호수비 아웃', liner: '직선타 아웃', home_safe: '안타 (홈 승부 세이프)', fumble: '실책 출루 (포구 실책)', throw: '실책 출루 (송구 실책)' };
+const STYLE_NAME = { dive: '다이빙 캐치 아웃', wall: '펜스 앞 호수비 아웃', liner: '직선타 아웃', home_safe: '안타 (홈 승부 세이프)', fumble: '실책 출루 (포구 실책)', throw: '실책 출루 (송구 실책)', bloop: '텍사스 안타', pop: '내야 뜬공 아웃', foul: '파울플라이 아웃' };
 const paName = l => PLAY_NAME[l.play] || STYLE_NAME[l.style] || (l.event === 'OUT' ? (l.fly ? '뜬공 아웃' : '땅볼 아웃') : PA_NAME[l.event] || l.event);
 const PITCH_E = { BALL: '볼', STRIKE: '스트', FOUL: '파울' };
 // 구종 칩 색(빠른 공은 따뜻한 색, 떨어지는 공은 차가운 색)
@@ -264,7 +264,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     if (!ball || ball.swung) return;
     ball.swung = true; swingAt = performance.now() - 30;   // 손을 떼자마자 방망이가 나가 보이게
     const diff = ts - ball.arrival;
-    const bat = auto ? null : { x: batAim.x, y: batAim.y, hard: prefs.hard };
+    const bat = auto ? null : { x: batAim.x, y: batAim.y, level: prefs.level };
     const r = resolveUserSwing(match, ball.pitch, diff, rng, bat);
     const k = r.contact.kind;
     if (bat) batFlash = { at: performance.now(), hit: k !== 'MISS', x: batAim.x, y: batAim.y };
@@ -357,8 +357,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       <button class="primary" data-act="auto">${auto ? '자동 진행 끄기' : '자동 진행 켜기'}</button>
       <p class="hint">투수가 알아서 던지고, 타자가 알아서 칩니다</p>
       <div class="row2"><button class="ghost" data-act="guide">${prefs.guide ? '궤적 안내 켜짐' : '궤적 안내 꺼짐'}</button>
-        <button class="ghost" data-act="hard">${prefs.hard ? '난이도: 어려움' : '난이도: 보통'}</button></div>
-      <p class="hint">${prefs.hard ? '어려움: 배트가 작고 궤적 안내가 안 보여요' : '내가 칠 때 공이 대략 올 범위를 보여 줘요(선구안이 좋을수록 정확)'}</p>
+        <button class="ghost" data-act="level">난이도: ${LEVEL_NAME[prefs.level]}</button></div>
+      <p class="hint">${{ easy: '쉬움: 배트가 크고, 공이 대략 올 길과 범위를 보여 줘요', normal: '보통: 배트가 작아요. 공이 대략 올 길과 범위를 보여 줘요(선구안이 좋을수록 정확)', hard: '어려움: 배트가 더 작고 궤적 안내가 안 보여요' }[prefs.level]}</p>
       <button class="ghost" data-act="inning">이번 이닝 넘기기</button>
       <button class="ghost" data-act="game">이번 경기 넘기기</button>
       <button class="ghost" data-act="log">경기 기록 보기</button>
@@ -371,7 +371,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       if (['aim', 'pick', 'gauge', 'bwait'].includes(mode) || (mode === 'msg' && !msg && !play && !ball)) nextPlay();
     });
     on('guide', () => { prefs = { ...prefs, guide: !prefs.guide }; savePrefs(prefs); closeOverlay(); showMenu(); });
-    on('hard', () => { prefs = { ...prefs, hard: !prefs.hard }; savePrefs(prefs); closeOverlay(); showMenu(); });
+    on('level', () => { prefs = { ...prefs, level: LEVELS[(LEVELS.indexOf(prefs.level) + 1) % LEVELS.length] }; savePrefs(prefs); closeOverlay(); showMenu(); });
     on('inning', () => skip('inning'));
     on('game', () => { if (confirm('남은 경기를 모두 자동으로 진행할까요?')) skip('game'); });
     on('log', () => showLog(match.log, '경기 기록', closeOverlay));
@@ -660,7 +660,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   // 궤적 안내: 공이 손을 떠나면 대략의 길(점점 커지는 점)과 '이쯤 올 것 같다'는 범위(점선 원)를 보여 준다
   // 범위 크기는 타자 선구안 따라. 끄거나 어려움이면 안 보인다
   function drawGuide(now) {
-    if (!ball || !ball.guide || ball.hitAt || auto || !prefs.guide || prefs.hard || mode !== 'bflight' || now < ball.start) return;
+    if (!ball || !ball.guide || ball.hitAt || auto || !prefs.guide || prefs.level === 'hard' || mode !== 'bflight' || now < ball.start) return;
     const a = Math.min(1, (now - ball.start) / 220) * (now > ball.arrival ? Math.max(0, 1 - (now - ball.arrival) / 150) : 1);
     if (a <= 0) return;
     const [cx, cy] = toS(V, ball.guide.x, ball.guide.y), rx = ball.guide.r * V.zw / 2, ry = ball.guide.r * V.zh / 2;
@@ -686,7 +686,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   function drawBat(now, batter) {
     const flash = batFlash && now - batFlash.at < 450 ? batFlash : null;
     if (auto || (!flash && mode !== 'bwait' && mode !== 'bflight')) return;
-    const { rx, ry } = batReach(batter.contact, prefs.hard);
+    const { rx, ry } = batReach(batter.contact, prefs.level);
     const at = flash || batAim;
     const [cx, cy] = toS(V, at.x, at.y), RX = rx * V.zw / 2, RY = ry * V.zh / 2;
     const col = flash ? (flash.hit ? '46,204,113' : '255,107,94') : '255,214,64';

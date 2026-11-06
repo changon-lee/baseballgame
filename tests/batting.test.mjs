@@ -59,8 +59,9 @@ test('off-center contact is weaker than square contact', () => {
   const edge = swingResult({ timingDiffMs: 0, batter, pitch: pitch(), rng: createRng(1), bat: { x: 0.45, y: 0 } });
   assert.ok(edge.quality < sq.quality);
 });
-test('hard mode has a smaller bat, better contact a wider one', () => {
-  assert.ok(batReach(50, true).rx < batReach(50).rx);
+test('harder levels have a smaller bat, better contact a wider one', () => {
+  assert.ok(batReach(50, 'hard').rx < batReach(50, 'normal').rx && batReach(50, 'normal').rx < batReach(50, 'easy').rx);
+  assert.equal(batReach(50).rx, batReach(50, 'easy').rx);
   assert.ok(batReach(90).rx > batReach(30).rx && batReach(90).ry > batReach(30).ry);
 });
 test('ball above the bat lifts (fly), below sinks (grounder)', () => {
@@ -76,6 +77,6 @@ test('batted balls produce the new plays sometimes', () => {
     const r = battedBallInfo({ quality: (i % 10) / 10, power: 50, outs: i % 2, runnerOnFirst: i % 3 === 0, runnerOnSecond: i % 4 === 0, runnerOnThird: false, rng });
     const k = r.event + (r.style ? ':' + r.style : ''); seen[k] = (seen[k] || 0) + 1;
   }
-  for (const k of ['INFIELD_SINGLE', 'ERROR:fumble', 'ERROR:throw', 'SINGLE_HOME_OUT', 'SINGLE:home_safe', 'LINE_DP:liner', 'OUT:liner', 'OUT:dive', 'OUT:wall'])
+  for (const k of ['INFIELD_SINGLE', 'ERROR:fumble', 'ERROR:throw', 'SINGLE_HOME_OUT', 'SINGLE:home_safe', 'LINE_DP:liner', 'OUT:liner', 'OUT:dive', 'OUT:wall', 'SINGLE:bloop', 'OUT:pop', 'OUT:foul'])
     assert.ok(seen[k] > 0, `${k} never happened`);
 });

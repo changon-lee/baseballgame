@@ -119,6 +119,8 @@ const NEW = [
   ['SINGLE', false, 'home_safe', [false, true, false]], ['SINGLE', true, 'home_safe', [true, true, true]], ['SINGLE_HOME_OUT', false, null, [true, true, false]],
   ['SINGLE_HOME_OUT', true, null, [false, true, true]], ['OUT', false, 'liner', [false, false, false]], ['LINE_DP', false, 'liner', [true, true, false]],
   ['LINE_DP', false, 'liner', [false, true, true]], ['OUT', true, 'dive', [true, false, false]], ['OUT', true, 'wall', [false, false, false]],
+  ['SINGLE', true, 'bloop', [true, false, false]], ['SINGLE', true, 'bloop', [false, true, false]], ['OUT', true, 'pop', [true, false, true]],
+  ['OUT', true, 'foul', [false, false, false]], ['OUT', true, 'foul', [true, true, true]],
 ];
 test('new plays are well formed', () => {
   for (let seed = 1; seed <= 30; seed++) for (const [event, fly, style, bases] of NEW)
@@ -157,5 +159,23 @@ test('wall catch: caught above the fence top at the wall; dive: caught near the 
     const d = buildPlay({ event: 'OUT', fly: true, style: 'dive', bats: 'L', contact: { pull: 0.5 }, bases: [false, false, false], rng: createRng(seed) });
     const q = ballAt(d, d.outs[0] - 0.001).p;
     assert.ok(q[2] < 3 && Math.abs(angOf(q[0], q[1])) <= 45, `dive seed ${seed}`);
+  }
+});
+test('texas leaguer drops between infield and outfield; pop-ups stay in the infield; foul flies are caught in foul ground', () => {
+  for (let seed = 1; seed <= 40; seed++) {
+    const opt = { bats: seed % 2 ? 'L' : 'R', contact: { pull: (seed % 5 - 2) / 3 }, bases: [false, false, false], rng: createRng(seed) };
+    const b = buildPlay({ event: 'SINGLE', fly: true, style: 'bloop', ...opt });
+    const land = b.ball[0].p1, dl = Math.hypot(land[0], land[1]);
+    assert.ok(dl > 120 && dl < 160 && Math.abs(angOf(land[0], land[1])) <= 45, `bloop seed ${seed}: lands at ${dl}`);
+    assert.equal(b.outs.length, 0);
+    const p = buildPlay({ event: 'OUT', fly: true, style: 'pop', ...opt, rng: createRng(seed) });
+    const pc = ballAt(p, p.outs[0] - 0.001).p;
+    assert.ok(Math.hypot(pc[0], pc[1]) < 160 && Math.abs(angOf(pc[0], pc[1])) <= 45 && p.distM === 0, `pop seed ${seed}`);
+    const f = buildPlay({ event: 'OUT', fly: true, style: 'foul', ...opt, rng: createRng(seed) });
+    const fc = ballAt(f, f.outs[0] - 0.001).p, fa = Math.abs(angOf(fc[0], fc[1]));
+    assert.ok(fa > 46, `foul seed ${seed}: caught at ${fa} deg`);
+    // 파울 쪽 벽(파울 선에서 42피트) 안쪽, 홈 뒤 벽(150피트) 안쪽
+    const fd = Math.hypot(fc[0], fc[1]);
+    assert.ok(fd < 145 && (fa > 90 || fd * Math.sin((fa - 45) * Math.PI / 180) < 40), `foul seed ${seed}: in the park`);
   }
 });

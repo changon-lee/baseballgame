@@ -39,6 +39,11 @@ const BOX = s => [[s * 1.2, -3], [s * 5.2, -3], [s * 5.2, 3], [s * 1.2, 3]];
 const WALLS = [];
 for (let i = 0; i < FENCE.length - 1; i++) WALLS.push([FENCE[i], FENCE[i + 1], FENCE_H, 'fence']);
 WALLS.push([poleL, AL, FENCE_H, 'side'], [AL, BL, 5, 'side'], [BR, AR, 5, 'side'], [AR, poleR, FENCE_H, 'side']);
+// 홈 뒤 둥근 관중석 앞 낮은 벽(관중석 아랫단 앞이 5피트 떠 있어서, 카메라 가까이에선 그 틈으로 바깥이 보였다)
+for (const sg of [-1, 1]) {
+  const B = sg < 0 ? BL : BR, aB = Math.atan2(B[0], B[1]) * 180 / Math.PI, arc = range(aB, sg * 150, 6).map(a => polar(a, RB + 0.5));
+  for (let i = 0; i < arc.length - 1; i++) WALLS.push([arc[i], arc[i + 1], 5, 'side']);
+}
 
 // ── 카메라 ──
 function makeCam(C, T, F, W, H) {
@@ -134,6 +139,24 @@ function imgQuad(ctx, img, u0, u1, v0, v1, tl, tr, bl, br) {
   imgTri(ctx, img, [u0, v0], [u1, v0], [u0, v1], tl, tr, bl);
   imgTri(ctx, img, [u1, v0], [u1, v1], [u0, v1], tr, br, bl);
 }
+// 3D 사각형(위 왼, 위 오, 아래 오, 아래 왼)에 그림 영역을 붙인다. 카메라 가까운 면 뒤로 넘어간 부분은 잘라 내고 나머지를 그린다
+// (예전엔 한 점이라도 카메라 뒤면 통째로 건너뛰어서, 카메라 옆 관중석이 뚝 잘려 판자처럼 떠 보였다)
+function texQuad3(ctx, K, img, P, UV, color) {
+  const cs = P.map(p => toCam(K, p)), out = [];
+  for (let i = 0; i < 4; i++) {
+    const a = cs[i], b = cs[(i + 1) % 4], ua = UV[i], ub = UV[(i + 1) % 4], ina = a[2] >= NEAR, inb = b[2] >= NEAR;
+    if (ina) out.push([a, ua]);
+    if (ina !== inb) {
+      const t = (NEAR - a[2]) / (b[2] - a[2]);
+      out.push([[lerp(a[0], b[0], t), lerp(a[1], b[1], t), NEAR], [lerp(ua[0], ub[0], t), lerp(ua[1], ub[1], t)]]);
+    }
+  }
+  if (out.length < 3) return;
+  const sp = out.map(([c]) => { const [x, y] = camToScreen(K, c); return { x, y }; });
+  if (offscreen(K, sp)) return;
+  if (!img) { quadFill(ctx, sp, color); return; }
+  for (let i = 1; i < out.length - 1; i++) imgTri(ctx, img, out[0][1], out[i][1], out[i + 1][1], sp[0], sp[i], sp[i + 1]);
+}
 const quadFill = (ctx, ps, color) => { ctx.fillStyle = color; ctx.beginPath(); ps.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.closePath(); ctx.fill(); };
 const offscreen = (K, ps) => ps.every(p => p.x < -50) || ps.every(p => p.x > K.W + 50) || ps.every(p => p.y < -50) || ps.every(p => p.y > K.H + 50);
 const SPAN_A = 54;                                        // 외야 관중석 그림이 덮는 각도(±), 폴 옆 꺾인 곳까지
@@ -196,10 +219,14 @@ function drawStands(ctx, K, crowdTint) {
       const lo = at(p0, layer), hi = at(p0, layer + 1), run = p0.pr[layer + 1][0] - p0.pr[layer][0], rise = hi[2] - lo[2];
       const n = [-p0.o[0] * rise, -p0.o[1] * rise, run];
       if ((K.C[0] - lo[0]) * n[0] + (K.C[1] - lo[1]) * n[1] + (K.C[2] - lo[2]) * n[2] < 0) continue;
-      const tl = project(K, at(p0, layer + 1)), tr = project(K, at(p1, layer + 1)), bl = project(K, at(p0, layer)), br = project(K, at(p1, layer));
-      if (!tl || !tr || !bl || !br || offscreen(K, [tl, tr, bl, br])) continue;
-      if (!img) quadFill(ctx, [tl, tr, br, bl], crowdTint);
-      else imgQuad(ctx, img, p0.u * img.width, p1.u * img.width, layer ? 0 : p0.v, layer ? p0.v : ROW, tl, tr, bl, br);
+      // 위아래로 몇 조각 나눠 그린다(가까이서 크게 보일 때 그림이 덜 일그러지게)
+      const T0 = at(p0, layer + 1), T1 = at(p1, layer + 1), B0 = at(p0, layer), B1 = at(p1, layer);
+      const u0 = p0.u * (img ? img.width : 1), u1 = p1.u * (img ? img.width : 1), v0 = layer ? 0 : p0.v, v1 = layer ? p0.v : ROW;
+      const N = 3, mix = (a, b, k) => [lerp(a[0], b[0], k), lerp(a[1], b[1], k), lerp(a[2], b[2], k)];
+      for (let j = 0; j < N; j++) {
+        const k0 = j / N, k1 = (j + 1) / N, va = lerp(v0, v1, k0), vb = lerp(v0, v1, k1);
+        texQuad3(ctx, K, img, [mix(T0, B0, k0), mix(T1, B1, k0), mix(T1, B1, k1), mix(T0, B0, k1)], [[u0, va], [u1, va], [u1, vb], [u0, vb]], crowdTint);
+      }
     }
   }
 }

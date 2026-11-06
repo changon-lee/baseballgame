@@ -280,9 +280,17 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
       let dist, H;
       if (ev === 'TRIPLE') { ang = (ang < 0 ? -1 : 1) * (19 + rng() * 9); dist = fenceAt(ang) - 25; H = 45; }
       else if (ev === 'DOUBLE') { ang = (ang < 0 ? -1 : 1) * (rng() < 0.5 ? 14 + rng() * 9 : 36 + rng() * 6); dist = 255 + rng() * 55; H = 38 + rng() * 15; }
+      else if (style === 'bloop') { dist = 128 + rng() * 22; H = 30 + rng() * 10; }   // 텍사스 안타: 내야수 머리 위, 외야수 앞
       else { dist = 150 + rng() * 55; H = 18 + rng() * 22; }
       dist = Math.min(dist, fenceAt(ang) - 12);
       const [x, y] = polar(ang, dist), T = hang(H);
+      if (style === 'bloop') {
+        // 가까운 내야수가 등을 돌려 쫓아가지만 한 발 모자란다
+        const back = nearest([x, y], IF), b0 = SPOTS[back], d = hyp(...b0, x, y), k = Math.max(0, (d - 7) / d);
+        used.add(back);
+        runTo(F[back], REACT, b0[0] + (x - b0[0]) * k, b0[1] + (y - b0[1]) * k, Math.max(runSpeed(back), d * k / Math.max(0.5, T - REACT)), 'dive');
+        act(F[back], T + 0.7, 'stand');
+      }
       const fl = { type: 'fly', t0: 0, t1: T, p0: P0, p1: [x, y, 0], H, k: 0.3, skew: 1.16 };
       sc.ball.push(fl);
       const vh = 0.7 * dist / T, [dx, dy] = polar(ang, 1);
@@ -498,17 +506,27 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
   } else if (event === 'OUT' && fly || event === 'SAC_FLY') {
     let who, dist, H;
     if (event === 'SAC_FLY') { who = OF[Math.floor(rng() * 3)]; ang = angOf(...SPOTS[who]) + randNormal(rng) * 4; dist = hyp(0, 0, ...SPOTS[who]) + 5 + rng() * 25; H = 75 + rng() * 15; }
-    else {
+    else if (style === 'pop') {                     // 내야 뜬공: 아주 높이 떠서 내야수가 제자리 근처에서
+      who = nearest(polar(ang, 120), IF);
+      ang = clamp(angOf(...SPOTS[who]) + randNormal(rng) * 8, -40, 40);
+      dist = clamp(hyp(0, 0, ...SPOTS[who]) - 15 + randNormal(rng) * 10, 50, 145);
+      H = 95 + rng() * 25;
+    } else if (style === 'foul') {                  // 파울플라이: 포수 뒤나 1·3루 옆 파울 지역
+      const s = rng() < 0.35 ? 0 : ang < 0 ? -1 : 1;
+      if (s === 0) { who = 'C'; ang = (rng() < 0.5 ? -1 : 1) * (100 + rng() * 30); dist = 30 + rng() * 25; H = 70 + rng() * 15; }
+      else { who = s < 0 ? '3B' : '1B'; ang = s * (52 + rng() * 10); dist = 85 + rng() * 45; H = 60 + rng() * 15; }
+    } else {
       const deep = rng() < 0.55;
       who = deep ? nearest(polar(ang, 280), OF) : nearest(polar(ang, 160), [...IF, ...OF]);
       ang = angOf(...SPOTS[who]) + randNormal(rng) * 6;
       dist = hyp(0, 0, ...SPOTS[who]) + randNormal(rng) * (IF.includes(who) ? 12 : 25);
       H = IF.includes(who) ? 70 + rng() * 25 : deep ? 80 + rng() * 15 : 55 + rng() * 15;
     }
-    dist = Math.min(dist, fenceAt(ang) - 8);
+    if (Math.abs(ang) <= 45) dist = Math.min(dist, fenceAt(ang) - 8);
     const [x, y] = polar(ang, dist);
     const T = catchFly(who, x, y, H);
-    sc.distM = Math.round(dist * 0.3048);
+    if (style !== 'pop' && style !== 'foul') sc.distM = Math.round(dist * 0.3048);
+    if (style === 'foul') sc.sounds.push({ t: T, name: 'ooh' });
     sc.outs.push(T);
     // 타자는 1루 쪽으로 뛰다가 잡히면 멈춘다
     act(B.keys, 0.25, 'drop');
