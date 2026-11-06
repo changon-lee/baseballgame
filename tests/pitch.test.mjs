@@ -31,8 +31,9 @@ test('fatigue starts past half stamina', () => {
 test('energy bar drains with pitches', () => { assert.equal(energy(0, 80), 1); assert.ok(energy(60, 80) < 1); assert.equal(energy(500, 80), 0); });
 test('tired gauge moves faster', () => assert.ok(gaugePeriod(1) < gaugePeriod(0)));
 test('ball touching zone edge is a strike', () => {
-  assert.equal(isStrike({ x: 1.1, y: 0 }), true); assert.equal(isStrike({ x: 1.2, y: 0 }), false);
-  assert.equal(isStrike({ x: 0, y: 1.13 }), true); assert.equal(isStrike({ x: 0, y: 1.2 }), false);
+  // 판정 존 반폭 0.85 + 공 반지름 0.17
+  assert.equal(isStrike({ x: 0.95, y: 0 }), true); assert.equal(isStrike({ x: 1.05, y: 0 }), false);
+  assert.equal(isStrike({ x: 0, y: 0.95 }), true); assert.equal(isStrike({ x: 0, y: 1.05 }), false);
 });
 test('on-target pitch lands near target', () => assert.ok(avgErr(0.5) < 0.25));
 test('off-timing pitch scatters more', () => assert.ok(avgErr(0.05) > avgErr(0.5) * 2));

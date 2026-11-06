@@ -1,7 +1,7 @@
 // 경기 화면: 투구(조준 → 구종 → 게이지), 타격(타이밍 터치), 타구 화면, 투수 교체, 경기 종료
 import { CONFIG } from '../config.js';
 import { createRng } from '../core/rng.js';
-import { PITCH_TYPES, gaugePos, sweetWidth, gaugePeriod, energy, aimFromTouch, fatigue } from '../core/pitch.js';
+import { PITCH_TYPES, gaugePos, sweetWidth, gaugePeriod, energy, aimFromTouch, fatigue, ZONE_K } from '../core/pitch.js';
 import { availableRelievers } from '../core/team.js';
 import { createMatch, matchup, playUserPitch, cpuPitchToUser, resolveUserSwing, changePitcher, cpuMaybeChangePitcher, simulateInning, simulateRest } from '../core/match.js';
 import { cpuChoosePitch, cpuSwing } from '../core/ai.js';
@@ -700,13 +700,14 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     ctx.lineWidth = Math.max(4, RY * 0.16); ctx.beginPath(); ctx.moveTo(cx - RX * 0.62, cy); ctx.lineTo(cx + RX * 0.62, cy); ctx.stroke();
     ctx.restore();
   }
+  // 스트라이크존: 판정 존(ZONE_K) 크기로 그린다
   function drawZone(alpha) {
-    const [x0, y0] = toS(V, V.mirror ? 1 : -1, 1);
-    ctx.strokeStyle = `rgba(255,255,255,${alpha})`; ctx.lineWidth = 2; ctx.strokeRect(x0, y0, V.zw, V.zh);
+    const [x0, y0] = toS(V, (V.mirror ? 1 : -1) * ZONE_K, ZONE_K), zw = V.zw * ZONE_K, zh = V.zh * ZONE_K;
+    ctx.strokeStyle = `rgba(255,255,255,${alpha})`; ctx.lineWidth = 2; ctx.strokeRect(x0, y0, zw, zh);
     ctx.lineWidth = 1; ctx.strokeStyle = `rgba(255,255,255,${alpha * 0.35})`;
     for (let i = 1; i < 3; i++) {
-      ctx.beginPath(); ctx.moveTo(x0 + V.zw * i / 3, y0); ctx.lineTo(x0 + V.zw * i / 3, y0 + V.zh); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(x0, y0 + V.zh * i / 3); ctx.lineTo(x0 + V.zw, y0 + V.zh * i / 3); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x0 + zw * i / 3, y0); ctx.lineTo(x0 + zw * i / 3, y0 + zh); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x0, y0 + zh * i / 3); ctx.lineTo(x0 + zw, y0 + zh * i / 3); ctx.stroke();
     }
   }
 

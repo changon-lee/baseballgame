@@ -1,6 +1,7 @@
 // 컴퓨터 투수의 공 선택, 컴퓨터 타자의 스윙
 import { CONFIG } from '../config.js';
 import { randNormal } from './rng.js';
+import { ZONE_K } from './pitch.js';
 
 export function cpuChoosePitch({ pitcher, balls, strikes, rng }) {
   const ws = pitcher.pitches.map(k => (k === 'FB' || k === 'SI' ? 3 : 1.5));
@@ -8,8 +9,8 @@ export function cpuChoosePitch({ pitcher, balls, strikes, rng }) {
   while ((r -= ws[i]) > 0 && i < ws.length - 1) i++;
   const inZone = rng() < CONFIG.BALANCE.CPU_ZONE + (balls >= 3 ? 0.25 : 0) - (strikes === 2 ? 0.2 : 0);
   let target;
-  if (inZone) target = { x: (rng() * 2 - 1) * 0.85, y: (rng() * 2 - 1) * 0.85 };
-  else { const a = rng() * Math.PI * 2, rr = 1.3 + rng() * 0.35; target = { x: Math.cos(a) * rr, y: Math.sin(a) * rr }; }
+  if (inZone) target = { x: (rng() * 2 - 1) * 0.85 * ZONE_K, y: (rng() * 2 - 1) * 0.85 * ZONE_K };
+  else { const a = rng() * Math.PI * 2, rr = 1.2 + rng() * 0.4; target = { x: Math.cos(a) * rr, y: Math.sin(a) * rr }; }
   const gaugePos = 0.5 + randNormal(rng) * 0.05 * (1.3 - pitcher.control / 100);
   return { type: pitcher.pitches[i], target, gaugePos };
 }

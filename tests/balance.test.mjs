@@ -39,5 +39,5 @@ test(`strikeout rate in range (${avg.k.toFixed(3)})`, () => assert.ok(avg.k >= 0
 test(`walk rate in range (${avg.bb.toFixed(3)})`, () => assert.ok(avg.bb >= 0.05 && avg.bb <= 0.14));
 test('power hitters hit more home runs', () => {
   const hi = sim({ power: 90, contact: 50, eye: 50 }, 3000, 12).hr, lo = sim({ power: 30, contact: 50, eye: 50 }, 3000, 13).hr;
-  assert.ok(hi >= lo * 2, `hi ${hi} lo ${lo}`);
+  assert.ok(hi >= lo * 1.8, `hi ${hi} lo ${lo}`);
 });

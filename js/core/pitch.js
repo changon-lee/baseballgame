@@ -13,7 +13,9 @@ export const PITCH_TYPES = {
   FO: { name: '포크', speedMul: 0.86, breakX: 0.00, breakY: -0.55 },
 }; // breakX는 우투수 기준, 좌투수는 부호 반대
 
-export const BALL_R = 0.17;   // 공 반지름(존 가로 반폭 기준)
+export const BALL_R = 0.17;   // 공 반지름(좌표 1 = 예전 존 가로 반폭 기준)
+// 스트라이크존(심판 판정) 반폭·반높이. 좌표계(공·포수·배트 크기)는 그대로 두고 판정 존만 좁혔다
+export const ZONE_K = 0.85;
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -26,7 +28,7 @@ export const fatigue = (pitchCount, stamina) => clamp((pitchCount - stamina * 0.
 export const energy = (pitchCount, stamina) => 1 - clamp(pitchCount / (stamina * 1.4), 0, 1);
 export const sweetWidth = (control, f) => (0.07 + control / 100 * 0.12) * (1 - 0.6 * f);
 export const gaugePeriod = f => CONFIG.GAUGE_PERIOD_MS * (1 - 0.25 * f);
-export const isStrike = p => Math.abs(p.x) <= 1 + BALL_R && Math.abs(p.y) <= 1 + BALL_R / 1.2;
+export const isStrike = p => Math.abs(p.x) <= ZONE_K + BALL_R && Math.abs(p.y) <= ZONE_K + BALL_R / 1.2;
 
 export function computePitch({ pitcher, type, target, gaugePos: gpos, pitchCount, rng }) {
   const f = fatigue(pitchCount, pitcher.stamina);
