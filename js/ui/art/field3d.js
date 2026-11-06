@@ -160,7 +160,7 @@ function texQuad3(ctx, K, img, P, UV, color) {
 const quadFill = (ctx, ps, color) => { ctx.fillStyle = color; ctx.beginPath(); ps.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.closePath(); ctx.fill(); };
 const offscreen = (K, ps) => ps.every(p => p.x < -50) || ps.every(p => p.x > K.W + 50) || ps.every(p => p.y < -50) || ps.every(p => p.y > K.H + 50);
 const SPAN_A = 54;                                        // 외야 관중석 그림이 덮는 각도(±), 폴 옆 꺾인 곳까지
-const DEP = 175, HT = 215, ROW = 675;                     // 관중석: 바깥으로 DEP, 펜스 위로 HT 만큼 올라가는 경사면 / 그림에서 쓰는 높이
+const DEP = 175, HT = 215, ROW = 675, TOP = 250;          // 관중석: 바깥으로 DEP, 펜스 위로 HT 만큼 올라가는 경사면 / 그림에서 쓰는 줄(TOP~ROW: 전광판 아래 관중만)
 // 파울 지역 옆 관중석: 아랫단(b)·바깥 방향(o)·단면(pr: [바깥 거리, 높이] 세 점 = 아래층·위층)·위아래층 경계의 그림 높이(v)·그림 가로 위치(u, 0..1).
 // 외야 관중석 끝에서 시작해 바깥 방향을 파울 쪽 벽에 수직으로 서서히 돌리고, 그림은 끝에서 거울처럼 되짚어 이어 붙인다.
 // 중계 카메라(홈 뒤 62피트)는 파울 쪽 벽을 늘인 선보다 바깥에 있어서, 외야처럼 가파르면 경사면 뒤쪽이 보인다(= 안 그려져 하늘이 뚫림).
@@ -205,7 +205,7 @@ function drawStands(ctx, K, crowdTint) {
     const bl = project(K, [...polar(a, R0), FENCE_H]), br = project(K, [...polar(a1, R1), FENCE_H]);
     if (!tl || !tr || !bl || !br || offscreen(K, [tl, tr, bl, br])) continue;
     if (!img) quadFill(ctx, [tl, tr, br, bl], crowdTint);
-    else imgQuad(ctx, img, (a + SPAN_A) / (2 * SPAN_A) * img.width, (a1 + SPAN_A) / (2 * SPAN_A) * img.width, 0, ROW, tl, tr, bl, br);
+    else imgQuad(ctx, img, (a + SPAN_A) / (2 * SPAN_A) * img.width, (a1 + SPAN_A) / (2 * SPAN_A) * img.width, TOP, ROW, tl, tr, bl, br);
   }
   // 파울 지역 옆 관중석: 외야 관중석 끝(폴 옆 꺾인 곳)에서 같은 높이·경사로 홈 쪽까지 이어 붙인다.
   // (예전엔 낮은 관중석만 따로 두어서, 좌중간·우중간을 비추면 그 위로 하늘이 뚫려 관중석 조각이 떠 보였다)
@@ -221,7 +221,7 @@ function drawStands(ctx, K, crowdTint) {
       if ((K.C[0] - lo[0]) * n[0] + (K.C[1] - lo[1]) * n[1] + (K.C[2] - lo[2]) * n[2] < 0) continue;
       // 위아래로 몇 조각 나눠 그린다(가까이서 크게 보일 때 그림이 덜 일그러지게)
       const T0 = at(p0, layer + 1), T1 = at(p1, layer + 1), B0 = at(p0, layer), B1 = at(p1, layer);
-      const u0 = p0.u * (img ? img.width : 1), u1 = p1.u * (img ? img.width : 1), v0 = layer ? 0 : p0.v, v1 = layer ? p0.v : ROW;
+      const u0 = p0.u * (img ? img.width : 1), u1 = p1.u * (img ? img.width : 1), v0 = layer ? TOP : p0.v, v1 = layer ? p0.v : ROW;
       const N = 3, mix = (a, b, k) => [lerp(a[0], b[0], k), lerp(a[1], b[1], k), lerp(a[2], b[2], k)];
       for (let j = 0; j < N; j++) {
         const k0 = j / N, k1 = (j + 1) / N, va = lerp(v0, v1, k0), vb = lerp(v0, v1, k1);

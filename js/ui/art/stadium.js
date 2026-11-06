@@ -28,6 +28,30 @@ function lightTower(ctx, x, y, s) {
 function speckle(ctx, x0, y0, w, h, rng, n, colors, size = 1.3) {
   for (let i = 0; i < n; i++) { ctx.fillStyle = colors[i % colors.length]; ctx.fillRect(x0 + rng() * w, y0 + rng() * h, size, size); }
 }
+// 사진에서 뽑은 잔디·흙 결(밝기만, 128 = 그대로). 코드로 그린 색 위에 overlay로 입힌다. 멀수록(위) 결을 잘게
+const TEX = {};
+let texLeft = 0;
+if (typeof Image !== 'undefined') {
+  for (const k of ['grass_tex', 'dirt_tex']) {
+    const img = new Image(); texLeft++;
+    img.onload = () => { TEX[k] = img; texLeft--; };
+    img.onerror = () => { texLeft--; };
+    img.src = new URL(`../../../assets/stadium/${k}.webp`, import.meta.url).href;
+  }
+}
+function texture(ctx, k, y0, y1, alpha, near, far) {
+  const img = TEX[k];
+  if (!img || y1 <= y0) return;
+  const bands = 4;
+  ctx.save(); ctx.globalCompositeOperation = 'overlay';
+  for (let i = 0; i < bands; i++) {
+    const a = y0 + (y1 - y0) * i / bands, b = y0 + (y1 - y0) * (i + 1) / bands;
+    const pat = ctx.createPattern(img, 'repeat');
+    if (pat.setTransform) pat.setTransform(new DOMMatrix().scale(far + (near - far) * (i + 0.5) / bands));
+    ctx.globalAlpha = alpha; ctx.fillStyle = pat; ctx.fillRect(-10, a, 1e4, b - a + 0.5);
+  }
+  ctx.restore();
+}
 function grass(ctx, W, H, top, vx, spread, rng) {
   const g = ctx.createLinearGradient(0, top, 0, H); g.addColorStop(0, '#2c7a3b'); g.addColorStop(1, '#2f8c43');
   ctx.fillStyle = g; ctx.fillRect(0, top, W, H - top);
@@ -38,6 +62,7 @@ function grass(ctx, W, H, top, vx, spread, rng) {
   }
   for (let y = top + 10; y < H; y += 22) { ctx.fillStyle = 'rgba(0,0,0,.035)'; ctx.fillRect(0, y, W, 9); }  // 가로 무늬
   speckle(ctx, 0, top, W, H - top, rng, Math.floor(W * (H - top) / 60), ['rgba(0,40,0,.18)', 'rgba(140,220,120,.10)']);
+  texture(ctx, 'grass_tex', top, H, 0.9, 0.45, 0.12);
 }
 function dirtEllipse(ctx, x, y, rx, ry, rng, a0 = 0, a1 = Math.PI * 2) {
   const g = ctx.createRadialGradient(x, y - ry * 0.3, ry * 0.2, x, y, Math.max(rx, ry));
@@ -45,6 +70,7 @@ function dirtEllipse(ctx, x, y, rx, ry, rng, a0 = 0, a1 = Math.PI * 2) {
   ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, a0, a1); ctx.fill();
   ctx.save(); ctx.clip();
   speckle(ctx, x - rx, y - ry, rx * 2, ry * 2, rng, Math.floor(rx * ry / 8), ['rgba(80,45,20,.22)', 'rgba(255,230,190,.16)'], 1.2);
+  texture(ctx, 'dirt_tex', y - ry, y + ry, 0.9, 0.3 * Math.min(1, ry / 40) + 0.1, 0.1);
   ctx.restore();
 }
 function adBoards(ctx, W, y, h, team) {
@@ -80,7 +106,7 @@ if (typeof Image !== 'undefined') {
     img.src = new URL(`../../../assets/stadium/${k}.webp`, import.meta.url).href;
   }
 }
-export const standsReady = kind => !!STANDS[kind];
+export const standsReady = kind => !!STANDS[kind] && texLeft === 0;   // 잔디·흙 결까지 불러온 뒤에 배경을 다시 그린다
 export const standsImage = kind => STANDS[kind] || null;
 // 그림 아래 끝(펜스 바로 아래 = 잔디 시작)을 bottom에 맞추고 가로를 꽉 채운다
 function drawStands(ctx, img, W, bottom) {
@@ -98,7 +124,7 @@ export function buildBackdrop(kind, V, W, H, dpr, homeTeam) {
   const home = [homeTeam.colors.main, '#f4f6fa', homeTeam.colors.main, '#a8c2ea', '#e9e9e9', '#2b5fae', '#ffffff'];
 
   const art = STANDS[kind];
-  c.ready = !!art;
+  c.ready = !!art && texLeft === 0;
   if (kind === 'catcher') {
     const wallY = art ? H * 0.25 : H * 0.2;
     if (art) { drawStands(ctx, art, W, wallY + 9); grass(ctx, W, H, wallY + 9, W / 2, W * 0.36, rng); }
