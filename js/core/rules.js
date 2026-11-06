@@ -16,15 +16,12 @@ export const battingSide = s => (s.half === 'top' ? 'away' : 'home');
 
 const leader = s => (s.score.home > s.score.away ? 'home' : s.score.away > s.score.home ? 'away' : null);
 
-// 땅볼 때 주자 진루: 1루·2루 주자는 무조건 다음 베이스로 뛴다(1루 주자는 포스, 2루 주자도 뛰게 했다).
-// 3루 주자는 밀려날 때(만루)만 홈으로. 3루가 차 있고 안 밀리면 2루 주자는 2루에 머문다.
+// 땅볼 때 주자 진루: 포스(뒤 베이스가 다 차서 밀려나는) 주자만 다음 베이스로 무조건 뛴다.
+// 1루 주자는 늘 포스, 2루 주자는 1루가 차 있을 때만, 3루 주자는 만루일 때만. 나머지는 리드했다가 베이스로 돌아온다.
 // 돌려주는 것: 베이스마다 갈 곳(1·2·3 = 그 베이스, 4 = 득점, null = 주자 없음)
 export function groundAdvance(bases) {
-  const [b1, b2, b3] = bases, to = [null, null, null];
-  if (b3) to[2] = b1 && b2 ? 4 : 3;
-  if (b2) to[1] = !b3 || to[2] === 4 ? 3 : 2;
-  if (b1) to[0] = 2;
-  return to;
+  const [b1, b2, b3] = bases;
+  return [b1 ? 2 : null, b2 ? (b1 ? 3 : 2) : null, b3 ? (b1 && b2 ? 4 : 3) : null];
 }
 
 // opts.ground: 땅볼(OUT·DOUBLE_PLAY)이면 주자가 진루한다

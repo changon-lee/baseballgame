@@ -95,10 +95,10 @@ test('sac fly: the catcher holds the ball the moment the throw arrives', () => {
   }
 });
 
-test('ground out / double play: runners on first and second always run to the next base, never back', () => {
+test('ground out / double play: forced runners always run to the next base, never back; others hold', () => {
   // [이벤트, 주자, [[출발 베이스, 도착 베이스(4 = 홈)]...]]
   const cases = [
-    ['OUT', [true, false, false], [[1, 2]]], ['OUT', [false, true, false], [[2, 3]]], ['OUT', [true, true, false], [[1, 2], [2, 3]]],
+    ['OUT', [true, false, false], [[1, 2]]], ['OUT', [false, true, false], [[2, 2]]], ['OUT', [true, true, false], [[1, 2], [2, 3]]],
     ['OUT', [true, true, true], [[1, 2], [2, 3], [3, 4]]], ['OUT', [false, true, true], [[2, 2], [3, 3]]], ['OUT', [true, false, true], [[1, 2], [3, 3]]],
     ['DOUBLE_PLAY', [true, true, true], [[2, 3], [3, 4]]], ['DOUBLE_PLAY', [true, true, false], [[2, 3]]],
   ];

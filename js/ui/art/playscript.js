@@ -170,7 +170,7 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
     return t;
   };
 
-  // 땅볼 진루(내야안타): 1·2루 주자는 다음 베이스로, 안 밀리는 3루 주자 등은 리드했다가 베이스로
+  // 땅볼 진루(내야안타): 포스된 주자는 다음 베이스로, 나머지는 리드했다가 베이스로
   const forcedRunners = t0 => {
     const to = groundAdvance(bases);
     R.forEach((r, i) => {
@@ -601,12 +601,12 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
       sc.outs.push(outT);
     }
     batterTo1B(outT);
-    // 땅볼이면 1·2루 주자는 무조건 다음 베이스로 뛴다(규칙 계산 groundAdvance와 같은 진루). 병살 1루 주자는 위에서 2루 아웃
+    // 땅볼이면 포스된 주자는 무조건 다음 베이스로 뛴다(규칙 계산 groundAdvance와 같은 진루). 병살 1루 주자는 위에서 2루 아웃
     const to = groundAdvance(bases);
     R.forEach((r, i) => {
       if (!r || r.keys.length > 1) return;
       if (to[i] > i + 1) { runBases(r, 0.12, i + 1, to[i], 25); return; }
-      const [lx, ly] = baseAlong(i + 1, 18);                 // 안 밀리는 3루 주자 등: 리드했다가 돌아온다
+      const [lx, ly] = baseAlong(i + 1, 18);                 // 포스가 아닌 주자: 리드했다가 돌아온다
       runTo(r.keys, 0.4, lx, ly, 12, 'lead');
       runTo(r.keys, outT + 0.1, ...BASES[i + 1], 16, 'stand');
     });

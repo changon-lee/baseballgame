@@ -82,10 +82,10 @@ test('non-walk-off hit keeps all runs when game not decided', () => {
 });
 
 // ── 다양한 타구 결과 ──
-test('infield single: batter to first, runners move up like a ground ball', () => {
+test('infield single: batter to first, forced runners move up', () => {
   const { s, runs } = run(setup({ bases: [false, true, true] }), ['INFIELD_SINGLE']);
   assert.deepEqual(s.bases, [true, true, true]); assert.equal(runs, 0);
-  assert.deepEqual(run(setup({ bases: [false, true, false] }), ['INFIELD_SINGLE']).s.bases, [true, false, true]);
+  assert.deepEqual(run(setup({ bases: [false, true, false] }), ['INFIELD_SINGLE']).s.bases, [true, true, false]);
   assert.equal(run(setup({ bases: [true, true, true] }), ['INFIELD_SINGLE']).runs, 1);
 });
 test('error: batter on first, every runner moves up one', () => {
@@ -102,11 +102,12 @@ test('line drive double play doubles off the lead-most runner nearest first', ()
   assert.deepEqual(run(setup({ bases: [false, true, false] }), ['LINE_DP']).s.bases, [false, false, false]);
 });
 
-test('ground outs move runners on first and second up; fly outs do not', () => {
+test('ground outs move forced runners up only; fly outs move nobody', () => {
   const g = (bases, ev = 'OUT', outs = 0) => applyEvent(setup({ bases, outs }), ev, { ground: true });
   assert.deepEqual(g([true, false, false]).state.bases, [false, true, false]);
-  assert.deepEqual(g([false, true, false]).state.bases, [false, false, true]);
-  assert.deepEqual(g([false, true, true]).state.bases, [false, true, true]);          // 3루가 안 밀리면 2루 주자는 그대로
+  assert.deepEqual(g([false, true, false]).state.bases, [false, true, false]);         // 1루가 비면 2루 주자는 포스가 아니라 그대로
+  assert.deepEqual(g([false, true, true]).state.bases, [false, true, true]);
+  assert.deepEqual(g([true, false, true]).state.bases, [false, true, true]);
   const full = g([true, true, true]);
   assert.deepEqual(full.state.bases, [false, true, true]); assert.equal(full.runs, 1);
   assert.equal(g([true, true, true], 'OUT', 2).runs, 0);                               // 3아웃이면 득점 없음
