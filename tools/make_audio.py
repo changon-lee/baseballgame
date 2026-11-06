@@ -170,33 +170,6 @@ f += filt(noise(n), 'band', [150, 900], 2) * env(n, 0.001, 0.06) * 0.6
 save('fence_hit', fade(room(f, 0.3, 0.2, 2000), 0.001, 0.08))
 
 
-# 응원 북·박수 반복(한국 야구장 느낌의 '쿵 쿵 짝짝짝'), 128bpm 4마디
-def kick(n):
-    t = np.arange(n) / SR
-    ph = 2 * np.pi * np.cumsum(55 + 90 * np.exp(-t / 0.03)) / SR
-    return np.sin(ph) * env(n, 0.001, 0.16) + filt(noise(n), 'band', [1200, 4000], 2) * env(n, 0.0005, 0.006) * 0.25
-
-
-def clap(n):
-    out = np.zeros(n)
-    for d in (0.0, 0.009, 0.018):                         # 여러 사람이 살짝 어긋나게 친다
-        s = int(d * SR); m = n - s
-        out[s:] += filt(noise(m), 'band', [900, 3200], 2) * env(m, 0.0008, 0.035)
-    return out
-
-
-bpm = 128; beat = 60 / bpm; bar = 4 * beat; bars = 4
-L = int(bars * bar * SR); drum = np.zeros(L + SR)
-pat = [(0, 'k'), (1, 'k'), (2, 'c'), (2.5, 'c'), (3, 'c')]   # 한 마디: 쿵 쿵 짝짝 짝
-for b_ in range(bars):
-    for pos, kind in pat:
-        s = int((b_ * bar + pos * beat) * SR) + int(rng.integers(0, int(0.004 * SR)))
-        hit = kick(int(0.5 * SR)) * 1.0 if kind == 'k' else clap(int(0.2 * SR)) * 0.55
-        drum[s:s + len(hit)] += hit
-tail = drum[L:]; drum = drum[:L]; drum[:len(tail)] += tail     # 끝 잔향을 처음에 더해 반복이 매끄럽게
-drum = room(drum, 0.6, 0.25, 2500)[:L]
-drum[:int(0.6 * SR)] += 0                                     # (room 꼬리는 버린다)
-save('cheer_drum_loop', drum, kbps=80)
 
 
 # 홈런 팡파레: 야구장 오르간 느낌(배음을 더한 음), 위로 올라가는 짧은 가락

@@ -4,12 +4,12 @@
 let AC = null, SFX = null, AMB = null;
 const DIR = new URL('../../assets/audio/', import.meta.url);
 const FILES = ['bat_crack', 'bat_hr', 'mitt_pop', 'glove_catch', 'swing_whoosh', 'fence_hit', 'ball_bounce',
-  'crowd_ooh', 'crowd_aww', 'crowd_cheer', 'crowd_cheer_big', 'jingle_hr', 'cheer_drum_loop', 'crowd_loop'];
-const LOOPS = { crowd_loop: 30, cheer_drum_loop: 7.5 };   // 반복 소리의 원래 길이(초): mp3 앞뒤 빈 소리를 빼고 이만큼만 돈다
+  'crowd_ooh', 'crowd_aww', 'crowd_cheer', 'crowd_cheer_big', 'jingle_hr', 'crowd_loop'];
+const LOOPS = { crowd_loop: 30 };   // 반복 소리의 원래 길이(초): mp3 앞뒤 빈 소리를 빼고 이만큼만 돈다
 const RAW = {}, BUF = {};
 let fetching = false;
 const opts = { sfx: true, amb: true };
-const amb = { want: false, drum: 0, nodes: {} };
+const amb = { want: false, nodes: {} };
 
 // 파일은 미리 받아 두고(오디오를 깨우기 전에도 된다), 소리로 풀기는 오디오가 생긴 뒤에 한다
 export function preloadAudio() {
@@ -62,10 +62,10 @@ export function setAudioOptions({ sfx = true, amb: a = true } = {}) {
   AMB.gain.setTargetAtTime(a ? 1 : 0, AC.currentTime, 0.15);
 }
 
-// 경기장 분위기: 관중 웅성거림은 늘, 응원 북·박수는 drum(0~1)만큼(우리 팀 공격 때 크게)
-export function setAmbience(on, drum = 0) {
-  if (amb.want === on && amb.drum === drum) return;
-  amb.want = on; amb.drum = drum; syncAmb();
+// 경기장 분위기: 관중 웅성거림
+export function setAmbience(on) {
+  if (amb.want === on) return;
+  amb.want = on; syncAmb();
 }
 function leadIn(b) {                                       // mp3 앞에 붙은 빈 소리 길이
   const d = b.getChannelData(0), lim = Math.min(d.length, 4096);
@@ -76,7 +76,7 @@ function syncAmb() {
   if (!AC) return;
   const t = AC.currentTime;
   for (const [n, len] of Object.entries(LOOPS)) {
-    const level = !amb.want ? 0 : n === 'crowd_loop' ? 0.3 : 0.42 * amb.drum;
+    const level = amb.want ? 0.3 : 0;
     let node = amb.nodes[n];
     if (!node && level > 0 && BUF[n]) {
       const b = BUF[n], s = AC.createBufferSource(), g = AC.createGain(), st = leadIn(b);

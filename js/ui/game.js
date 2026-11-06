@@ -599,7 +599,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
 
   function frame(dt, now) {
     if (!W || !V) resize();
-    setAmbience(true, mode === 'end' ? 0 : shownMu().battingSide === 'home' ? 1 : 0.12);   // 응원 북은 우리 공격 때 크게
+    setAmbience(true);
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     if (mode === 'bwait' && pitchAt && overlayOpen()) pitchAt = Math.max(pitchAt, now + CONFIG.WIND_CPU_MS + 500);
     else if (mode === 'bwait' && pitchAt && now >= pitchAt) throwCpuPitch();
