@@ -139,7 +139,52 @@ const SETS = {
       { w: 369, h: 770, ax: 95, ay: 704 },
     ],
   },
-  catcher: { h0: 1005, frames: [{ w: 762, h: 1005, ax: 380, mitt: [517, 413] }] },
+  catcher: { h0: 413, frames: [                   // 영상에서 미트 위치가 고르게 퍼지게 고른 44장(tools/video_catcher.py). 0번 = 가운데 자세. mitt = 미트 가운데
+    { w: 283, h: 414, ax: 140, ay: 413, mitt: [188, 192] },
+    { w: 282, h: 402, ax: 138, ay: 402, mitt: [128, 351] },
+    { w: 283, h: 454, ax: 140, ay: 453, mitt: [185, 63] },
+    { w: 282, h: 407, ax: 138, ay: 406, mitt: [34, 156] },
+    { w: 310, h: 406, ax: 139, ay: 405, mitt: [270, 309] },
+    { w: 318, h: 412, ax: 141, ay: 411, mitt: [286, 106] },
+    { w: 282, h: 404, ax: 137, ay: 404, mitt: [60, 259] },
+    { w: 340, h: 408, ax: 140, ay: 408, mitt: [299, 209] },
+    { w: 284, h: 412, ax: 140, ay: 410, mitt: [102, 87] },
+    { w: 283, h: 414, ax: 140, ay: 413, mitt: [192, 109] },
+    { w: 282, h: 404, ax: 138, ay: 404, mitt: [203, 352] },
+    { w: 284, h: 412, ax: 141, ay: 411, mitt: [133, 147] },
+    { w: 282, h: 403, ax: 137, ay: 402, mitt: [86, 314] },
+    { w: 283, h: 406, ax: 137, ay: 406, mitt: [51, 207] },
+    { w: 283, h: 414, ax: 141, ay: 413, mitt: [228, 58] },
+    { w: 336, h: 410, ax: 141, ay: 410, mitt: [291, 158] },
+    { w: 333, h: 407, ax: 140, ay: 406, mitt: [294, 258] },
+    { w: 308, h: 412, ax: 142, ay: 412, mitt: [238, 123] },
+    { w: 283, h: 410, ax: 139, ay: 410, mitt: [67, 116] },
+    { w: 282, h: 414, ax: 140, ay: 413, mitt: [179, 67] },
+    { w: 284, h: 412, ax: 140, ay: 410, mitt: [172, 150] },
+    { w: 286, h: 406, ax: 138, ay: 404, mitt: [241, 335] },
+    { w: 282, h: 407, ax: 138, ay: 402, mitt: [165, 355] },
+    { w: 284, h: 412, ax: 140, ay: 411, mitt: [101, 131] },
+    { w: 288, h: 414, ax: 142, ay: 412, mitt: [225, 91] },
+    { w: 282, h: 404, ax: 137, ay: 404, mitt: [68, 288] },
+    { w: 282, h: 408, ax: 138, ay: 407, mitt: [62, 180] },
+    { w: 324, h: 406, ax: 139, ay: 406, mitt: [284, 286] },
+    { w: 282, h: 402, ax: 138, ay: 402, mitt: [105, 334] },
+    { w: 330, h: 411, ax: 141, ay: 410, mitt: [289, 132] },
+    { w: 283, h: 436, ax: 141, ay: 436, mitt: [207, 63] },
+    { w: 283, h: 411, ax: 139, ay: 410, mitt: [76, 90] },
+    { w: 340, h: 410, ax: 141, ay: 408, mitt: [300, 185] },
+    { w: 283, h: 409, ax: 139, ay: 408, mitt: [62, 157] },
+    { w: 282, h: 406, ax: 137, ay: 405, mitt: [56, 230] },
+    { w: 284, h: 412, ax: 140, ay: 410, mitt: [170, 174] },
+    { w: 340, h: 408, ax: 140, ay: 407, mitt: [293, 230] },
+    { w: 284, h: 412, ax: 140, ay: 411, mitt: [124, 125] },
+    { w: 282, h: 414, ax: 139, ay: 412, mitt: [192, 131] },
+    { w: 282, h: 414, ax: 140, ay: 412, mitt: [192, 158] },
+    { w: 283, h: 430, ax: 140, ay: 429, mitt: [184, 61] },
+    { w: 283, h: 430, ax: 141, ay: 430, mitt: [207, 79] },
+    { w: 283, h: 410, ax: 139, ay: 409, mitt: [72, 135] },
+    { w: 282, h: 414, ax: 140, ay: 413, mitt: [187, 85] },
+  ] },
   umpire: { h0: 1177, frames: [{ w: 633, h: 1177, ax: 316 }] },
 };
 
@@ -520,15 +565,38 @@ export function drawBatterSprite(ctx, { x, y, scale, facing, uni, now, swingAt, 
 }
 
 // ── 포수 + 심판 (투구 시점). 포수는 제자리, 겨냥 위치는 노란 원으로만 표시 ──
-export function drawCatcherSprite(ctx, V, mitt, now = 0) {
+// 포수 자리: 가운데 자세(0번)의 미트가 존 한가운데에 오게. 키 = 존 높이 * CATCH_H
+// 포수는 홈플레이트 뒤라 원근으로 작아 보여서, 미트는 존보다 MITT_K배 좁게 움직인다(공은 존을 지난 뒤 미트로 마저 날아간다)
+const CATCH_H = 0.95, MITT_K = 0.8;
+function catcherLayout(V) {
+  const c = SETS.catcher, cs = V.zh * CATCH_H / c.h0, f0 = c.frames[0], [mx, my] = toS(V, 0, 0);
+  return { cs, fx: mx - (f0.mitt[0] - f0.ax) * cs, fy: my - (f0.mitt[1] - f0.ay) * cs };
+}
+const mittOf = (L, f) => [L.fx + (f.mitt[0] - f.ax) * L.cs, L.fy + (f.mitt[1] - f.ay) * L.cs];
+function pickMitt(V, L, zx, zy) {                        // 존 좌표(zx, zy)로 갈 공을 받을 미트에 가장 가까운 프레임
+  const [cx, cy] = toS(V, 0, 0), [tx, ty] = toS(V, zx, zy);
+  const wx = cx + (tx - cx) * MITT_K, wy = cy + (ty - cy) * MITT_K;
+  let best = 0, bd = Infinity;
+  SETS.catcher.frames.forEach((f, i) => { const [x, y] = mittOf(L, f), d = (x - wx) ** 2 + (y - wy) ** 2; if (d < bd) { bd = d; best = i; } });
+  return best;
+}
+// 존 좌표로 온 공을 받는 미트의 화면 위치(포수 그림이 없으면 null) — 공이 존을 지나 미트로 들어가는 길에 쓴다
+export function catcherMitt(V, zx, zy) {
+  if (!setReady('catcher')) return null;
+  const L = catcherLayout(V);
+  return mittOf(L, SETS.catcher.frames[pickMitt(V, L, zx, zy)]);
+}
+
+// mitt: 조준 표시(노란 원) 위치, glove: 포수가 미트를 댈 곳(존 좌표, 없으면 가운데 자세)
+export function drawCatcherSprite(ctx, V, mitt, now = 0, glove = null) {
   if (!setReady('catcher', 'umpire')) return false;
-  const base = V.feetY - V.zh * 0.05;
-  const um = SETS.umpire.frames[0], us = (V.zh * 1.35) / um.h;
-  ctx.drawImage(um.img, V.cx + V.zw * 0.3 - um.ax * us, base - V.zh * 0.2 - um.h * us, um.w * us, um.h * us);
-  const c = SETS.catcher.frames[0], cs = (V.zh * 0.86) / c.h;
+  const L = catcherLayout(V), hc = V.zh * CATCH_H;
+  const um = SETS.umpire.frames[0], us = (hc * 1.57) / um.h;   // 심판은 포수 뒤(발이 조금 위)에 서서 포수 머리 위로 본다
+  ctx.drawImage(um.img, V.cx + V.zw * 0.3 - um.ax * us, L.fy - hc * 0.23 - um.h * us, um.w * us, um.h * us);
+  const c = SETS.catcher.frames[glove ? pickMitt(V, L, glove.x, glove.y) : 0];
   const breathe = Math.sin(now / 480) * V.zh * 0.004;
-  ctx.save(); ctx.translate(V.cx, base); shadowAt(ctx, V.zw * 0.6); ctx.restore();
-  ctx.drawImage(c.img, V.cx - c.ax * cs, base - c.h * cs + breathe, c.w * cs, c.h * cs);
+  ctx.save(); ctx.translate(L.fx, L.fy); shadowAt(ctx, V.zw * 0.6); ctx.restore();
+  ctx.drawImage(c.img, L.fx - c.ax * L.cs, L.fy - c.ay * L.cs + breathe, c.w * L.cs, c.h * L.cs);
   if (mitt) {
     const [tx, ty] = toS(V, mitt.x, mitt.y), r = V.zw * 0.16;
     ctx.save();
