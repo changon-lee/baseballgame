@@ -54,18 +54,29 @@ def cutout(path):
     t0, t1 = 18.0, np.median(edge) * 0.55
     A = np.clip((t1 - d) / (t1 - t0), 0, 1)
     gy = ground_line(a) - 6
-    # 바닥: 흰색(바지·신발)만, 그중 세로로 18픽셀 넘게 이어진 것만(분필 선·홈플레이트는 얇다)
+    # 바닥(잔디 띠·흙): 카메라가 서 있어서 바닥은 줄마다 색이 거의 같다. 다리 바깥에서 그 줄의 바닥색(중앙값)을 재고,
+    # 그 색과 확실히 다른 것(흰 바지·신발, 회색 그림자, 금색·검은 밑창)만 남긴다.
+    # 흰 것 중 세로로 얇은 것(분필 선·홈플레이트)은 지우고, 다리가 있는 가로 범위 밖은 다 지운다
     lo, hi = np.minimum(np.minimum(r, g), b), np.maximum(np.maximum(r, g), b)
-    white = (lo > 150) & (hi - lo < 55)
-    W = white[gy:]
+    G = slice(gy - 40, None)
+    legs = np.nonzero((A[gy - 90:gy - 45] > 0.5).any(axis=0))[0]
+    x0, x1 = (legs.min(), legs.max()) if len(legs) else (0, a.shape[1])
+    cols = np.zeros(a.shape[1], bool); cols[max(0, x0 - 220):x1 + 220] = True
+    outside = np.ones(a.shape[1], bool); outside[max(0, x0 - 260):x1 + 260] = False
+    bg = np.median(a[G][:, outside], axis=1)                        # 줄마다 바닥색
+    dist = np.sqrt(((a[G] - bg[:, None, :]) ** 2).sum(axis=2))
+    R, Gr, B = r[G], g[G], b[G]
+    green = (Gr > R + 12) & (Gr > B + 12)                            # 잔디(다리 사이 그늘진 잔디도)
+    brown = (R > B + 30) & (R >= Gr) & (60 * (Gr - B) / np.maximum(R - B, 1) < 33) & ((R - B) / np.maximum(R, 1) > 0.25)   # 흙·흙 그림자(색상 26° 근처, 진하다). 금색 밑창은 40° 넘게 노랗고, 흰 신발은 연하다
+    keep = (dist > 62) & ~green & ~brown & cols[None, :]
+    W = keep                                                          # 세로로 얇은 것(선·홈플레이트·흙 자국)은 지운다
     run = np.zeros_like(W, np.int32)
     for y in range(W.shape[0]): run[y] = (run[y - 1] + 1) * W[y] if y else W[y]
     tall = np.zeros_like(W)
     for y in range(W.shape[0] - 1, -1, -1):          # 아래에서 위로: 이어진 길이를 위쪽 픽셀에도 나눠 준다
-        tall[y] = W[y] & ((run[y] >= 18) | (tall[y + 1] if y + 1 < W.shape[0] else False))
-    A[gy:] = np.where(tall, 1, 0)
-    # 바닥 줄 바로 위 잔디 띠도 흰색이 아니면 지운다
-    A[gy - 40:gy] = np.where(white[gy - 40:gy] | (hi[gy - 40:gy] < 90), A[gy - 40:gy], 0)
+        tall[y] = W[y] & ((run[y] >= 14) | (tall[y + 1] if y + 1 < W.shape[0] else False))
+    keep &= tall
+    A[G] = np.where(keep, np.maximum(A[G], (np.arange(A.shape[0])[G] >= gy)[:, None] * 1.0), 0)
     a[..., 1] = np.minimum(g, np.maximum(r, b))
     im = Image.fromarray(np.dstack([a, A * 255]).round().astype(np.uint8), 'RGBA')
     # 몸·방망이 덩어리만(날아오는 공·떨어진 조각은 지운다)
@@ -74,8 +85,10 @@ def cutout(path):
     comps = components(np.asarray(small) > 100)
     keep = np.zeros(np.asarray(small).shape, bool)
     for c in comps:
-        if len(c) >= max(40, len(comps[0]) * 0.02):
-            ys, xs = zip(*c); keep[ys, xs] = True
+        ys, xs = zip(*c)
+        # 큰 덩어리(몸·방망이)는 남기고, 작은 덩어리는 바닥 근처(몸에서 살짝 떨어져 보이는 신발)만 남긴다. 날아오는 공은 공중이라 지워진다
+        if len(c) >= len(comps[0]) * 0.02 or (len(c) >= 45 and np.mean(ys) * 4 > gy - 150):
+            keep[ys, xs] = True
     big = np.asarray(Image.fromarray(keep.astype(np.uint8) * 255).resize((AA.shape[1], AA.shape[0]))) > 0
     big = np.asarray(Image.fromarray(big.astype(np.uint8) * 255).filter(ImageFilter.MaxFilter(9))) > 0
     AA[~big] = 0; AA[AA < 40] = 0
