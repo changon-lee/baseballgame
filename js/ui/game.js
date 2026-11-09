@@ -204,7 +204,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       if (m.n !== netN) return;
       if (userPitching()) {                                // 내가 던진 공: 상대 타자가 준비되면 서버가 만들어 보낸다
         const start = performance.now() + CONFIG.WIND_USER_MS;
-        ball = { pitch: m.pitch, start, wind: CONFIG.WIND_USER_MS, arrival: start + m.pitch.travelMs, result: null };
+        const pitch = viewPitch(m.pitch);
+        ball = { pitch, start, wind: CONFIG.WIND_USER_MS, arrival: start + pitch.travelMs, result: null };
         mode = 'flight';
       } else {                                             // 와인드업 뒤 날아온다
         netPitch = m.pitch; pitchAt = performance.now() + CONFIG.WIND_CPU_MS; mode = 'bwait';
@@ -322,6 +323,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     target = c.target; pitchType = c.type;
     throwWith(c.gaugePos);
   }
+  // 내가 던진 공은 실제 속도로 날아가 보이게(판정은 이미 끝났거나 서버가 한다. 화면 시간만 바꾼다)
+  const viewPitch = p => ({ ...p, travelMs: p.travelMs * CONFIG.PITCH_VIEW_SPEED / CONFIG.SPEED_SCALE });
   function throwWith(gpos, level = 'easy') {
     if (net) {                                           // 서버로 보내고, 상대 타자가 준비되면 공이 돌아온다
       const mu = matchup(match), sweet = sweetWidth(mu.pitcher.control, mu.fatigue, level), err = gaugeError(gpos);
@@ -334,7 +337,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     }
     const r = playUserPitch(match, { type: pitchType, target, gaugePos: gpos, level }, rng);
     const start = performance.now() + CONFIG.WIND_USER_MS;
-    ball = { pitch: r.pitch, start, wind: CONFIG.WIND_USER_MS, arrival: start + r.pitch.travelMs, result: r };
+    const pitch = viewPitch(r.pitch);
+    ball = { pitch, start, wind: CONFIG.WIND_USER_MS, arrival: start + pitch.travelMs, result: r };
     mode = 'flight';
     lastGauge = { pos: gpos, sweet: r.pitch.sweet, at: performance.now(), q: !r.pitch.onTarget ? 0 : r.pitch.err < r.pitch.sweet * 0.35 ? 2 : 1 };
     const grade = !r.pitch.onTarget ? '<b class="r">타이밍 실패 — 제구가 흔들렸어요</b>'

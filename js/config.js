@@ -1,6 +1,7 @@
 // 조정용 상수 모음
 export const CONFIG = {
-  SPEED_SCALE: 1.6,        // 공 속도 배율(클수록 느리게 날아옴)
+  SPEED_SCALE: 1.6,        // 공 속도 배율(클수록 느리게 날아옴). 내가 칠 때: 실제(150km/h ≈ 0.44초)대로면 폰에서 반응하기 어려워 늦춘다
+  PITCH_VIEW_SPEED: 1.0,   // 내가 던질 때 보이는 공 속도 배율: 칠 일이 없으니 실제 속도로 미트에 꽂힌다(판정과는 상관없다)
   MOUND_DISTANCE_M: 18.44,
   MAX_DT_MS: 50,           // 프레임 간격 상한
   EXTRA_INNINGS: 2,        // 연장 상한 = 설정 이닝 + 2
