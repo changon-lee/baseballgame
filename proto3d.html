@@ -32,6 +32,7 @@ canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
 // 좌표(피트): x = 1루 쪽 +, y = 홈 → 중견수 +, z = 위. 홈플레이트 가운데 = 원점
 import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { makeCamera, drawStadium3D } from './js/ui/art/field3d.js';
 
 const bgc = document.getElementById('bg'), bctx = bgc.getContext('2d');
@@ -92,10 +93,87 @@ new FBXLoader().load('assets/models/pitching.fbx', fbx => {
     prev = v.y;
   }
   mixer.setTime(0);
-  startPitch(performance.now());
+  new GLTFLoader().load('assets/models/player.glb', g => { try { reskin(fbx, g.scene); } catch (e) { console.error(e); } startPitch(performance.now()); },
+    undefined, () => startPitch(performance.now()));
   window.__info = { duration: clip.duration, releaseT, tracks: clip.tracks.length };
   document.getElementById('note').textContent = `Mixamo 투구 동작 · 손가락으로 좌우로 끌면 카메라가 돌아요`;
 }, undefined, e => { document.getElementById('note').textContent = '3D 모델을 못 불러왔어요: ' + (e.message || e); });
+
+// ── 사진으로 만든 3D 선수(움직이는 뼈가 없는 모양만)를 마네킹 뼈대에 붙인다 ──
+// 둘 다 T자 자세라, 크기·위치를 맞춘 뒤 선수 모양의 점마다 가장 가까운 마네킹 점들의 '어느 뼈를 따라 움직이는지'를 옮겨 받는다.
+// 색: 사진 모델엔 색이 없어서 뼈·높이로 유니폼(모자·상의·벨트·바지·양말·신발)과 피부를 나눠 칠한다
+const UNI = { cap: 0x1d4ea1, jersey: 0xf2f2ee, belt: 0x1d4ea1, pants: 0xf2f2ee, socks: 0x1d4ea1, shoes: 0x1b1b1f, skin: 0xe9bc98 };
+function reskin(fbx, glbRoot) {
+  let surf = null; fbx.traverse(o => { if (o.isSkinnedMesh && (!surf || /Surface/.test(o.name))) surf = o; });
+  let gmesh = null; glbRoot.traverse(o => { if (o.isMesh && !gmesh) gmesh = o; });
+  const sk = surf.skeleton;
+  sk.pose(); fbx.parent.updateMatrixWorld(true);
+  const toLocal = new THREE.Matrix4().copy(fbx.matrixWorld).invert();
+  // 마네킹 점(마네킹 자신의 좌표: Y가 위, +Z가 앞, cm)과 뼈 정보
+  const sp = surf.geometry.attributes.position, si = surf.geometry.attributes.skinIndex, sw = surf.geometry.attributes.skinWeight;
+  const N = sp.count, src = new Float32Array(N * 3), v = new THREE.Vector3();
+  const mb = new THREE.Box3();
+  for (let i = 0; i < N; i++) { surf.getVertexPosition(i, v); v.applyMatrix4(surf.matrixWorld).applyMatrix4(toLocal); src.set([v.x, v.y, v.z], i * 3); mb.expandByPoint(v); }
+  // 선수 모양을 마네킹 크기·자리에 맞춘다(키 기준, 발바닥·가운데 맞춤)
+  const g = gmesh.geometry.clone(); g.applyMatrix4(gmesh.matrixWorld);
+  g.computeBoundingBox(); const gb = g.boundingBox;
+  const s = (mb.max.y - mb.min.y) / (gb.max.y - gb.min.y);
+  const gp = g.attributes.position, M = gp.count;
+  const gc = new THREE.Vector3(); gb.getCenter(gc); const mc = new THREE.Vector3(); mb.getCenter(mc);
+  const loc = new Float32Array(M * 3);
+  for (let i = 0; i < M; i++) {
+    loc[i * 3] = (gp.getX(i) - gc.x) * s + mc.x; loc[i * 3 + 1] = (gp.getY(i) - gb.min.y) * s + mb.min.y; loc[i * 3 + 2] = (gp.getZ(i) - gc.z) * s + mc.z;
+  }
+  // 가까운 점 찾기용 격자
+  const CELL = 6, grid = new Map(), key = (x, y, z) => x + ',' + y + ',' + z, cellOf = c => Math.floor(c / CELL);
+  for (let i = 0; i < N; i++) { const k = key(cellOf(src[i * 3]), cellOf(src[i * 3 + 1]), cellOf(src[i * 3 + 2])); let a = grid.get(k); if (!a) grid.set(k, a = []); a.push(i); }
+  const H = mb.max.y - mb.min.y, bones = sk.bones;
+  const bonePos = bones.map(b => { const w = new THREE.Vector3(); b.getWorldPosition(w); return w.applyMatrix4(toLocal); });
+  const boneIdx = n => bones.findIndex(b => b.name.endsWith(n));
+  const skinIndex = new Uint16Array(M * 4), skinWeight = new Float32Array(M * 4), colors = new Float32Array(M * 3), col = new THREE.Color();
+  for (let i = 0; i < M; i++) {
+    const x = loc[i * 3], y = loc[i * 3 + 1], z = loc[i * 3 + 2], cx = cellOf(x), cy = cellOf(y), cz = cellOf(z);
+    let best = [];
+    for (let r = 1; r <= 6 && best.length < 4; r++) {
+      best = [];
+      for (let a = -r; a <= r; a++) for (let b = -r; b <= r; b++) for (let c = -r; c <= r; c++) {
+        const list = grid.get(key(cx + a, cy + b, cz + c)); if (!list) continue;
+        for (const j of list) { const dx = src[j * 3] - x, dy = src[j * 3 + 1] - y, dz = src[j * 3 + 2] - z; best.push([dx * dx + dy * dy + dz * dz, j]); }
+      }
+    }
+    best.sort((p, q) => p[0] - q[0]); best = best.slice(0, 4);
+    const acc = new Map();
+    for (const [d2, j] of best) { const w0 = 1 / (Math.sqrt(d2) + 0.5); for (let k = 0; k < 4; k++) { const bw = sw.getComponent(j, k); if (bw > 0) { const bi = si.getComponent(j, k); acc.set(bi, (acc.get(bi) || 0) + bw * w0); } } }
+    const top = [...acc].sort((p, q) => q[1] - p[1]).slice(0, 4), tot = top.reduce((t, e) => t + e[1], 0) || 1;
+    top.forEach(([bi, w], k) => { skinIndex[i * 4 + k] = bi; skinWeight[i * 4 + k] = w / tot; });
+    // 색
+    const name = top.length ? bones[top[0][0]].name : '', h = (y - mb.min.y) / H;
+    let part;
+    if (/Hand|ForeArm/.test(name)) part = 'skin';
+    else if (/(Left|Right)Arm$/.test(name)) {
+      const a = bonePos[top[0][0]], e = bonePos[boneIdx(name.replace('Arm', 'ForeArm'))];
+      const t = e ? ((x - a.x) * (e.x - a.x) + (y - a.y) * (e.y - a.y) + (z - a.z) * (e.z - a.z)) / a.distanceToSquared(e) : 0;
+      part = t < 0.55 ? 'jersey' : 'skin';
+    }
+    else if (/Shoulder|Spine/.test(name) && h < 0.86) part = 'jersey';      // 어깨 위쪽이 목 높이라 피부로 칠해지던 것
+    else part = h > 0.935 ? 'cap' : h > 0.835 ? 'skin' : h > 0.595 ? 'jersey' : h > 0.575 ? 'belt' : h > 0.25 ? 'pants' : h > 0.085 ? 'socks' : 'shoes';
+    col.setHex(UNI[part]).convertSRGBToLinear(); colors.set([col.r, col.g, col.b], i * 3);
+  }
+  // 마네킹 메시 좌표로 옮겨 같은 뼈대에 묶는다
+  const back = new THREE.Matrix4().copy(surf.matrixWorld).invert().multiply(fbx.matrixWorld);
+  for (let i = 0; i < M; i++) { v.set(loc[i * 3], loc[i * 3 + 1], loc[i * 3 + 2]).applyMatrix4(back); gp.setXYZ(i, v.x, v.y, v.z); }
+  g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(skinIndex, 4));
+  g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(skinWeight, 4));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  g.computeVertexNormals();
+  const mesh = new THREE.SkinnedMesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75 }));
+  mesh.castShadow = true; mesh.frustumCulled = false;
+  surf.parent.add(mesh); mesh.position.copy(surf.position); mesh.quaternion.copy(surf.quaternion); mesh.scale.copy(surf.scale);
+  mesh.updateMatrixWorld(true);
+  mesh.bind(sk, surf.bindMatrix);
+  fbx.traverse(o => { if (o.isSkinnedMesh && o !== mesh) o.visible = false; });
+  window.__reskin = { verts: M, src: N };
+}
 
 // 공
 const ball = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 12), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 }));
