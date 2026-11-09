@@ -41,7 +41,7 @@ for (let i = 0; i < FENCE.length - 1; i++) WALLS.push([FENCE[i], FENCE[i + 1], F
 WALLS.push([poleL, AL, FENCE_H, 'side'], [AL, BL, 5, 'side'], [BR, AR, 5, 'side'], [AR, poleR, FENCE_H, 'side']);
 // 홈 뒤 둥근 관중석 앞 낮은 벽(관중석 아랫단 앞이 5피트 떠 있어서, 카메라 가까이에선 그 틈으로 바깥이 보였다)
 for (const sg of [-1, 1]) {
-  const B = sg < 0 ? BL : BR, aB = Math.atan2(B[0], B[1]) * 180 / Math.PI, arc = range(aB, sg * 150, 6).map(a => polar(a, RB + 0.5));
+  const B = sg < 0 ? BL : BR, aB = Math.atan2(B[0], B[1]) * 180 / Math.PI, arc = range(aB, sg * 180, 6).map(a => polar(a, RB + 0.5));
   for (let i = 0; i < arc.length - 1; i++) WALLS.push([arc[i], arc[i + 1], 5, 'side']);
 }
 
@@ -53,6 +53,7 @@ function makeCam(C, T, F, W, H) {
 }
 const toCam = (K, p) => { const d = sub(p, K.C); return [dot(d, K.r), dot(d, K.u), dot(d, K.f)]; };
 const camToScreen = (K, c) => [K.cx + c[0] / c[2] * K.F, K.cy - c[1] / c[2] * K.F];
+export const makeCamera = makeCam;                      // 투구·타격 3D 시점(proto3d)에서 쓴다
 export function project(K, p) {
   const c = toCam(K, p);
   if (c[2] < NEAR) return null;
@@ -185,7 +186,7 @@ const SIDE = (() => {
     // 홈 뒤 둥근 벽을 따라 카메라 옆까지 더 이어 간다(카메라가 왼쪽·오른쪽 끝을 비출 때 홈 뒤가 텅 비어 보이지 않게)
     const aB = Math.atan2(B[0], B[1]) * 180 / Math.PI, side = pts[pts.length - 1].pr;
     let u = L * ftU;
-    for (const a of range(aB, sg * 150, 6).slice(1)) {
+    for (const a of range(aB, sg * 180, 6).slice(1)) {
       const b = polar(a, RB + 0.5), last = pts[pts.length - 1].b;
       u += Math.hypot(b[0] - last[0], b[1] - last[1]) * ftU;
       pts.push({ b, o: polar(a, 1), pr: side, v: 440, u: sg < 0 ? u % 1 : 1 - u % 1 });
@@ -251,6 +252,7 @@ function drawOuter(ctx, K) {
 }
 // 사진에서 뽑은 흙 결을 바닥에 입힌다: 바닥을 칸으로 나눠 칸마다 무늬를 원근(아핀)에 맞춰 overlay로 칠한다.
 // 아주 멀어서 무늬가 자글거릴 칸은 점점 흐리게, 카메라 뒤로 넘어간 칸은 건너뛴다
+let flatGrain = false;
 const CELL = 45, TEX_FT = 55;                             // 칸 크기(피트), 무늬 한 장(512px)이 덮는 길이(피트)
 function groundGrain(ctx, K, k, clipPts, x0, x1, y0, y1, alpha) {
   const img = groundTexture(k);
@@ -262,8 +264,10 @@ function groundGrain(ctx, K, k, clipPts, x0, x1, y0, y1, alpha) {
     const a = project(K, [x, y, 0]), b = project(K, [x + CELL, y, 0]), c = project(K, [x, y + CELL, 0]), d = project(K, [x + CELL, y + CELL, 0]);
     if (!a || !b || !c || !d || offscreen(K, [a, b, c, d])) continue;
     const du = CELL * tp, m = new DOMMatrix([(b.x - a.x) / du, (b.y - a.y) / du, (c.x - a.x) / du, (c.y - a.y) / du, 0, 0]);
-    const px = Math.sqrt(Math.abs(m.a * m.d - m.b * m.c));      // 무늬 한 칸이 화면에서 몇 픽셀인지
-    const f = Math.min(1, Math.max(0, (px - 0.12) / 0.3));
+    // 무늬 한 칸이 화면에서 몇 픽셀인지. 낮은 카메라(flatGrain)에선 세로로 납작해진 칸이 줄무늬가 되므로 흐리게
+    const px = Math.sqrt(Math.abs(m.a * m.d - m.b * m.c)), la = Math.hypot(m.a, m.b), lc = Math.hypot(m.c, m.d);
+    const flat = flatGrain ? Math.min(1, Math.max(0, (Math.min(la, lc) / Math.max(la, lc) - 0.2) / 0.3)) : 1;
+    const f = Math.min(1, Math.max(0, (px - 0.12) / 0.3)) * flat;
     if (f <= 0) continue;
     m.e = a.x - m.a * x * tp - m.c * y * tp; m.f = a.y - m.b * x * tp - m.d * y * tp;
     pat.setTransform(m);
@@ -444,6 +448,13 @@ function drawSprite(ctx, x, y, s, u, kind, act, ph, since, dir, view) {
     return true;
   }
   return false;
+}
+
+// 경기장만(하늘·땅·벽·관중석). 투구·타격 3D 시점에서 배경으로 쓴다
+export function drawStadium3D(ctx, K) {
+  flatGrain = true;
+  drawSky(ctx, K); drawOuter(ctx, K); drawGround(ctx, K, null); drawWalls(ctx, K); drawStands(ctx, K, '#5b6a80'); drawPoles(ctx, K);
+  flatGrain = false;
 }
 
 // ── 한 장면 그리기 ──
