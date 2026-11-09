@@ -2,11 +2,13 @@
 import { USER_TEAM_ID, getTeam } from '../data/rosters.js';
 import { createSeason, recordRound, recordPostGame, seasonSummary } from './season.js';
 import { createGrowth, gainFromLog, applyGrowth, playerLine } from './growth.js';
+import { fatigueAfterGame, applyFatigue } from './fatigue.js';
 
 const KEY = 'baseball.career.v1';
 const ME = USER_TEAM_ID;
 
-export const newCareer = () => ({ v: 1, nextYear: 2027, season: null, growth: createGrowth(), stats: {}, total: {}, history: [] });
+// day: 지금까지 지난 날 수(경기 한 라운드 = 하루). fatigue: 투수 피로. practice: 오늘 한 연습 횟수
+export const newCareer = () => ({ v: 1, nextYear: 2027, season: null, growth: createGrowth(), stats: {}, total: {}, history: [], day: 0, fatigue: {}, practice: { day: -1, used: 0 } });
 
 export function loadCareer(storage) {
   try {
@@ -24,7 +26,9 @@ export function saveCareer(storage, c) {
 }
 
 export const userTeamNow = c => applyGrowth(getTeam(ME), c.growth);
-const teamGetter = c => id => (id === ME ? userTeamNow(c) : getTeam(id));
+// 경기에 나가는 우리 팀: 성장 + 투수 피로 반영
+export const userTeamTired = c => applyFatigue(userTeamNow(c), c);
+const teamGetter = c => id => (id === ME ? userTeamTired(c) : getTeam(id));
 
 export function startSeason(c, { cycles, innings }) {
   return { ...c, season: createSeason({ cycles, innings, year: c.nextYear }), stats: {} };
@@ -52,7 +56,8 @@ export function applyUserGame(c, result, rng, { userLineup, userStarterId } = {}
   const { growth, ups } = gainFromLog(c.growth, log, ME);
   const stats = mineOnly(playerLine(c.stats, log));
   const total = mineOnly(playerLine(c.total, log));
-  return { career: { ...c, season, growth, stats, total }, ups, game: game && { ...game, log: undefined } };
+  const fatigue = mine ? fatigueAfterGame(c, log, ME) : c.fatigue;   // 오늘 던진 투수는 쉬어야 한다
+  return { career: { ...c, season, growth, stats, total, fatigue, day: c.day + 1 }, ups, game: game && { ...game, log: undefined } };
 }
 
 export const applyAutoGame = (c, rng, opts) => applyUserGame(c, null, rng, opts);

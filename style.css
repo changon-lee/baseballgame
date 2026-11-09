@@ -251,3 +251,13 @@ button.danger{color:var(--red)}
 .vs-join input{flex:1;min-width:0;min-height:48px;border-radius:12px;border:1px solid var(--line2);background:rgba(0,0,0,.28);color:var(--fg);font-size:22px;font-weight:800;letter-spacing:.2em;text-align:center}
 .vs-join button{flex:0 0 auto;padding:0 18px}
 .vs-err{color:#ff8a80}
+
+/* 연습장 · 투수 피로 */
+.seg button:has(.xp){padding:6px 6px;min-height:46px}
+.xp.wide{width:80%;margin:5px auto 0}
+.fbar{display:block;width:84px;height:6px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden}
+.fbar>i{display:block;height:100%;background:linear-gradient(90deg,#f2c14e,#ff6b5e)}
+.chip .tired,.ps .tired{color:#ff9d8f}
+.chip .fresh,.ps b.fresh{color:var(--green)}
+.pn em{font-style:normal;color:#ff9d8f}
+.prow.cond{grid-template-columns:1fr auto 70px}

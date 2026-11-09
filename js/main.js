@@ -3,10 +3,11 @@ import { USER_TEAM_ID, getTeam } from './data/rosters.js';
 import { loadLineup } from './core/team.js';
 import { createRng } from './core/rng.js';
 import { nextUserGame, nextStarter } from './core/season.js';
-import { newCareer, loadCareer, saveCareer, startSeason, applyUserGame, applyAutoGame, finishSeason, userTeamNow } from './core/career.js';
+import { newCareer, loadCareer, saveCareer, startSeason, applyUserGame, applyAutoGame, finishSeason, userTeamNow, userTeamTired } from './core/career.js';
+import { PRACTICE, applyPractice } from './core/practice.js';
 import { showMenu } from './ui/menu.js';
 import { showLineup } from './ui/lineup.js';
-import { showHub, showResult } from './ui/hub.js';
+import { showHub, showResult, showPracticeResult } from './ui/hub.js';
 import './ui/art/sprites.js';   // 경기 그림을 홈 화면에서 미리 불러 둔다
 import './ui/art/stadium.js';
 
@@ -50,6 +51,7 @@ function hub() {
       finish: () => { career = finishSeason(career); hubCtx.tab = 'records'; persist(); hub(); },
       lineup: () => showLineup(app, userTeamNow(career), storage, lineup, l => { lineup = l; hub(); }),
       exhibition: () => exhibitionMenu(),
+      practice: (kind, playerId, stat) => playPractice(kind, playerId, stat),
       versus: () => versusMenu(),
       reset: () => { career = newCareer(); hubCtx.tab = 'home'; persist(); hub(); },
     },
@@ -71,6 +73,26 @@ async function loadGame() {
   try { return await import('./ui/game.js'); } catch (e) { return null; }
 }
 
+// 연습장: 투구 연습은 내가 던지고, 타격 연습은 내가 친다. 정해진 공 수를 채우면 경험치가 쌓인다
+async function playPractice(kind, playerId, stat) {
+  const mod = await loadGame();
+  if (!mod) return hub();
+  const team = userTeamNow(career), base = loadLineup(storage, team);
+  const player = kind === 'pitch' ? team.pitchers.find(p => p.id === playerId) : team.batters.find(b => b.id === playerId);
+  if (!player) return hub();
+  const lu = kind === 'pitch' ? { ...base, starterId: playerId } : { ...base, order: Array(9).fill(playerId) };
+  mod.showGame(app, {
+    userTeam: team, cpuTeam: getTeam('lg'), lineup: lu, innings: 99, title: `${kind === 'pitch' ? '투구' : '타격'} 연습장 · ${player.name}`,
+    practice: { kind, playerId, stat, goal: PRACTICE.goal },
+  }, result => {
+    const pr = result && result.practice;
+    if (!pr) return hub();
+    const r = applyPractice(career, pr);
+    career = r.career; persist();
+    showPracticeResult(app, { career, kind, playerId, stat, n: pr.n, pts: pr.pts, xp: r.xp, ups: r.ups, saved: r.xp > 0 }, () => { hubCtx.tab = 'practice'; hub(); });
+  });
+}
+
 async function playSeasonGame(starterId) {
   const s = career.season, g = nextUserGame(s);
   const mod = await loadGame();
@@ -78,7 +100,7 @@ async function playSeasonGame(starterId) {
   const opp = getTeam(g.opponentId);
   const sid = starterId || nextStarter(s, USER_TEAM_ID);
   mod.showGame(app, {
-    userTeam: userTeamNow(career), cpuTeam: opp, lineup: { ...lineup, starterId: sid },
+    userTeam: userTeamTired(career), cpuTeam: opp, lineup: { ...lineup, starterId: sid },
     innings: s.innings, cpuStarterId: nextStarter(s, opp.id), title: g.label,
   }, result => {
     if (!result) return hub();

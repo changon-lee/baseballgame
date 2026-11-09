@@ -1,8 +1,10 @@
 // 시즌 허브: 홈(다음 경기) · 순위 · 선수 · 기록 탭, 새 시즌 설정, 경기 결과 화면
 import { USER_TEAM_ID, getTeam } from '../data/rosters.js';
 import { standings, nextUserGame, nextStarter } from '../core/season.js';
-import { userTeamNow } from '../core/career.js';
+import { userTeamNow, userTeamTired } from '../core/career.js';
 import { avg, era, ip } from '../core/growth.js';
+import { PRACTICE, PRACTICE_STATS, practiceLeft } from '../core/practice.js';
+import { loadNow, daysToRecover } from '../core/fatigue.js';
 
 const ME = USER_TEAM_ID;
 const STAT_KO = { power: '파워', contact: '컨택', eye: '선구안', control: '제구', stamina: '체력', velo: '구속' };
@@ -16,7 +18,7 @@ const teamName = id => getTeam(id).short;
 const pct = x => x.toFixed(3).replace(/^0/, '');
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-// ctx: { career, saveOk, tab, setup:{cycles,innings}, on:{ startSeason, play, auto, autoMany, finish, lineup, exhibition, versus, reset } }
+// ctx: { career, saveOk, tab, setup:{cycles,innings}, pr:{ pitchId, pitchStat, batId, batStat }, on:{ startSeason, play, auto, autoMany, finish, lineup, exhibition, versus, practice, reset } }
 export function showHub(root, ctx) {
   let tab = ctx.tab || 'home';
   const render = () => {
@@ -30,10 +32,10 @@ export function showHub(root, ctx) {
           <div class="hero-text"><h1>삼성 라이온즈</h1>${recordLine(c)}</div>
         </div>
       </header>
-      <main class="tab-body">${tab === 'home' ? homeTab(c) : tab === 'table' ? tableTab(c) : tab === 'players' ? playersTab(c) : recordsTab(c)}</main>
+      <main class="tab-body">${tab === 'home' ? homeTab(c) : tab === 'table' ? tableTab(c) : tab === 'players' ? playersTab(c) : tab === 'practice' ? practiceTab(c) : recordsTab(c)}</main>
       ${ctx.saveOk === false ? '<p class="note center">이 브라우저에서는 저장이 안 돼요. 창을 닫으면 진행이 사라져요.</p>' : ''}
     </div>
-    <nav class="tabbar">${[['home', '홈', '⌂'], ['table', '순위', '≡'], ['players', '선수', '◔'], ['records', '기록', '★']].map(([k, l, i]) =>
+    <nav class="tabbar">${[['home', '홈', '⌂'], ['table', '순위', '≡'], ['players', '선수', '◔'], ['practice', '연습', '✦'], ['records', '기록', '★']].map(([k, l, i]) =>
       `<button data-tab="${k}" class="${tab === k ? 'on' : ''}"><span>${i}</span>${l}</button>`).join('')}</nav>`;
     bind();
   };
@@ -64,7 +66,7 @@ export function showHub(root, ctx) {
       </section>${post}`;
     }
     const opp = getTeam(g.opponentId);
-    const team = userTeamNow(c);
+    const team = userTeamTired(c);
     const sps = team.pitchers.filter(p => p.role === 'SP');
     const starter = ctx.starterId && sps.some(p => p.id === ctx.starterId) ? ctx.starterId : nextStarter(s, ME);
     ctx.starterId = starter;
@@ -79,7 +81,7 @@ export function showHub(root, ctx) {
       </div>
       <div class="probables"><span>상대 선발 <b>${oppSp.name}</b> <small>${oppSp.velo}km · 제구 ${oppSp.control}</small></span></div>
       <div class="label">우리 선발</div>
-      <div class="chips">${sps.map(p => `<button class="chip ${p.id === starter ? 'on' : ''}" data-sp="${p.id}">${esc(p.name)}<small>${p.velo}km · 제구 ${p.control}</small></button>`).join('')}</div>
+      <div class="chips">${sps.map(p => `<button class="chip ${p.id === starter ? 'on' : ''}" data-sp="${p.id}">${esc(p.name)}<small>${p.velo}km · 제구 ${p.control}</small>${tiredTag(c, p.id)}</button>`).join('')}</div>
       <div class="actions">
         <button class="primary big" data-act="play">경기 시작</button>
         <button class="ghost" data-act="auto">자동 진행</button>
@@ -178,6 +180,45 @@ export function showHub(root, ctx) {
     </section>`;
   }
 
+  // ── 연습 탭 ──
+  const tiredTag = (c, id) => { const L = loadNow(c, id); return L > 0 ? `<small class="tired">피로 ${Math.round(L * 100)}% · 회복 ${daysToRecover(L)}일</small>` : '<small class="fresh">컨디션 최상</small>'; };
+  function practiceTab(c) {
+    const team = userTeamNow(c), tired = userTeamTired(c), left = practiceLeft(c), pr = ctx.pr = ctx.pr || {};
+    const pit = team.pitchers.find(p => p.id === pr.pitchId) || team.pitchers.find(p => p.role === 'SP');
+    const bat = team.batters.find(b => b.id === pr.batId) || team.batters[0];
+    const pStat = PRACTICE_STATS.pitch.includes(pr.pitchStat) ? pr.pitchStat : 'control';
+    const bStat = PRACTICE_STATS.bat.includes(pr.batStat) ? pr.batStat : 'contact';
+    pr.pitchId = pit.id; pr.pitchStat = pStat; pr.batId = bat.id; pr.batStat = bStat;
+    const xpOf = (id, stat) => Math.min(100, ((c.growth.xp[id] || {})[stat] || 0) / 12 * 100);
+    const statBtns = (who, stats, cur, attr) => `<div class="seg">${stats.map(k => `<button data-${attr}="${k}" class="${cur === k ? 'on' : ''}">${STAT_KO[k]} ${who[k]}<i class="xp wide"><i style="width:${xpOf(who.id, k)}%"></i></i></button>`).join('')}</div>`;
+    const dis = left <= 0 ? ' disabled' : '';
+    return `<section class="card">
+      <div class="card-h">연습장<span class="pill">오늘 ${left}/${PRACTICE.perDay}회 남음</span></div>
+      <p class="hint">${PRACTICE.goal}구를 채우면 고른 선수의 능력치 경험치가 쌓여요. 잘 던지고 잘 칠수록 더 많이 쌓여요. 경기를 하루 치르면 연습 횟수가 다시 채워져요.</p>
+    </section>
+    <section class="card">
+      <div class="card-h">투구 연습장</div>
+      <div class="label">연습할 투수</div>
+      <div class="chips">${team.pitchers.map(p => `<button class="chip ${p.id === pit.id ? 'on' : ''}" data-pp="${p.id}">${esc(p.name)}<small>${p.role === 'SP' ? '선발' : '불펜'} · ${p.velo}km · 제구 ${p.control}</small></button>`).join('')}</div>
+      <div class="label">올릴 능력치</div>${statBtns(pit, PRACTICE_STATS.pitch, pStat, 'ps')}
+      <div class="actions"><button class="primary big" data-act="pitchprac"${dis}>${left > 0 ? `투구 연습 시작 · ${PRACTICE.goal}구` : '오늘은 그만 쉬어요'}</button></div>
+    </section>
+    <section class="card">
+      <div class="card-h">타격 연습장</div>
+      <div class="label">연습할 타자</div>
+      <div class="chips">${team.batters.map(b => `<button class="chip ${b.id === bat.id ? 'on' : ''}" data-pb="${b.id}">${esc(b.name)}<small>${b.pos} · 파워 ${b.power} · 컨택 ${b.contact}</small></button>`).join('')}</div>
+      <div class="label">올릴 능력치</div>${statBtns(bat, PRACTICE_STATS.bat, bStat, 'bs')}
+      <div class="actions"><button class="primary big" data-act="batprac"${dis}>${left > 0 ? `타격 연습 시작 · ${PRACTICE.goal}구` : '오늘은 그만 쉬어요'}</button></div>
+    </section>
+    <section class="card flush"><div class="card-h pad">투수 컨디션</div>
+      ${tired.pitchers.map(p => { const L = loadNow(c, p.id); return `<div class="prow cond">
+        <div class="pn"><b>${esc(p.name)}</b><small>${p.role === 'SP' ? '선발' : '불펜'} · 체력 ${p.stamina}${L ? ` <em>(−${Math.round(0.4 * L * 100)}%)</em>` : ''}</small></div>
+        <i class="fbar"><i style="width:${Math.round(L * 100)}%"></i></i>
+        <div class="ps">${L ? `<b>${Math.round(L * 100)}%</b><small>회복 ${daysToRecover(L)}일</small>` : '<b class="fresh">최상</b>'}</div></div>`; }).join('')}
+      <div class="legend">던진 투수는 다음 경기에도 지친 채로 나오고, 3일이 지나야 완전히 회복해요</div>
+    </section>`;
+  }
+
   // ── 기록 탭 ──
   function recordsTab(c) {
     const h = c.history;
@@ -196,6 +237,10 @@ export function showHub(root, ctx) {
     root.querySelectorAll('[data-cyc]').forEach(b => { b.onclick = () => { ctx.setup.cycles = +b.dataset.cyc; render(); }; });
     root.querySelectorAll('[data-inn]').forEach(b => { b.onclick = () => { ctx.setup.innings = +b.dataset.inn; render(); }; });
     root.querySelectorAll('[data-sp]').forEach(b => { b.onclick = () => { ctx.starterId = b.dataset.sp; render(); }; });
+    root.querySelectorAll('[data-pp]').forEach(b => { b.onclick = () => { ctx.pr.pitchId = b.dataset.pp; render(); }; });
+    root.querySelectorAll('[data-pb]').forEach(b => { b.onclick = () => { ctx.pr.batId = b.dataset.pb; render(); }; });
+    root.querySelectorAll('[data-ps]').forEach(b => { b.onclick = () => { ctx.pr.pitchStat = b.dataset.ps; render(); }; });
+    root.querySelectorAll('[data-bs]').forEach(b => { b.onclick = () => { ctx.pr.batStat = b.dataset.bs; render(); }; });
     root.querySelectorAll('[data-sv]').forEach(b => { b.onclick = () => { ctx.statView = b.dataset.sv; render(); }; });
     const on = ctx.on;
     const act = (name, fn) => root.querySelectorAll(`[data-act=${name}]`).forEach(b => { b.onclick = fn; });
@@ -207,9 +252,29 @@ export function showHub(root, ctx) {
     act('lineup', () => on.lineup());
     act('exhibition', () => on.exhibition());
     act('versus', () => on.versus());
+    act('pitchprac', () => on.practice('pitch', ctx.pr.pitchId, ctx.pr.pitchStat));
+    act('batprac', () => on.practice('bat', ctx.pr.batId, ctx.pr.batStat));
     act('reset', () => { if (confirm('지금까지의 시즌·성장·기록이 모두 지워져요. 처음부터 할까요?')) on.reset(); });
   }
   render();
+}
+
+// 연습 결과 화면
+export function showPracticeResult(root, { career, kind, playerId, stat, n, pts, xp, ups, saved }, onDone) {
+  const team = userTeamNow(career);
+  const who = (team.batters.find(b => b.id === playerId) || team.pitchers.find(p => p.id === playerId) || {}).name || playerId;
+  const cur = Math.round(((career.growth.xp[playerId] || {})[stat] || 0) / 12 * 100);
+  root.innerHTML = `<div class="screen result">
+    <div class="eyebrow center">${kind === 'pitch' ? '투구 연습장' : '타격 연습장'}</div>
+    <h1 class="res win">연습 끝!</h1>
+    <p class="hint center">${esc(who)} · ${n}구 · 연습 점수 ${pts.toFixed(1)}</p>
+    ${saved ? `<section class="card"><div class="card-h">${STAT_KO[stat]} 경험치 +${xp.toFixed(1)}</div>
+      <i class="xp wide"><i style="width:${cur}%"></i></i>
+      ${ups.length ? `<div class="ups"><div><b>${esc(who)}</b><span>${STAT_KO[stat]} <em>+${ups[0].n}${stat === 'velo' ? 'km' : ''}</em></span></div></div>` : `<p class="hint">다음 성장까지 ${cur}% 찼어요</p>`}</section>`
+      : '<p class="hint center">오늘 연습 횟수를 다 써서 경험치는 쌓이지 않았어요</p>'}
+    <div class="actions"><button class="primary big" id="ok">확인</button></div>
+  </div>`;
+  root.querySelector('#ok').onclick = onDone;
 }
 
 // 경기 결과 화면

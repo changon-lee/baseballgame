@@ -5,6 +5,7 @@ import { PITCH_TYPES, gaugePos, gaugeError, sweetWidth, gaugePeriod, energy, aim
 import { availableRelievers } from '../core/team.js';
 import { createMatch, matchup, playUserPitch, cpuPitchToUser, resolveUserSwing, changePitcher, cpuMaybeChangePitcher, simulateHalf, simulateInning, lastPitch, simulateRest, applyDecision } from '../core/match.js';
 import { cpuChoosePitch, cpuSwing } from '../core/ai.js';
+import { pitchPts, swingPts } from '../core/practice.js';
 import { batReach } from '../core/batting.js';
 import { loadPrefs, savePrefs, LEVELS, LEVEL_NAME } from './prefs.js';
 import { startLoop } from './loop.js';
@@ -57,11 +58,16 @@ function goFullscreen() {
   } catch (e) { /* 허락 안 됨 */ }
 }
 
-export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterId, title, net = null, cpuLineup = null }, onExit) {
+// practice(연습장): { kind: 'pitch'|'bat', playerId, stat, goal } — 아웃·이닝 없이 goal구를 채우면 onExit({ practice: { kind, playerId, stat, n, pts } })
+export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterId, title, net = null, cpuLineup = null, practice = null }, onExit) {
   goFullscreen();
   const rng = createRng((Date.now() ^ (Math.random() * 1e9)) >>> 0);
   setReleaseOverride(spriteReleaseOffset);
   let match = createMatch({ userTeam, cpuTeam, userLineup: lineup, innings, rng, cpuStarterId, cpuLineup });
+  if (practice) {                                    // 타격 연습은 내가 말 공격으로 시작한다
+    practice = { ...practice, n: 0, pts: 0 };
+    if (practice.kind === 'bat') match = { ...match, game: { ...match.game, half: 'bottom' } };
+  }
   const mySide = net ? net.side : 'home';
   let netN = 0, netIdle = false, netPitch = null, netQ = [];
   const uni = { home: uniformFor(userTeam, 'home'), away: uniformFor(cpuTeam, 'away') };
@@ -132,7 +138,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     root.querySelectorAll('.bases i').forEach((el, i) => el.classList.toggle('on', !!g.bases[i]));
     const dots = (cls, n, max) => Array.from({ length: max }, (_, i) => `<i class="${cls}${i < n ? ' on' : ''}"></i>`).join('');
     $('.bso').innerHTML = `<div><em>B</em>${dots('b', g.balls, 3)}</div><div><em>S</em>${dots('s', g.strikes, 2)}</div><div><em>O</em>${dots('o', g.outs, 2)}</div>`;
-    $('.mu').innerHTML = `<b>${mu.pitcher.name}</b> <small>${match.pitchCount[mu.pitchingSide]}구</small> <span class="vs">vs</span> <small>${g.battingIndex[mu.battingSide] + 1}번</small> <b>${mu.batter.name}</b>`;
+    $('.mu').innerHTML = practice ? `<b>${mu.pitcher.name}</b> <span class="vs">vs</span> <b>${mu.batter.name}</b> <small>· 연습 ${practice.n}/${practice.goal}구</small>`
+      : `<b>${mu.pitcher.name}</b> <small>${match.pitchCount[mu.pitchingSide]}구</small> <span class="vs">vs</span> <small>${g.battingIndex[mu.battingSide] + 1}번</small> <b>${mu.batter.name}</b>`;
   }
   const setControls = html => { controls.innerHTML = html; if (!['aim', 'pick'].includes(mode)) hideBullpenChip(); };
   function showMsg(text, color, ms, sub, then) {
@@ -237,6 +244,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
 
   // 투수 교체 칩: 내가 던질 차례(조준·구종 고르기)에 투수 왼쪽에 뜬다(구종 칩은 오른쪽)
   function showBullpenChip() {
+    if (practice) return;
     if (sidePick.childElementCount) return placeSidePick();
     sidePick.innerHTML = '<button data-act="bullpen" style="--i:0"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h11l-3-3M17 17H6l3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></i><b>투수 교체</b></button>';
     sidePick.querySelector('button').onclick = () => { if (['aim', 'pick'].includes(mode)) showBullpen(); };
@@ -445,6 +453,10 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   function settle(prev, r, userPitched) {
     hold = matchup(match);
     match = r.match;
+    if (practice) {                                     // 연습: 점수를 쌓고, 아웃·주자·이닝은 매번 되돌린다
+      practice.n++; practice.pts += userPitched ? pitchPts(ball.pitch) : swingPts(r.contact);
+      match = { ...match, game: { ...match.game, inning: 1, half: practice.kind === 'pitch' ? 'top' : 'bottom', outs: 0, bases: [false, false, false], score: { away: 0, home: 0 }, over: false, result: null }, pitchCount: { home: 0, away: 0 } };
+    }
     if (r.chk && r.chk !== checkOf(match)) console.warn('경기 상태가 서버와 달라요', r.chk, checkOf(match));
     let label = (r.style && STYLE_LABEL[r.style]) || LABEL[r.event] || (r.fly ? '뜬공 아웃' : '땅볼 아웃');
     if (r.event === 'STRIKE' && prev.strikes === 2) { label = '삼진!'; playSound('strikeout'); }
@@ -453,11 +465,12 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     crowd(prev, r, userPitched);
     const good = userPitched ? (r.event === 'STRIKE' || OUTS.includes(r.event)) : (HITS.includes(r.event) || FREE.includes(r.event));
     const color = r.event === 'FOUL' ? '#ffffff' : good ? '#2ecc71' : '#e74c3c';
-    const sub = (r.runs ? `${r.runs}점 득점! · ` : '') + info;
+    const sub = (r.runs && !practice ? `${r.runs}점 득점! · ` : '') + info;
     const g = match.game;
     const halfOver = !g.over && (g.half !== prev.half || g.inning !== prev.inning);
     updateBoard();
     showMsg(label, color, r.event === 'HR' ? 2000 : 1300, sub, () => {
+      if (practice && practice.n >= practice.goal) return finishPractice();
       if (match.game.over) return showEnd();
       if (halfOver) {
         play = null; ball = null;
@@ -488,6 +501,19 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     if (name === 'mitt') return playSound('catch');
     if (name === 'cheer') return playSound(shownMu().battingSide === mySide ? 'jingle' : 'aww');
     playSound(name);
+  }
+
+  // 연습 끝: 요약을 보여 주고, 확인을 누르면 결과를 넘긴다
+  function finishPractice() {
+    mode = 'end'; $('.more').hidden = true; hold = null; ball = null; play = null;
+    overlay.innerHTML = `<div class="end-card win">
+      <div class="tag">${practice.kind === 'pitch' ? '투구' : '타격'} 연습 끝</div><h1>${practice.n}구 완료</h1>
+      <p class="hint" style="text-align:center">연습 점수 ${practice.pts.toFixed(1)}</p>
+      <button class="primary" data-act="menu">경험치 받기</button></div>`;
+    overlay.classList.remove('hidden');
+    overlay.querySelector('[data-act=menu]').onclick = () => exit({ practice: { kind: practice.kind, playerId: practice.playerId, stat: practice.stat, n: practice.n, pts: practice.pts } });
+    playSound('jingle');
+    setControls('');
   }
 
   function showEnd() {
@@ -598,10 +624,11 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     overlay.querySelector('[data-act=ok]').onclick = onClose;
   }
   $('.more').onclick = showMenu;
+  if (practice) $('.more').hidden = true;
 
   $('.exit').onclick = () => {
     if (mode === 'end') { const b = overlay.querySelector('[data-act=menu]'); return b ? b.click() : showEnd(); }
-    if (confirm(net ? '대결을 그만둘까요? 상대 화면에서도 경기가 끝나요' : '경기를 그만둘까요? (시즌 경기는 기록되지 않고 다시 할 수 있어요)')) exit();
+    if (confirm(net ? '대결을 그만둘까요? 상대 화면에서도 경기가 끝나요' : practice ? '연습을 그만둘까요? (중간에 나가면 경험치가 쌓이지 않아요)' : '경기를 그만둘까요? (시즌 경기는 기록되지 않고 다시 할 수 있어요)')) exit();
   };
 
   // 화면이 가려지면 던지던 공을 취소하고 다시 던진다(순간이동 방지)

@@ -19,6 +19,13 @@ function add(gr, id, stat, amount, ups) {
   return { xp: { ...gr.xp, [id]: xp }, delta: { ...gr.delta, [id]: delta } };
 }
 
+// 한 선수의 한 능력치에 경험치를 직접 쌓는다 (연습장). 오른 만큼은 ups로
+export function gainXp(growth, id, stat, amount) {
+  const ups = [], gr = add(growth || createGrowth(), id, stat, amount, ups);
+  const n = ups.length;
+  return { growth: gr, ups: n ? [{ id, stat, n }] : [] };
+}
+
 export function gainFromLog(growth, log, teamId) {
   let gr = growth || createGrowth();
   const ups = [], mine = id => id.startsWith(teamId + '-');
