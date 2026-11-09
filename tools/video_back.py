@@ -3,7 +3,7 @@
 사용법: python -I tools/video_back.py <영상 폴더(assets/raw)> <작업 폴더>
 결과: assets/sprites/batter_back_*.webp, batter_back_idle_*.webp, 마지막 줄에 JSON(sprites.js의 SETS·IDLE에 옮긴다)
   - 영상은 초록 벽 앞이지만 바닥(잔디 띠·흙·타석 선·홈플레이트)이 같이 찍혀 있다.
-    바닥 줄(초록 벽이 끝나는 높이) 아래에서는 흰색(바지·신발)만 남기고, 세로로 얇은 흰 것(분필 선·홈플레이트)은 지운다
+    바닥 줄(초록 벽이 끝나는 높이) 아래는 rembg(isnet-general-use) 사람 마스크로 자른다(필요: pip install "rembg[cpu]")
   - 영상 속 타자는 오른손 타자이고, 투수는 화면 왼쪽 앞에 있다(공이 왼쪽에서 날아온다). 그래서 그림은 왼쪽(투수 쪽)을 본다
   - 프레임 번호(24fps): 1 준비, 17~49 다리 들고 내딛기, 57 내딛은 자세, 61~67 스윙, 68 임팩트(방망이가 몸 왼쪽 앞으로 나온 순간), 69~ 팔로스루
   - 기다리는 동작: batter_back_idle_g의 앞부분(1~47, 두 장마다)을 갔다가 되돌아오게 반복한다
@@ -46,6 +46,13 @@ def ground_line(a):
     return int(np.nonzero(row < wall * 0.5)[0][0])
 
 
+def rembg_mask(path):
+    from rembg import remove, new_session
+    global _session
+    if '_session' not in globals(): _session = new_session('isnet-general-use')
+    return remove(Image.open(path).convert('RGB'), session=_session, only_mask=True)
+
+
 def cutout(path):
     a = np.asarray(Image.open(path).convert('RGB')).astype(np.float32)
     r, g, b = a[..., 0], a[..., 1], a[..., 2]
@@ -54,29 +61,12 @@ def cutout(path):
     t0, t1 = 18.0, np.median(edge) * 0.55
     A = np.clip((t1 - d) / (t1 - t0), 0, 1)
     gy = ground_line(a) - 6
-    # 바닥(잔디 띠·흙): 카메라가 서 있어서 바닥은 줄마다 색이 거의 같다. 다리 바깥에서 그 줄의 바닥색(중앙값)을 재고,
-    # 그 색과 확실히 다른 것(흰 바지·신발, 회색 그림자, 금색·검은 밑창)만 남긴다.
-    # 흰 것 중 세로로 얇은 것(분필 선·홈플레이트)은 지우고, 다리가 있는 가로 범위 밖은 다 지운다
-    lo, hi = np.minimum(np.minimum(r, g), b), np.maximum(np.maximum(r, g), b)
-    G = slice(gy - 40, None)
-    legs = np.nonzero((A[gy - 90:gy - 45] > 0.5).any(axis=0))[0]
-    x0, x1 = (legs.min(), legs.max()) if len(legs) else (0, a.shape[1])
-    cols = np.zeros(a.shape[1], bool); cols[max(0, x0 - 220):x1 + 220] = True
-    outside = np.ones(a.shape[1], bool); outside[max(0, x0 - 260):x1 + 260] = False
-    bg = np.median(a[G][:, outside], axis=1)                        # 줄마다 바닥색
-    dist = np.sqrt(((a[G] - bg[:, None, :]) ** 2).sum(axis=2))
-    R, Gr, B = r[G], g[G], b[G]
-    green = (Gr > R + 12) & (Gr > B + 12)                            # 잔디(다리 사이 그늘진 잔디도)
-    brown = (R > B + 30) & (R >= Gr) & (60 * (Gr - B) / np.maximum(R - B, 1) < 33) & ((R - B) / np.maximum(R, 1) > 0.25)   # 흙·흙 그림자(색상 26° 근처, 진하다). 금색 밑창은 40° 넘게 노랗고, 흰 신발은 연하다
-    keep = (dist > 62) & ~green & ~brown & cols[None, :]
-    W = keep                                                          # 세로로 얇은 것(선·홈플레이트·흙 자국)은 지운다
-    run = np.zeros_like(W, np.int32)
-    for y in range(W.shape[0]): run[y] = (run[y - 1] + 1) * W[y] if y else W[y]
-    tall = np.zeros_like(W)
-    for y in range(W.shape[0] - 1, -1, -1):          # 아래에서 위로: 이어진 길이를 위쪽 픽셀에도 나눠 준다
-        tall[y] = W[y] & ((run[y] >= 14) | (tall[y + 1] if y + 1 < W.shape[0] else False))
-    keep &= tall
-    A[G] = np.where(keep, np.maximum(A[G], (np.arange(A.shape[0])[G] >= gy)[:, None] * 1.0), 0)
+    # 바닥(잔디 띠·흙·분필 선·홈플레이트)은 색으로 가르기 어려워서(흰 신발·회색 그늘·금색 밑창이 같이 지워진다),
+    # 바닥 줄 아래는 사람 누끼 모델(rembg isnet)의 마스크를 쓴다. 위쪽은 초록 벽 크로마키 그대로, 경계 30줄은 섞는다
+    M = np.asarray(rembg_mask(path)).astype(np.float32) / 255
+    ys = np.arange(A.shape[0])[:, None]
+    w = np.clip((ys - (gy - 30)) / 30, 0, 1)
+    A = A * (1 - w) + M * w
     a[..., 1] = np.minimum(g, np.maximum(r, b))
     im = Image.fromarray(np.dstack([a, A * 255]).round().astype(np.uint8), 'RGBA')
     # 몸·방망이 덩어리만(날아오는 공·떨어진 조각은 지운다)

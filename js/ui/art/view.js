@@ -10,7 +10,7 @@ export function makeView(kind, W, H) {
     // 타자 등 뒤 카메라(컴투스 프로야구 같은 구도): 타자는 가까워서 크게 화면 옆에(뒷모습), 투수는 멀리 가운데 작게, 홈플레이트는 아래쪽
     const zw = Math.min(W * 0.36, H * 0.24), zh = zw * 1.2, cy = H * 0.62;
     return { kind, W, H, zw, zh, cx: W / 2, cy, mirror: false, d0: 18.5, d1: 4.5, brk: 1.2, screenBreak: true,
-      feetY: cy + zh * 1.15, figH: zh * 2.25, batX: 1.15, moundY: cy - zh * 1.05, pitX: W / 2, pitY: cy - zh * 1.05, pitS: zh * 0.72 / 180 };
+      feetY: cy + zh * 1.15, figH: zh * 2.25, batX: 1.85, moundY: cy - zh * 1.05, pitX: W / 2, pitY: cy - zh * 1.05, pitS: zh * 0.72 / 180 };
   }
   // 투구 시점: 투수는 카메라 바로 앞이라 크게, 멀리 있는 타자·포수·심판은 작게
   // 타자는 크게(존이 타자 무릎~가슴 높이쯤에 오도록). zw·zh는 좌표 단위(포수·공 크기 기준)이고, 그려지는 존은 ZONE_K배
@@ -41,12 +41,13 @@ export function releasePoint(V, throws) {
   return [a.x + h[0] * a.scale * a.mirror, a.y + h[1] * a.scale];
 }
 // 타자 위치: 포수 좌표계에서 우타자는 x<0 쪽(1루 반대편). batX = 홈플레이트 중심에서 타자 머리까지(존 반폭 단위)
-// 타격 시점의 뒷모습 그림은 오른손 타자가 왼쪽(투수 쪽)을 보는 모습이라, 방망이 든 손이 맞게 보이도록 좌우를 바꿔 세운다
-// (우타자 = 화면 오른쪽에 그림 그대로, 좌타자 = 왼쪽에 뒤집어서)
+// 타격 시점의 뒷모습 그림은 오른손 타자(방망이를 오른 어깨에 메고 오른쪽→왼쪽으로 휘두름)라서, 우타자는 홈플레이트 왼쪽에 그림 그대로,
+// 좌타자는 오른쪽에 뒤집어서 세운다 — 둘 다 홈플레이트 쪽으로 휘두른다(drawBatterFrame이 한 번 뒤집으므로 facing -1 = 그림 그대로)
 export function batterAnchor(V, bats) {
-  const side = (bats === 'L' ? 1 : -1) * (V.kind === 'catcher' ? -1 : 1);
+  const side = bats === 'L' ? 1 : -1;
   const [x] = toS(V, side * (V.batX || 2.05), 0);
-  return { x, y: V.feetY, scale: V.figH / 180, facing: (V.mirror ? -1 : 1) * -side };
+  const facing = V.kind === 'catcher' ? side : (V.mirror ? -1 : 1) * -side;
+  return { x, y: V.feetY, scale: V.figH / 180, facing };
 }
 
 // 구종별로 화면에 보이는 휘는 정도(존 반폭·반높이 단위, 우투수 기준, 중력 포함)와 휘는 시점.
