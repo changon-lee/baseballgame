@@ -45,6 +45,9 @@ export function applyEvent(prev, type, opts = {}) {
   };
   switch (type) {
     case 'BALL': if (++s.balls >= 4) force(); break;
+    case 'HBP': force(); break;                                                    // 몸에 맞는 공: 볼넷처럼 타자 1루, 밀려나는 주자만 진루
+    // 폭투(포구 실패): 볼 하나 + 주자 모두 한 베이스. 4구째면 볼넷으로 처리
+    case 'WILD': if (++s.balls >= 4) force(); else { runs = +b[2]; s.bases = [false, b[0], b[1]]; } break;
     case 'INFIELD_SINGLE': advance(); s.bases[0] = true; paEnded = true; break;   // 내야안타: 땅볼처럼 주자 진루 + 타자 1루
     case 'ERROR': runs = +b[2]; s.bases = [true, b[0], b[1]]; paEnded = true; break;   // 실책: 타자 1루, 주자 모두 한 베이스
     // 안타 + 홈 보살: 2루 주자가 홈에서 아웃, 3루 주자는 득점, 1루 주자는 2루로

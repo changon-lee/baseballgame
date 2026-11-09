@@ -1,6 +1,7 @@
 // 한 경기 진행. 사용자 팀 = 홈(말 공격), 컴퓨터 팀 = 원정(초 공격).
 import { createGameState, applyEvent, battingSide } from './rules.js';
-import { computePitch, fatigue } from './pitch.js';
+import { CONFIG } from '../config.js';
+import { computePitch, fatigue, pitchMiss } from './pitch.js';
 import { swingResult } from './batting.js';
 import { battedBallInfo } from './outcome.js';
 import { cpuChoosePitch, cpuSwing } from './ai.js';
@@ -48,11 +49,12 @@ function commit(m, event, ps, pitch, fly, style) {
   const mu = matchup(m);
   const { state, runs, paEnded } = applyEvent(m.game, event, { ground: (event === 'OUT' && !fly && style !== 'liner') || event === 'DOUBLE_PLAY' });
   let log = m.log || [];
-  let pa = [...(m.pa || []), pitch ? { k: pitch.type, v: pitch.speedKmh, e: event } : { e: event }];
+  let pa = [...(m.pa || []), { ...(pitch ? { k: pitch.type, v: pitch.speedKmh } : {}), e: event, ...(event === 'WILD' && runs ? { r: runs } : {}) }];
   if (paEnded) {
     const ev = paEvent(event), g = m.game;
     const outs = Math.min(OUTS_OF[event] || 0, 3 - g.outs);
-    log = [...log, { batterId: mu.batter.id, pitcherId: mu.pitcher.id, event: ev, runs, outs,
+    const wild = (m.pa || []).reduce((a, q) => a + (q.r || 0), 0);   // 타석 도중 폭투로 들어온 점수(타점 아님)
+    log = [...log, { batterId: mu.batter.id, pitcherId: mu.pitcher.id, event: ev, runs: runs + wild, outs, ...(wild ? { wild } : {}),
       inning: g.inning, half: g.half, outsBefore: g.outs, bases: [...g.bases], score: { ...state.score }, pitches: pa, fly: !!fly,
       ...(ev !== event && event !== 'BALL' && event !== 'STRIKE' ? { play: event } : {}), ...(style ? { style } : {}) }];
     pa = [];
@@ -62,7 +64,14 @@ function commit(m, event, ps, pitch, fly, style) {
 
 // 스윙(또는 노스윙) → 이벤트
 function decide(m, batter, pitch, timingDiffMs, rng, bat = null) {
-  if (timingDiffMs == null) return { event: pitch.isStrike ? 'STRIKE' : 'BALL', contact: null, fly: false, swung: false };
+  if (timingDiffMs == null) {
+    if (pitch.isStrike) return { event: 'STRIKE', contact: null, fly: false, swung: false };
+    // 안 친 볼: 너무 몸에 붙으면 사구, 너무 멀면 포수가 놓쳐 폭투(주자가 있고 4구째가 아닐 때만 뜻이 있다)
+    const miss = pitchMiss(pitch.plate, batter.bats, pitch.throws), B = CONFIG.BALANCE, g = m.game;
+    if (miss === 'HBP' && rng() < B.HBP_CHANCE) return { event: 'HBP', contact: null, fly: false, swung: false };
+    if (miss === 'WILD' && g.balls < 3 && g.bases.some(Boolean) && rng() < B.WILD_CHANCE) return { event: 'WILD', contact: null, fly: false, swung: false };
+    return { event: 'BALL', contact: null, fly: false, swung: false };
+  }
   const contact = swingResult({ timingDiffMs, batter, pitch, rng, bat });
   if (contact.kind === 'MISS') return { event: 'STRIKE', contact, fly: false, swung: true };
   if (contact.kind === 'FOUL') return { event: 'FOUL', contact, fly: false, swung: true };

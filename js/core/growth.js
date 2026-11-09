@@ -61,14 +61,14 @@ export function playerLine(prev, log) {
     const b = { pa: 0, ab: 0, h: 0, d2: 0, d3: 0, hr: 0, bb: 0, so: 0, rbi: 0, ...bat[e.batterId] };
     const p = { bf: 0, outs: 0, h: 0, hr: 0, bb: 0, so: 0, r: 0, ...pit[e.pitcherId] };
     b.pa++; p.bf++;
-    if (e.event !== 'WALK' && e.event !== 'SAC_FLY') b.ab++;
+    if (e.event !== 'WALK' && e.event !== 'HBP' && e.event !== 'SAC_FLY') b.ab++;
     if (HIT.includes(e.event)) { b.h++; p.h++; }
     if (e.event === 'DOUBLE') b.d2++;
     if (e.event === 'TRIPLE') b.d3++;
     if (e.event === 'HR') { b.hr++; p.hr++; }
     if (e.event === 'WALK') { b.bb++; p.bb++; }
     if (e.event === 'STRIKEOUT') { b.so++; p.so++; }
-    if (e.event !== 'DOUBLE_PLAY') b.rbi += e.runs || 0;
+    if (e.event !== 'DOUBLE_PLAY') b.rbi += (e.runs || 0) - (e.wild || 0);
     p.r += e.runs || 0;
     p.outs += e.outs ?? (OUTS_OF[e.event] || 0);
     bat[e.batterId] = b; pit[e.pitcherId] = p;

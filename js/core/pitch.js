@@ -34,6 +34,16 @@ export const sweetWidth = (control, f, level = 'easy') => (0.07 + control / 100 
 export const gaugePeriod = (f, level = 'easy') => CONFIG.GAUGE_PERIOD_MS * (1 - 0.25 * f) * gl(level).period;
 export const isStrike = p => Math.abs(p.x) <= ZONE_K + BALL_R && Math.abs(p.y) <= ZONE_K + BALL_R / 1.2;
 
+// 안 친 공이 어디로 왔나: 'HBP'(타자 몸 쪽으로 붙음) | 'WILD'(너무 멀리 떨어짐) | null
+// bats: 타자 손 'L'|'R'|'S'. 포수 시점에서 우타자는 x<0, 좌타자는 x>0 쪽에 선다(양타자는 투수 반대 손)
+export function pitchMiss(plate, bats, throws) {
+  const B = CONFIG.BALANCE;
+  const side = bats === 'L' ? 1 : bats === 'R' ? -1 : (throws === 'L' ? -1 : 1);
+  if (side * plate.x >= B.HBP_X && Math.abs(plate.y) <= B.HBP_Y) return 'HBP';
+  if (Math.max(Math.abs(plate.x), Math.abs(plate.y)) >= B.WILD_DIST) return 'WILD';
+  return null;
+}
+
 export function computePitch({ pitcher, type, target, gaugePos: gpos, pitchCount, rng, level = 'easy' }) {
   const f = fatigue(pitchCount, pitcher.stamina);
   const sweet = sweetWidth(pitcher.control, f, level);

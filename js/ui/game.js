@@ -19,19 +19,20 @@ import { buildPlay, toMs } from './art/playscript.js';
 import { drawPlay3D } from './art/field3d.js';
 
 const LABEL = {
-  BALL: '볼', STRIKE: '스트라이크', FOUL: '파울', SINGLE: '안타!', DOUBLE: '2루타!', TRIPLE: '3루타!', HR: '홈런!!',
+  BALL: '볼', HBP: '몸에 맞는 공!', WILD: '폭투! 공이 빠졌다', STRIKE: '스트라이크', FOUL: '파울', SINGLE: '안타!', DOUBLE: '2루타!', TRIPLE: '3루타!', HR: '홈런!!',
   SAC_FLY: '희생플라이', DOUBLE_PLAY: '병살타', INFIELD_SINGLE: '내야안타!', ERROR: '실책!', SINGLE_HOME_OUT: '안타 · 홈에서 아웃!', LINE_DP: '직선타 병살!',
 };
 // 같은 결과의 다른 장면
 const STYLE_LABEL = { dive: '다이빙 캐치!', wall: '펜스 앞 점프 캐치!', liner: '직선타 아웃', home_safe: '안타! 홈 세이프', bloop: '텍사스 안타!', pop: '내야 뜬공 아웃', foul: '파울플라이 아웃' };
 const HITS = ['SINGLE', 'DOUBLE', 'TRIPLE', 'HR', 'INFIELD_SINGLE', 'SINGLE_HOME_OUT', 'ERROR'];   // 타자에게 좋은 결과
+const FREE = ['BALL', 'HBP', 'WILD'];   // 타자에게 좋은 '안 친' 결과
 const OUTS = ['OUT', 'SAC_FLY', 'DOUBLE_PLAY', 'LINE_DP'];
 // 경기 기록에 쓰는 이름
-const PA_NAME = { WALK: '볼넷', STRIKEOUT: '삼진', SINGLE: '안타', DOUBLE: '2루타', TRIPLE: '3루타', HR: '홈런', OUT: '범타 아웃', SAC_FLY: '희생플라이', DOUBLE_PLAY: '병살타', ERROR: '실책 출루' };
+const PA_NAME = { WALK: '볼넷', HBP: '몸에 맞는 공', STRIKEOUT: '삼진', SINGLE: '안타', DOUBLE: '2루타', TRIPLE: '3루타', HR: '홈런', OUT: '범타 아웃', SAC_FLY: '희생플라이', DOUBLE_PLAY: '병살타', ERROR: '실책 출루' };
 const PLAY_NAME = { INFIELD_SINGLE: '내야안타', SINGLE_HOME_OUT: '안타 (2루 주자 홈에서 아웃)', LINE_DP: '직선타 병살' };
 const STYLE_NAME = { dive: '다이빙 캐치 아웃', wall: '펜스 앞 호수비 아웃', liner: '직선타 아웃', home_safe: '안타 (홈 승부 세이프)', fumble: '실책 출루 (포구 실책)', throw: '실책 출루 (송구 실책)', bloop: '텍사스 안타', pop: '내야 뜬공 아웃', foul: '파울플라이 아웃' };
 const paName = l => PLAY_NAME[l.play] || STYLE_NAME[l.style] || (l.event === 'OUT' ? (l.fly ? '뜬공 아웃' : '땅볼 아웃') : PA_NAME[l.event] || l.event);
-const PITCH_E = { BALL: '볼', STRIKE: '스트', FOUL: '파울' };
+const PITCH_E = { BALL: '볼', HBP: '사구', WILD: '폭투', STRIKE: '스트', FOUL: '파울' };
 // 구종 칩 색(빠른 공은 따뜻한 색, 떨어지는 공은 차가운 색)
 const PITCH_COLORS = { FB: '#ff6b5e', SI: '#ffa94d', CT: '#ffd43b', SL: '#69db7c', CU: '#4dabf7', CH: '#b197fc', FO: '#f783ac' };
 const basesText = b => { const on = [1, 2, 3].filter((n, i) => b[i]); return on.length === 3 ? '만루' : on.length ? on.join('·') + '루' : '주자 없음'; };
@@ -432,7 +433,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     mode = 'msg';
     const prev = match.game;
     const finish = () => settle(prev, r, userPitched);
-    if (['BALL', 'STRIKE', 'FOUL'].includes(r.event)) return finish();
+    if (['BALL', 'STRIKE', 'FOUL', 'HBP', 'WILD'].includes(r.event)) return finish();
     const batter = matchup(match).batter;
     // 대결이면 서버가 준 씨앗으로: 두 폰에서 같은 장면이 나온다
     play = buildPlay({ event: r.event, fly: r.fly, style: r.style, contact: r.contact, bats: batter.bats, bases: prev.bases, rng: r.seed != null ? createRng(r.seed) : rng });
@@ -450,7 +451,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     else if (r.event === 'STRIKE' && r.contact && r.contact.kind === 'MISS') label = '헛스윙';
     if (r.event === 'BALL' && prev.balls === 3) label = '볼넷';
     crowd(prev, r, userPitched);
-    const good = userPitched ? (r.event === 'STRIKE' || OUTS.includes(r.event)) : (HITS.includes(r.event) || r.event === 'BALL');
+    const good = userPitched ? (r.event === 'STRIKE' || OUTS.includes(r.event)) : (HITS.includes(r.event) || FREE.includes(r.event));
     const color = r.event === 'FOUL' ? '#ffffff' : good ? '#2ecc71' : '#e74c3c';
     const sub = (r.runs ? `${r.runs}점 득점! · ` : '') + info;
     const g = match.game;
@@ -472,7 +473,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     if (ev === 'HR') return;
     if (!userPitched) {                                   // 우리 공격
       if (r.runs) playSound('roar', { gain: 0.75 });
-      else if (HITS.includes(ev)) playSound('cheer', { gain: 0.85 });
+      else if (HITS.includes(ev) || ev === 'HBP') playSound('cheer', { gain: 0.85 });
       else if (ev === 'BALL' && prev.balls === 3) playSound('cheer', { gain: 0.45 });
       else if (OUTS.includes(ev) && inplay) playSound('aww', { gain: 0.6 });
     } else {                                              // 상대 공격
@@ -577,9 +578,9 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       if (key !== cur) { cur = key; rows.push(`<h3>${key} <span>${(l.half === 'top' ? cpuTeam : userTeam).short} 공격</span></h3>`); }
       const seq = (l.pitches || []).map((q, i, a) => {
         const last = i === a.length - 1, e = PITCH_E[q.e] || '타격';
-        return `<i class="${q.e === 'BALL' ? 'b' : last && !PITCH_E[q.e] ? 'x' : 's'}">${q.k ? `${PITCH_TYPES[q.k].name} ${q.v} ` : ''}${e}</i>`;
+        return `<i class="${(q.e === 'BALL' || q.e === 'WILD' || q.e === 'HBP') ? 'b' : last && !PITCH_E[q.e] ? 'x' : 's'}">${q.k ? `${PITCH_TYPES[q.k].name} ${q.v} ` : ''}${e}</i>`;
       }).join('');
-      const good = HITS.includes(l.event) || l.event === 'WALK';
+      const good = HITS.includes(l.event) || l.event === 'WALK' || l.event === 'HBP';
       rows.push(`<div class="pa">
         <div class="who"><b>${nameOf(bat, 'batters', l.batterId)}</b> <small>vs ${nameOf(pit, 'pitchers', l.pitcherId)} · ${l.outsBefore ?? 0}사 ${basesText(l.bases || [])}</small></div>
         <div class="seq">${seq}</div>
