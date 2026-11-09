@@ -7,15 +7,17 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 export function makeView(kind, W, H) {
   if (kind === 'catcher') {
-    const zw = Math.min(W * 0.36, H * 0.24), zh = zw * 1.2, cy = H * 0.58;
+    // 타자 등 뒤 카메라(컴투스 프로야구 같은 구도): 타자는 가까워서 크게 화면 옆에(뒷모습), 투수는 멀리 가운데 작게, 홈플레이트는 아래쪽
+    const zw = Math.min(W * 0.36, H * 0.24), zh = zw * 1.2, cy = H * 0.62;
     return { kind, W, H, zw, zh, cx: W / 2, cy, mirror: false, d0: 18.5, d1: 4.5, brk: 1.2, screenBreak: true,
-      feetY: cy + zh * 1.06, figH: zh * 2, batX: 1.9, moundY: H * 0.34, pitX: W / 2, pitY: H * 0.34, pitS: zh * 0.85 / 180 };
+      feetY: cy + zh * 1.15, figH: zh * 2.25, batX: 1.3, moundY: cy - zh * 1.05, pitX: W / 2, pitY: cy - zh * 1.05, pitS: zh * 0.72 / 180 };
   }
   // 투구 시점: 투수는 카메라 바로 앞이라 크게, 멀리 있는 타자·포수·심판은 작게
   // 타자는 크게(존이 타자 무릎~가슴 높이쯤에 오도록). zw·zh는 좌표 단위(포수·공 크기 기준)이고, 그려지는 존은 ZONE_K배
+  // 투수 등 뒤 카메라를 한쪽으로 비켜 둔 구도: 투수는 화면 왼쪽 아래 크게, 홈플레이트(타자·포수)는 가운데 위
   const zw = Math.min(W * 0.33, H * 0.21), zh = zw * 1.2, cy = H * 0.36;
   return { kind, W, H, zw, zh, cx: W / 2, cy, mirror: true, d0: 2, d1: 19,
-    feetY: cy + zh * 1.06, figH: zh * 1.8, batX: 2.45, pitX: W * 0.5, pitY: H * 1.13, pitS: H * 0.56 / 180 };
+    feetY: cy + zh * 1.06, figH: zh * 1.8, batX: 2.45, pitX: W * 0.27, pitY: H * 1.1, pitS: H * 0.54 / 180 };
 }
 
 export const toS = (V, x, y) => [V.cx + (V.mirror ? -x : x) * V.zw / 2, V.cy - y * V.zh / 2];

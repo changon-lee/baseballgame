@@ -793,10 +793,10 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       drawP();
     } else {
       drawP();
+      drawB();                                   // 타자는 카메라 가까이 옆에 크게 서 있어서 존·공은 그 위에 그린다(공이 몸에 가리지 않게)
       drawZone(0.32);
       drawGuide(now);
       if (bp && bp.prog <= 1.02) { drawTrail(now); drawBall(ctx, bp.x, bp.y, bp.r, bp.spin); }
-      drawB();
       drawBat(now, mu.batter);
     }
     drawHUD();

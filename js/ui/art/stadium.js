@@ -183,9 +183,9 @@ export function buildBackdrop(kind, V, W, H, dpr, homeTeam) {
     ctx.strokeRect(V.cx - V.zw * 1.55, V.feetY - 13, V.zw * 0.88, 21); ctx.strokeRect(V.cx + V.zw * 0.67, V.feetY - 13, V.zw * 0.88, 21);
     plate(ctx, V.cx, V.feetY + 2, V.zw, true);
     // 마운드 (화면 아래)
-    dirtEllipse(ctx, W / 2, H * 1.04, W * 0.64, H * 0.16, rng);
-    ctx.fillStyle = 'rgba(255,240,215,.18)'; ctx.beginPath(); ctx.ellipse(W / 2, H * 1.05, W * 0.42, H * 0.1, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#fafafa'; ctx.fillRect(W / 2 - 32, H * 0.985, 64, 5);
+    dirtEllipse(ctx, V.pitX, H * 1.04, W * 0.64, H * 0.16, rng);
+    ctx.fillStyle = 'rgba(255,240,215,.18)'; ctx.beginPath(); ctx.ellipse(V.pitX, H * 1.05, W * 0.42, H * 0.1, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fafafa'; ctx.fillRect(V.pitX - 32, H * 0.985, 64, 5);
   }
   // 비네트
   const vg = ctx.createRadialGradient(W / 2, H * 0.55, Math.min(W, H) * 0.35, W / 2, H * 0.55, Math.max(W, H) * 0.8);

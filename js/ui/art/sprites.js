@@ -71,41 +71,42 @@ const SETS = {
       { w: 455, h: 631, ax: 267, ay: 567 },
     ],
   },
-  batter: {                                              // 영상에서 뽑은 29장(방망이까지 그림에 있다, tools/video_batter.py). 그림은 왼쪽(투수 쪽)을 본다
-    h0: 662,                                             // 0 준비, 1~5 다리 들고 내딛기, 6 내딛은 자세, 7~13 스윙, 14 임팩트(방망이가 투수 쪽), 15~24 팔로스루, 25~28 마무리
-    frames: [                                            // 기준점(ax, ay) = 준비 자세의 두 발 가운데. 모든 프레임이 같은 영상 좌표라 내딛는 발이 그대로 움직인다
-      { w: 394, h: 755, ax: 145, ay: 753 },
-      { w: 304, h: 740, ax: 44, ay: 738 },
-      { w: 314, h: 736, ax: 60, ay: 734 },
-      { w: 364, h: 728, ax: 114, ay: 727 },
-      { w: 433, h: 715, ax: 190, ay: 714 },
-      { w: 447, h: 700, ax: 221, ay: 698 },
-      { w: 410, h: 676, ax: 219, ay: 674 },
-      { w: 387, h: 643, ax: 217, ay: 643 },
-      { w: 387, h: 617, ax: 216, ay: 617 },
-      { w: 424, h: 614, ax: 215, ay: 614 },
-      { w: 467, h: 614, ax: 214, ay: 614 },
-      { w: 416, h: 616, ax: 213, ay: 615 },
-      { w: 391, h: 617, ax: 212, ay: 616 },
-      { w: 488, h: 617, ax: 302, ay: 616 },
-      { w: 494, h: 617, ax: 302, ay: 616 },
-      { w: 501, h: 617, ax: 302, ay: 615 },
-      { w: 507, h: 615, ax: 302, ay: 614 },
-      { w: 513, h: 615, ax: 302, ay: 614 },
-      { w: 495, h: 640, ax: 278, ay: 638 },
-      { w: 425, h: 685, ax: 203, ay: 684 },
-      { w: 428, h: 722, ax: 202, ay: 721 },
-      { w: 431, h: 756, ax: 201, ay: 755 },
-      { w: 431, h: 780, ax: 200, ay: 779 },
-      { w: 432, h: 794, ax: 199, ay: 793 },
-      { w: 431, h: 801, ax: 198, ay: 799 },
-      { w: 461, h: 784, ax: 196, ay: 782 },
-      { w: 468, h: 711, ax: 193, ay: 709 },
-      { w: 428, h: 645, ax: 189, ay: 642 },
-      { w: 430, h: 649, ax: 184, ay: 646 },
+  batter_back: {                                         // 타격 시점(타자 등 뒤 카메라, tools/video_back.py). 그림은 왼쪽(투수 쪽)을 본다. 방망이까지 그림에 있다
+    // 29장: 0 준비, 1~5 다리 들고 내딛기, 6 내딛은 자세, 7~13 스윙, 14 임팩트, 15~24 팔로스루, 25~28 마무리. 기준점(ax, ay) = 준비 자세의 두 발 가운데
+    h0: 662,
+    frames: [
+      { w: 315, h: 662, ax: 144, ay: 662 },
+      { w: 273, h: 684, ax: 50, ay: 684 },
+      { w: 263, h: 686, ax: 23, ay: 685 },
+      { w: 272, h: 677, ax: 22, ay: 676 },
+      { w: 282, h: 665, ax: 31, ay: 665 },
+      { w: 290, h: 653, ax: 56, ay: 653 },
+      { w: 306, h: 629, ax: 92, ay: 629 },
+      { w: 316, h: 570, ax: 99, ay: 574 },
+      { w: 297, h: 534, ax: 100, ay: 543 },
+      { w: 299, h: 527, ax: 99, ay: 545 },
+      { w: 359, h: 531, ax: 99, ay: 548 },
+      { w: 372, h: 534, ax: 98, ay: 551 },
+      { w: 295, h: 537, ax: 97, ay: 554 },
+      { w: 243, h: 541, ax: 95, ay: 557 },
+      { w: 304, h: 543, ax: 152, ay: 559 },
+      { w: 395, h: 545, ax: 241, ay: 561 },
+      { w: 455, h: 570, ax: 299, ay: 585 },
+      { w: 469, h: 644, ax: 312, ay: 659 },
+      { w: 448, h: 705, ax: 290, ay: 721 },
+      { w: 397, h: 741, ax: 232, ay: 756 },
+      { w: 327, h: 739, ax: 150, ay: 754 },
+      { w: 277, h: 716, ax: 95, ay: 731 },
+      { w: 291, h: 617, ax: 90, ay: 633 },
+      { w: 327, h: 590, ax: 90, ay: 606 },
+      { w: 349, h: 592, ax: 89, ay: 605 },
+      { w: 363, h: 587, ax: 85, ay: 594 },
+      { w: 332, h: 749, ax: 68, ay: 756 },
+      { w: 438, h: 823, ax: 179, ay: 830 },
+      { w: 414, h: 724, ax: 158, ay: 732 },
     ],
   },
-  batter_front: {                                        // 투수 시점(앞에서 본 타자). 순서·기준점은 batter와 같다
+  batter_front: {                                        // 투수 시점(앞에서 본 타자). 순서·기준점은 batter_back과 같다
     h0: 662, raw: true,                                  // 정면 그림은 방망이를 왼쪽 어깨에 멘 모습(좌타자처럼 보임)이라 batter와 반대로, 뒤집지 않고 그린다                                             // 14 임팩트 = 방망이가 몸 뒤에서 카메라 쪽으로 돌아 나와 홈플레이트를 가로지른 순간
     frames: [
       { w: 379, h: 664, ax: 175, ay: 664 },
@@ -145,7 +146,7 @@ const SETS = {
 
 // 묶음마다 다 받으면 바로 쓴다(못 받은 묶음만 코드로 그린 사람). 경기는 투구 시점(1회초)부터라 그 그림을 먼저 받는다
 let loaded = 0, total = 0, failed = false;
-for (const name of ['pitcher_back', 'batter_front', 'catcher', 'umpire', 'pitcher_front', 'batter']) {
+for (const name of ['pitcher_back', 'batter_front', 'catcher', 'umpire', 'pitcher_front', 'batter_back']) {
   const set = SETS[name];
   set.got = 0;
   set.frames.forEach((f, i) => {
@@ -162,31 +163,31 @@ const setReady = (...names) => names.every(n => !SETS[n].bad && SETS[n].got === 
 // ── 타자가 기다리며 방망이를 흔드는 동작(영상에서 처음과 끝이 이어지는 짧은 구간을 프레임마다 다, 1초 IDLE_FPS장) ──
 // 경기 그림을 다 받은 뒤에 받고, 못 받았으면 준비 자세(스윙 그림 0번)로 서 있는다. 0.7배로 줄여 저장했다(res)
 const IDLE = {
-  batter_idle: { res: 0.7, pingpong: true, frames: [
-  { w: 233, h: 489, ax: 91, ay: 489 },
-  { w: 233, h: 490, ax: 91, ay: 490 },
-  { w: 233, h: 490, ax: 91, ay: 490 },
-  { w: 233, h: 490, ax: 91, ay: 490 },
-  { w: 233, h: 490, ax: 91, ay: 490 },
-  { w: 233, h: 490, ax: 91, ay: 490 },
-  { w: 233, h: 491, ax: 91, ay: 491 },
-  { w: 233, h: 491, ax: 91, ay: 491 },
-  { w: 233, h: 491, ax: 91, ay: 491 },
-  { w: 233, h: 491, ax: 91, ay: 491 },
-  { w: 233, h: 491, ax: 91, ay: 491 },
-  { w: 233, h: 491, ax: 91, ay: 491 },
-  { w: 233, h: 491, ax: 91, ay: 491 },
-  { w: 233, h: 491, ax: 91, ay: 491 },
-  { w: 234, h: 491, ax: 91, ay: 491 },
-  { w: 234, h: 491, ax: 91, ay: 491 },
-  { w: 234, h: 491, ax: 91, ay: 491 },
-  { w: 234, h: 491, ax: 91, ay: 491 },
-  { w: 234, h: 491, ax: 91, ay: 491 },
-  { w: 234, h: 491, ax: 91, ay: 491 },
-  { w: 234, h: 491, ax: 91, ay: 491 },
-  { w: 234, h: 491, ax: 91, ay: 491 },
-  { w: 235, h: 490, ax: 91, ay: 490 },
-  { w: 235, h: 490, ax: 91, ay: 490 },
+  batter_back_idle: { res: 0.7, pingpong: true, frames: [
+  { w: 220, h: 463, ax: 101, ay: 463 },
+  { w: 225, h: 474, ax: 99, ay: 473 },
+  { w: 228, h: 482, ax: 97, ay: 481 },
+  { w: 230, h: 486, ax: 95, ay: 486 },
+  { w: 233, h: 488, ax: 98, ay: 487 },
+  { w: 238, h: 487, ax: 100, ay: 486 },
+  { w: 236, h: 482, ax: 103, ay: 482 },
+  { w: 231, h: 478, ax: 105, ay: 478 },
+  { w: 224, h: 472, ax: 105, ay: 472 },
+  { w: 218, h: 465, ax: 105, ay: 465 },
+  { w: 214, h: 453, ax: 105, ay: 453 },
+  { w: 211, h: 439, ax: 106, ay: 439 },
+  { w: 208, h: 426, ax: 106, ay: 426 },
+  { w: 209, h: 420, ax: 106, ay: 420 },
+  { w: 211, h: 424, ax: 106, ay: 424 },
+  { w: 212, h: 438, ax: 106, ay: 438 },
+  { w: 218, h: 458, ax: 106, ay: 457 },
+  { w: 223, h: 476, ax: 105, ay: 476 },
+  { w: 229, h: 487, ax: 105, ay: 486 },
+  { w: 236, h: 490, ax: 104, ay: 490 },
+  { w: 259, h: 483, ax: 102, ay: 483 },
+  { w: 275, h: 469, ax: 98, ay: 469 },
+  { w: 290, h: 452, ax: 97, ay: 452 },
+  { w: 299, h: 441, ax: 99, ay: 440 },
   ] },
   batter_idle_front: { res: 0.7, raw: true, pingpong: true, frames: [
   { w: 265, h: 465, ax: 123, ay: 465 },
@@ -442,10 +443,10 @@ const idleAt = {};                                       // 묶음별: 기다리
 
 // front: 투수 시점(앞에서 본 그림). 두 묶음은 프레임 순서가 같아서 같은 시각표를 쓴다
 export function drawBatterSprite(ctx, { x, y, scale, facing, uni, now, swingAt, pitchStart, travelMs, front = false }) {
-  const name = front ? 'batter_front' : 'batter';
+  const name = front ? 'batter_front' : 'batter_back';
   if (!setReady(name)) return false;
   const set = SETS[name], su = STAND / set.h0;
-  const iset = IDLE[front ? 'batter_idle_front' : 'batter_idle'];
+  const iset = IDLE[front ? 'batter_idle_front' : 'batter_back_idle'];
   const st = batterState(now, swingAt, pitchStart, travelMs);
   const u = st.t < 0 && pitchStart != null && now >= pitchStart ? (now - pitchStart) / Math.max(1, travelMs) : -1;
   const ia = idleAt[name] || (idleAt[name] = { since: null, i: 0 });
