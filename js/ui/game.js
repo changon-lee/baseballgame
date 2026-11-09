@@ -271,6 +271,15 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       + `<circle cx="${ex.toFixed(1)}" cy="${ey.toFixed(1)}" r="2.9" fill="#fff" stroke="currentColor" stroke-width="1.4"/></svg>`;
   }
   let pickerToken = 0;
+  // PC(마우스가 있는 기기): 구종 칩을 위에서부터 1, 2, 3, 4… 숫자 키로도 고른다
+  const KEYS_HINT = typeof matchMedia === 'function' && matchMedia('(hover: hover) and (pointer: fine)').matches;
+  function onKey(e) {
+    if (!alive || mode !== 'pick' || overlayOpen() || e.repeat || e.ctrlKey || e.altKey || e.metaKey) return;
+    const n = /^[1-9]$/.test(e.key) ? +e.key : /^(Digit|Numpad)[1-9]$/.test(e.code) ? +e.code.slice(-1) : 0;
+    const b = n && picker.querySelectorAll('[data-k]')[n - 1];
+    if (b) { e.preventDefault(); b.click(); }
+  }
+  document.addEventListener('keydown', onKey);
   function showPitchButtons() {
     const p = matchup(match).pitcher;
     const again = mode === 'pick' && picker.childElementCount && !picker.classList.contains('out');
@@ -278,9 +287,9 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     setControls(`<p>오른쪽에서 구종을 고르세요 <small>(다시 드래그하면 위치 변경)</small></p>`);
     if (again) return placePicker();                    // 위치만 다시 잡은 경우: 칩은 그대로 둔다
     pickerToken++;
-    picker.classList.remove('out');
+    picker.classList.remove('out'); picker.classList.toggle('keys', KEYS_HINT);
     picker.innerHTML = p.pitches.map((k, i) => `<button data-k="${k}" style="--c:${PITCH_COLORS[k] || '#9fb3cc'};--i:${i}">`
-      + `<i>${pitchIcon(k, p.throws)}</i><b>${PITCH_TYPES[k].name}</b><span>${Math.round(p.velo * PITCH_TYPES[k].speedMul)}</span></button>`).join('');
+      + `<i>${pitchIcon(k, p.throws)}</i><b>${PITCH_TYPES[k].name}</b><span>${Math.round(p.velo * PITCH_TYPES[k].speedMul)}</span>${KEYS_HINT && i < 9 ? `<kbd>${i + 1}</kbd>` : ''}</button>`).join('');
     placePicker();
     picker.querySelectorAll('[data-k]').forEach(b => {
       b.onclick = () => {
@@ -503,7 +512,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     if (net) { net.conn.send({ t: 'leave' }); net.conn.close(); }
     setAmbience(false);
     loop.stop(); timers.forEach(clearTimeout); window.removeEventListener('resize', resize);
-    document.removeEventListener('visibilitychange', onVisibility);
+    document.removeEventListener('visibilitychange', onVisibility); document.removeEventListener('keydown', onKey);
     root.removeEventListener('pointerdown', onRootDown);
     onExit(result);
   }

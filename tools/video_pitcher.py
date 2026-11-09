@@ -22,9 +22,12 @@ WIND = 18
 AFTER = [3, 6, 10, 15, 22, 30, 40]
 SET_H = 667                                       # 셋 자세 그림 키(픽셀)
 # 이름: (영상 파일, start, release) 프레임 번호(1부터)
-# pitcher_back_g: 1~57 제자리 셋, 59부터 다리 들기, 110 릴리스(111부터 공이 손을 떠나 보인다)
-VIDEOS = {'pitcher_back': ('pitcher_back_g', 59, 110), 'pitcher_front': ('pitcher_front', 10, 97)}
+# pitcher_back34_g2(투수 오른쪽 뒤 3/4 시점): 1~29 제자리 셋, 30부터 다리 들기, 79 릴리스(80부터 공이 손을 떠나 보인다).
+#   홈 쪽(화면 오른쪽 안)으로 내딛어서 내딛은 뒤엔 카메라에서 멀어져 작아진다(원근 그대로)
+VIDEOS = {'pitcher_back': ('pitcher_back34_g2', 30, 79), 'pitcher_front': ('pitcher_front', 10, 97)}
 ONLY = sys.argv[3:] or list(VIDEOS)
+# 공이 손을 떠나는 위치를 눈으로 정한 것(릴리스 그림 좌표). pitcher_back34_g2는 다음 프레임에 공이 벌써 멀리 날아가 있어서 손에 쥔 공 자리를 쓴다
+HAND = {'pitcher_back': [153, 12]}
 
 
 def chroma(path):
@@ -113,7 +116,9 @@ for name in ONLY:
             yy, xx = np.nonzero(band)
             if len(xx): f['num'] = [round(float(np.median(xx))), round(float(np.median(yy)) + h * 0.15)]
         if j == WIND - 1:                         # 릴리스 프레임: 떨어져 나간 공 자리, 못 찾으면 맨 위 끝(머리 위로 올린 손)
-            if balls:
+            if name in HAND:
+                f['hand'] = HAND[name]
+            elif balls:
                 bx, by = min(balls, key=lambda p: p[1])
                 f['hand'] = [round((bx - x0) * k), round((by - y0) * k)]
             else:

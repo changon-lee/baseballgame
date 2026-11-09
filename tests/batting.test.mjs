@@ -50,6 +50,14 @@ test('bat far from the ball path is a swing and miss even with perfect timing', 
   const r = swingResult({ timingDiffMs: 0, batter, pitch: pitch({ plate: { x: 0.8, y: -0.8 } }), rng: createRng(1), bat: { x: -0.8, y: 0.8 } });
   assert.equal(r.kind, 'MISS'); assert.ok(r.aimMiss);
 });
+test('easy mode: a swing 90ms late still goes in play (normal: pull foul)', () => {
+  const easy = swingResult({ timingDiffMs: 90, batter, pitch: pitch(), rng: createRng(1), bat: { x: 0, y: 0, level: 'easy' } });
+  const normal = swingResult({ timingDiffMs: 90, batter, pitch: pitch(), rng: createRng(1), bat: { x: 0, y: 0, level: 'normal' } });
+  assert.equal(easy.kind, 'INPLAY'); assert.notEqual(normal.kind, 'INPLAY');
+  const e40 = swingResult({ timingDiffMs: 40, batter, pitch: pitch(), rng: createRng(1), bat: { x: 0, y: 0, level: 'easy' } });
+  const n40 = swingResult({ timingDiffMs: 40, batter, pitch: pitch(), rng: createRng(1), bat: { x: 0, y: 0, level: 'normal' } });
+  assert.ok(e40.quality > n40.quality && e40.quality <= 1);
+});
 test('reach is generous: a bat a third of the zone off still connects', () => {
   const r = swingResult({ timingDiffMs: 0, batter, pitch: pitch({ plate: { x: 0.3, y: 0.2 } }), rng: createRng(1), bat: { x: 0, y: 0 } });
   assert.equal(r.kind, 'INPLAY');

@@ -211,6 +211,8 @@ button.danger{color:var(--red)}
 .pitch-pick b,.side-pick b{flex:1;min-width:0;font-weight:800;letter-spacing:-.03em;white-space:nowrap}
 .pitch-pick span{font-size:11.5px;font-weight:700;color:var(--dim);font-variant-numeric:tabular-nums}
 .pitch-pick span::after{content:'km';font-size:9px;margin-left:1px;color:var(--dim2)}
+.pitch-pick.keys{width:172px}
+.pitch-pick kbd{flex:none;display:grid;place-items:center;min-width:17px;height:17px;margin-left:2px;border-radius:5px;border:1px solid var(--dim2);font:700 10.5px/1 inherit;color:var(--dim)}
 .pitch-pick button:active,.side-pick button:active{transform:scale(.95)}
 .pitch-pick.out button{animation:chipOut .2s ease both;pointer-events:none}
 .pitch-pick.out button.on{animation:chipPick .22s ease both}

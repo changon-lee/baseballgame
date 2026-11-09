@@ -9,6 +9,8 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export const timingWindowMs = contact => 18 + contact * 0.3;
 // 내가 칠 때(bat 있음)만: 이만큼 안쪽 차이는 정타로 본다. 폰은 화면·터치가 늦게 반영돼서(합쳐 두세 장) 사람이 맞출 수 있는 정확도가 이쯤이다
 export const TIMING_GRACE_MS = 30;
+// 쉬움(내가 칠 때만): 타이밍이 조금 빠르거나 늦어도 잘 맞는다. 타이밍 창을 넓히고(헛스윙·파울 경계도 같이 넓어진다), 정타 여유를 더 주고, 타구질을 조금 올린다
+export const EASY = { window: 1.5, grace: 45, bonus: 0.06 };
 // 배트가 공을 맞힐 수 있는 타원(존 좌표, 공 반지름 포함). 배트는 가로로 누워 있어 가로가 넓고, 컨택이 좋을수록 넓다.
 // 난이도(level)마다 크기가 다르다: 쉬움 1배(컨택 50이면 존 가로의 3분의 2쯤), 보통 0.6배, 어려움 0.48배
 export const BAT_SCALE = { easy: 1, normal: 0.6, hard: 0.48 };
@@ -25,17 +27,18 @@ export function batOffset(bat, plate, contact) {
 
 export function swingResult({ timingDiffMs, batter, pitch, rng, bat = null }) {
   const B = CONFIG.BALANCE;
-  const w = timingWindowMs(batter.contact);
+  const easy = !!bat && bat.level === 'easy';               // 게임·서버는 늘 난이도를 넣는다
+  const w = timingWindowMs(batter.contact) * (easy ? EASY.window : 1);
   const m = Math.max(Math.abs(pitch.plate.x), Math.abs(pitch.plate.y));
   const d = Math.abs(timingDiffMs);
   const off = bat ? batOffset(bat, pitch.plate, batter.contact) : { e: 0, lift: 0 };
   if (off.e > 1) return { kind: 'MISS', quality: 0, pull: 0, aimMiss: true, lift: off.lift };   // 배트가 공 길에 없었다
   if (d > w * 5 || m > 1.6) return { kind: 'MISS', quality: 0, pull: 0 };
-  const dq = bat ? Math.max(0, d - TIMING_GRACE_MS) : d;
-  const quality = 1 - dq / (w * 5)
+  const dq = bat ? Math.max(0, d - (easy ? EASY.grace : TIMING_GRACE_MS)) : d;
+  const quality = Math.min(1, 1 - dq / (w * 5) + (easy ? EASY.bonus : 0)
     - Math.max(0, m - 0.6) * B.EDGE_PENALTY
     - (Math.abs(pitch.breakX) + Math.abs(pitch.breakY)) * B.BREAK_PENALTY
-    - off.e * off.e * B.AIM_PENALTY;
+    - off.e * off.e * B.AIM_PENALTY);
   const lift = off.lift;
   if (quality < B.WEAK_CONTACT) return { kind: rng() < 0.5 ? 'FOUL' : 'MISS', quality, pull: 0, lift };
   const pull = clamp(-timingDiffMs / (w * 3), -1, 1);
