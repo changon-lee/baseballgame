@@ -3,207 +3,174 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>3D 시점 맛보기</title>
+<title>3D 투수 맛보기</title>
 <style>
-html,body{margin:0;height:100%;background:#0b1a2e;overflow:hidden;font-family:system-ui,sans-serif}
-canvas{width:100%;height:100%;display:block}
-.bar{position:fixed;left:0;right:0;top:0;display:flex;gap:6px;padding:8px;flex-wrap:wrap;z-index:2}
+html,body{margin:0;height:100%;background:#0b1a2e;overflow:hidden;font-family:system-ui,sans-serif;touch-action:none}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+.bar{position:fixed;left:0;right:0;top:0;display:flex;gap:6px;padding:8px;z-index:2}
 .bar button{flex:1;min-width:0;padding:9px 4px;border:0;border-radius:9px;background:rgba(10,20,36,.72);color:#dfe8f4;font-weight:700;font-size:13px}
 .bar button.on{background:#f1c40f;color:#1a1a1a}
 .note{position:fixed;left:8px;right:8px;bottom:8px;color:#fff;font-size:12px;text-shadow:0 1px 2px #000;z-index:2;pointer-events:none}
 </style>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+               "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
+</script>
 </head>
 <body>
+<canvas id="bg"></canvas>
+<canvas id="gl"></canvas>
 <div class="bar">
-  <button data-v="pitcher" class="on">투구 시점</button>
-  <button data-v="catcher">타격 시점</button>
-  <button id="d2">2D(지금)</button>
+  <button data-cam="pitcher" class="on">투구 시점</button>
+  <button data-cam="catcher">타격 시점</button>
+  <button data-cam="side">옆에서</button>
 </div>
-<canvas id="cv"></canvas>
-<div class="note" id="note"></div>
+<div class="note" id="note">불러오는 중…</div>
 <script type="module">
-// 맛보기(버릴 코드): 타구 장면의 3D 경기장을 투구·타격 시점 카메라로 비추고, 지금 쓰는 투수·타자 그림과 3D로 날아오는 공을 올린다.
+// 맛보기(버릴 코드): Mixamo 투구 동작(3D 마네킹)을 3D 구장 위에 세운다.
+// 구장은 타구 장면 코드(캔버스)로 같은 카메라에서 그리고, 그 위에 투명한 WebGL 화면으로 선수·공·그림자를 겹친다.
 // 좌표(피트): x = 1루 쪽 +, y = 홈 → 중견수 +, z = 위. 홈플레이트 가운데 = 원점
-import { getTeam } from './js/data/rosters.js';
-import { uniformFor } from './js/ui/art/uniforms.js';
-import { makeCamera, project, drawStadium3D } from './js/ui/art/field3d.js';
-import { drawPitcherSprite, drawBatterSprite, drawCatcherSprite, spriteReleaseOffset, SWING_CONTACT_MS } from './js/ui/art/sprites.js';
-import { drawBall } from './js/ui/art/figures.js';
-import { pitchPath, makeView, ballScreen, toS, pitcherAnchor, batterAnchor, setReleaseOverride } from './js/ui/art/view.js';
-import { buildBackdrop, standsImage } from './js/ui/art/stadium.js';
-import { ZONE_K, BALL_R } from './js/core/pitch.js';
+import * as THREE from 'three';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { makeCamera, drawStadium3D } from './js/ui/art/field3d.js';
 
-const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
-let W, H, dpr;
-function resize() { dpr = window.devicePixelRatio || 1; W = innerWidth; H = innerHeight; cv.width = W * dpr; cv.height = H * dpr; bg = {}; }
-let bg = {};
+const bgc = document.getElementById('bg'), bctx = bgc.getContext('2d');
+const glc = document.getElementById('gl');
+const renderer = new THREE.WebGLRenderer({ canvas: glc, alpha: true, antialias: true });
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+const scene = new THREE.Scene();
+const cam = new THREE.PerspectiveCamera(30, 1, 1, 3000); cam.up.set(0, 0, 1);
+scene.add(new THREE.HemisphereLight(0xdfeeff, 0x4a6b3a, 1.3));
+const sun = new THREE.DirectionalLight(0xffffff, 2.2); sun.position.set(-60, 120, 160); sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024); Object.assign(sun.shadow.camera, { left: -15, right: 15, top: 15, bottom: -15, near: 50, far: 400 });
+sun.target.position.set(0, 58, 0); scene.add(sun, sun.target);
+// 그림자만 받는 투명 바닥(구장 그림 위에 그림자만 얹힌다)
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.ShadowMaterial({ opacity: 0.32 }));
+ground.position.set(0, 55, 0.02); ground.receiveShadow = true; scene.add(ground);
+
+// 카메라 자리: [카메라 위치, 바라보는 곳, 세로 시야각]
+const CAMS = {
+  pitcher: { C: [1.5, 60.5 + 42, 13], T: [0, 0, 3.5], fov: 21 },
+  catcher: { C: [0, -30, 6], T: [0, 50, 4], fov: 26 },
+  side:    { C: [-45, 40, 14], T: [0, 56, 3.5], fov: 30 },
+};
+let camFrom = CAMS.pitcher, camTo = CAMS.pitcher, camT0 = 0, yaw = 0, drag = null;
+const lerp = (a, b, t) => a + (b - a) * t, mix3 = (a, b, t) => a.map((v, i) => lerp(v, b[i], t));
+function camAt(now) {
+  const k = Math.min(1, (now - camT0) / 900), s = k * k * (3 - 2 * k);
+  const C0 = mix3(camFrom.C, camTo.C, s), T = mix3(camFrom.T, camTo.T, s), fov = lerp(camFrom.fov, camTo.fov, s);
+  // 손가락으로 끌면 바라보는 곳을 중심으로 돈다
+  const dx = C0[0] - T[0], dy = C0[1] - T[1], c = Math.cos(yaw), sn = Math.sin(yaw);
+  return { C: [T[0] + dx * c - dy * sn, T[1] + dx * sn + dy * c, C0[2]], T, fov };
+}
+
+// 선수: Mixamo 마네킹(Beta_Surface = 몸, Beta_Joints = 관절)에 팀 색을 입힌다
+const mixers = [];
+let pitcher = null, hand = null, clip = null, action = null, releaseT = 0;
+new FBXLoader().load('assets/models/pitching.fbx', fbx => {
+  fbx.traverse(o => {
+    if (o.isMesh) {
+      o.castShadow = true;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      mats.forEach(m => { m.color && m.color.set(/Joint/i.test(m.name) ? 0x1d4ea1 : 0xf3f3f0); m.shininess = 12; });
+    }
+    if (/RightHand$/.test(o.name)) hand = o;
+  });
+  // Mixamo는 센티미터·Y가 위 → 피트·Z가 위로. 앞(+Z)은 홈 쪽(-y)을 보게 된다
+  const holder = new THREE.Group();
+  fbx.scale.setScalar(1 / 30.48); fbx.rotation.x = Math.PI / 2;
+  holder.add(fbx); holder.position.set(0, 60.5, 0); scene.add(holder);
+  pitcher = holder;
+  const mixer = new THREE.AnimationMixer(fbx); mixers.push(mixer);
+  clip = fbx.animations[0]; action = mixer.clipAction(clip); action.setLoop(THREE.LoopOnce); action.clampWhenFinished = true;
+  // 공을 놓는 순간 = 손이 가장 빨리 홈 쪽으로 움직이는 때
+  action.play(); let best = -1, prev = null; const v = new THREE.Vector3();
+  for (let t = 0; t <= clip.duration; t += 1 / 60) {
+    mixer.setTime(t); holder.updateMatrixWorld(true); hand.getWorldPosition(v);
+    if (prev != null) { const sp = prev - v.y; if (sp > best) { best = sp; releaseT = t; } }
+    prev = v.y;
+  }
+  mixer.setTime(0);
+  startPitch(performance.now());
+  window.__info = { duration: clip.duration, releaseT, tracks: clip.tracks.length };
+  document.getElementById('note').textContent = `Mixamo 투구 동작 · 손가락으로 좌우로 끌면 카메라가 돌아요`;
+}, undefined, e => { document.getElementById('note').textContent = '3D 모델을 못 불러왔어요: ' + (e.message || e); });
+
+// 공
+const ball = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 12), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 }));
+ball.castShadow = true; ball.visible = false; scene.add(ball);
+// 홈 뒤 백스톱 + 관중(구장 사진). 투구 시점에서 홈 뒤 관중석이 너무 멀어 흐릿해서 60피트 뒤에 사진을 세운다
+new THREE.TextureLoader().load('assets/stadium/pitcher.webp', tex => {
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const w = 170, h = w * tex.image.height / tex.image.width;
+  const wall = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex }));
+  wall.position.set(0, -62, h / 2); wall.up.set(0, 0, 1); wall.lookAt(0, 100, h / 2); scene.add(wall);
+});
+// 스트라이크 존
+const zone = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints([[-0.71, 3.4], [0.71, 3.4], [0.71, 1.6], [-0.71, 1.6]].map(([x, z]) => new THREE.Vector3(x, 0, z))),
+  new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 }));
+scene.add(zone);
+
+let p0 = 0, rel = null, target = null;
+const TRAVEL = 0.45;                          // 초(약 140km/h)
+function startPitch(now) {
+  p0 = now; rel = null; target = new THREE.Vector3((Math.random() - 0.5) * 1.6, 0, 1.8 + Math.random() * 1.5);
+  action.reset().play();
+}
+
+let lastKey = '';
+function resize() {
+  const W = innerWidth, H = innerHeight, d = Math.min(2, devicePixelRatio || 1);
+  bgc.width = W * d; bgc.height = H * d; renderer.setPixelRatio(d); renderer.setSize(W, H, false);
+  cam.aspect = W / H; cam.updateProjectionMatrix(); lastKey = '';
+}
 addEventListener('resize', resize); resize();
 
-const sam = getTeam('samsung'), lg = getTeam('lg');
-const pitcher = sam.pitchers[0], uP = uniformFor(sam, 'home'), uB = uniformFor(lg, 'away');
-let view = 'pitcher', d2 = false;
-
-// 존 좌표 → 피트: 존 가로 끝(±ZONE_K) = 홈플레이트 끝(±0.708피트), 세로는 지금 화면처럼 가로의 1.2배
-const XU = 0.708 / ZONE_K, YU = XU * 1.2, ZC = 2.5;
-const plateW = (x, y) => [x * XU, 0, ZC + y * YU];
-const STAND_FT = 6.2;                       // 그림 속 선 키(182 포즈 단위) = 6.2피트
-const RAW = 182;
-
-// 카메라: 지금 화면과 존 크기·위치를 맞춘다. 사람은 실제 크기면 너무 커서(망원) 홈 근처 사람만 줄인다
-function camera(kind) {
-  if (kind === 'catcher') {                 // 포수 뒤 32피트, 눈높이보다 조금 위에서 마운드 쪽
-    const C = [0, -32, 6.2], T = [0, 30, 3.2];
-    const K = makeCamera(C, T, 1, W, H);
-    const d = 32;                           // 존까지 거리
-    K.F = Math.min(W * 0.36, H * 0.24) * ZONE_K * d / (2 * 0.708);
-    K.cy = H * 0.5;
-    const z = project(K, [0, 0, ZC]); K.cy += H * 0.6 - z.y;   // 존 가운데를 화면 0.6 높이에
-    return { K, plateK: 0.72, batX: 2.0 };
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  const W = innerWidth, H = innerHeight, d = Math.min(2, devicePixelRatio || 1);
+  const c = camAt(now);
+  cam.fov = c.fov; cam.updateProjectionMatrix(); cam.position.set(...c.C); cam.lookAt(...c.T);
+  // 구장(캔버스): 같은 카메라. 카메라가 그대로면 다시 그리지 않는다(관중석 그림이 늦게 오면 몇 초 뒤 한 번 더)
+  const key = c.C.map(v => v.toFixed(2)).join() + c.fov.toFixed(2) + W + H + Math.min(3, Math.floor(now / 2500));
+  if (key !== lastKey) {
+    lastKey = key;
+    const F = H / 2 / Math.tan(c.fov * Math.PI / 360);
+    bctx.setTransform(d, 0, 0, d, 0, 0); drawStadium3D(bctx, makeCamera(c.C, c.T, F, W, H));
   }
-  const C = [0, 60.5 + 24, 10], T = [0, 0, 3];  // 투수 뒤 24피트, 조금 높이서 홈 쪽
-  const K = makeCamera(C, T, 1, W, H);
-  K.F = Math.min(W * 0.33, H * 0.21) * ZONE_K * 84.5 / (2 * 0.708);
-  const z = project(K, [0, 0, ZC]); K.cy += H * 0.36 - z.y;
-  return { K, plateK: 0.62, batX: 2.0 };
-}
-// 화면 점(sx, sy)을 지나는 시선이 y = yT 평면과 만나는 3D 점
-function unproject(K, sx, sy, yT) {
-  const X = (sx - K.cx) / K.F, Y = (K.cy - sy) / K.F;
-  const dir = [K.r[0] * X + K.u[0] * Y + K.f[0], K.r[1] * X + K.u[1] * Y + K.f[1], K.r[2] * X + K.u[2] * Y + K.f[2]];
-  const t = (yT - K.C[1]) / dir[1];
-  return [K.C[0] + dir[0] * t, K.C[1] + dir[1] * t, K.C[2] + dir[2] * t];
-}
-
-// 공: 손 → 홈플레이트 3D 경로(구종별로 휘는 것은 지금과 같은 값, 피트로 바꿔서)
-const TYPES = pitcher.pitches;
-let ball = null, cycle = 0;
-function newPitch(now) {
-  const type = TYPES[cycle++ % TYPES.length];
-  const target = { x: (Math.random() * 2 - 1) * 0.9, y: (Math.random() * 2 - 1) * 0.9 };
-  const speed = { FB: 1, SL: 0.88, CH: 0.85, CU: 0.8 }[type] || 0.9;
-  const travelMs = 430 / speed;
-  ball = { pitch: { type, throws: pitcher.throws, plate: target, travelMs, breakX: 0, breakY: 0 }, start: now + 1050, swing: Math.random() < 0.5 };
-}
-function ballWorld(R, pitch, p) {
-  const br = pitchPath(pitch), m = 1.2;
-  const P = plateW(pitch.plate.x, pitch.plate.y), B = [br.x * m * XU, 0, br.y * m * YU];
-  const pp = Math.min(p, 1), late = Math.pow(pp, br.n);
-  const out = [0, 1, 2].map(i => R[i] + (P[i] - B[i] - R[i]) * pp + B[i] * late);
-  if (p > 1) out[1] = -(p - 1) * 55;        // 지나간 뒤 포수 쪽으로
-  return out;
-}
-
-// 투구 시점: 홈 뒤 60피트에 백스톱 벽 + 관중(지금 쓰는 구장 사진)을 세운다. 망원이라 보이는 폭이 좁아서 화면 폭에 맞춘다
-function backstop(x, K) {
-  const img = standsImage('pitcher'), Y = -60;
-  const a = project(K, [0, Y, 0]); if (!a) return;
-  const wFt = W / a.s * 1.15, hFt = img ? wFt * img.height / img.width : 8;
-  const tl = project(K, [wFt / 2, Y, hFt]), br = project(K, [-wFt / 2, Y, 0]);
-  if (img) x.drawImage(img, tl.x, tl.y, br.x - tl.x, br.y - tl.y);
-  else { x.fillStyle = '#1d2a44'; x.fillRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y); }
-  x.fillStyle = '#1d2a44'; x.fillRect(0, 0, W, Math.max(0, tl.y + 1));   // 사진 위(하늘 쪽)는 어둡게 채운다
-}
-function drawZone(K, alpha) {
-  const c = [[-0.708, ZC + ZONE_K * YU], [0.708, ZC + ZONE_K * YU], [0.708, ZC - ZONE_K * YU], [-0.708, ZC - ZONE_K * YU]].map(([x, z]) => project(K, [x, 0, z]));
-  ctx.save(); ctx.strokeStyle = `rgba(255,255,255,${alpha})`; ctx.lineWidth = 2;
-  ctx.beginPath(); c.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ctx.closePath(); ctx.stroke();
-  ctx.restore();
-}
-
-function frame3D(now) {
-  const { K, plateK, batX } = camera(view);
-  // 배경은 카메라가 그대로면 한 번만 그려 둔다
-  if (!bg[view] || !bg[view].done) {
-    const c = bg[view]?.c || document.createElement('canvas'); c.width = W * dpr; c.height = H * dpr;
-    const x = c.getContext('2d'); x.setTransform(dpr, 0, 0, dpr, 0, 0); drawStadium3D(x, K);
-    if (view === 'pitcher') backstop(x, K);
-    bg[view] = { c, done: now > 6000 };      // 관중석 그림이 늦게 오면 다시 그린다
+  mixers.forEach(m => m.update(dt));
+  if (pitcher && hand) {
+    const t = action.time, v = new THREE.Vector3();
+    if (rel == null && t < releaseT) { hand.getWorldPosition(v); ball.position.copy(v); ball.visible = true; }
+    else {
+      if (rel == null) { hand.getWorldPosition(v); rel = { at: now, from: v.clone() }; }
+      const p = (now - rel.at) / 1000 / TRAVEL, pp = Math.min(p, 1);
+      if (p <= 1.15) {
+        const q = rel.from.clone().lerp(target, pp);
+        q.z += 0.9 * pp * (1 - pp);                // 살짝 떠 보이다 가라앉는 길
+        if (p > 1) q.y = -(p - 1) * 60;
+        ball.position.copy(q); ball.visible = true;
+      } else ball.visible = false;
+    }
+    if (now - p0 > clip.duration * 1000 + 1200) startPitch(now);
   }
-  ctx.drawImage(bg[view].c, 0, 0, W, H);
-  const front = view === 'catcher';
-  const R = pitcher.throws === 'L' ? 'L' : 'R';
-  // 투수
-  let pArgs;
-  if (front) {
-    const f = project(K, [0, 60.5, 0.8]);
-    pArgs = { x: f.x, y: f.y, scale: f.s * STAND_FT / RAW };
-  } else {
-    pArgs = { x: W * 0.5, y: H * 1.13, scale: H * 0.56 / 180 };   // 카메라 바로 앞이라 지금처럼 크게(실제 크기로는 화면을 넘는다)
-  }
-  pArgs = { ...pArgs, back: !front, uni: uP, player: pitcher, throws: R, now, releaseAt: ball ? ball.start : null, windMs: 1050 };
-  // 손 위치 → 3D 릴리스 점(마운드 앞 5.5피트 평면)
-  const off = spriteReleaseOffset(!front, R) || [0, -170];
-  const hand = [pArgs.x + off[0] * pArgs.scale * (front ? 1 : 1), pArgs.y + off[1] * pArgs.scale];
-  const rel = unproject(K, hand[0], hand[1], 55);
-  // 타자(우타자는 3루 쪽 = x < 0)
-  const side = -1, bw = project(K, [side * batX, 0, 0]);
-  const bArgs = { x: bw.x, y: bw.y, scale: bw.s * STAND_FT / RAW * plateK, facing: (front ? 1 : -1) * -side, uni: uB, now,
-    swingAt: ball && ball.swing ? ball.start + ball.pitch.travelMs - SWING_CONTACT_MS : null, pitchStart: ball ? ball.start : null, travelMs: ball ? ball.pitch.travelMs : 1, front: !front };
-  // 공
-  let bp = null;
-  if (ball && now >= ball.start) {
-    const p = (now - ball.start) / ball.pitch.travelMs;
-    if (p <= 1.06) { const w = ballWorld(rel, ball.pitch, p), q = project(K, w); if (q) bp = { x: q.x, y: q.y, r: Math.max(2.2, q.s * BALL_R * XU), spin: (now - ball.start) / 25 }; }
-  }
-  if (front) {
-    drawPitcherSprite(ctx, pArgs);
-    drawZone(K, 0.32);
-    if (bp) drawBall(ctx, bp.x, bp.y, bp.r, bp.spin);
-    drawBatterSprite(ctx, bArgs);
-  } else {
-    // 포수·심판: 지금 그리는 함수에 3D로 구한 자리·크기를 넘긴다
-    const cf = project(K, [0, -2.6, 0]), zh = 3.9 * STAND_FT / 6.2 * cf.s * plateK / 0.86;
-    drawCatcherSprite(ctx, { feetY: cf.y + zh * 0.05, zh, zw: zh / 1.2, cx: cf.x, figH: zh * 1.35, mirror: true }, null, now);
-    drawZone(K, 0.7);
-    drawBatterSprite(ctx, bArgs);
-    if (bp) drawBall(ctx, bp.x, bp.y, bp.r, bp.spin);
-    drawPitcherSprite(ctx, pArgs);
-  }
-  return ball ? ball.pitch.type : '';
+  renderer.render(scene, cam);
+  requestAnimationFrame(frame);
 }
+requestAnimationFrame(frame);
 
-// 비교용: 지금 쓰는 2D 화면(같은 공)
-function frame2D(now) {
-  const V = makeView(view, W, H);
-  if (!bg['2d' + view]) bg['2d' + view] = buildBackdrop(view, V, W, H, dpr, sam);
-  ctx.drawImage(bg['2d' + view], 0, 0, W, H);
-  const pa = pitcherAnchor(V, 'R'), ba = batterAnchor(V, 'R');
-  setReleaseOverride((back, t) => spriteReleaseOffset(back, t));
-  const pArgs = { ...pa, uni: uP, player: pitcher, throws: 'R', now, releaseAt: ball ? ball.start : null, windMs: 1050 };
-  const bArgs = { ...ba, uni: uB, now, swingAt: ball && ball.swing ? ball.start + ball.pitch.travelMs - SWING_CONTACT_MS : null, pitchStart: ball ? ball.start : null, travelMs: ball ? ball.pitch.travelMs : 1, front: view === 'pitcher' };
-  const bp = ball && now >= ball.start ? ballScreen(V, ball.pitch, ball.start, now) : null;
-  const zone = a => { const [x0, y0] = toS(V, (V.mirror ? 1 : -1) * ZONE_K, ZONE_K); ctx.strokeStyle = `rgba(255,255,255,${a})`; ctx.lineWidth = 2; ctx.strokeRect(x0, y0, V.zw * ZONE_K, V.zh * ZONE_K); };
-  if (view === 'pitcher') {
-    drawCatcherSprite(ctx, V, null, now); zone(0.7); drawBatterSprite(ctx, bArgs);
-    if (bp && bp.prog <= 1.02) drawBall(ctx, bp.x, bp.y, bp.r, bp.spin);
-    drawPitcherSprite(ctx, pArgs);
-  } else {
-    drawPitcherSprite(ctx, pArgs); zone(0.32);
-    if (bp && bp.prog <= 1.02) drawBall(ctx, bp.x, bp.y, bp.r, bp.spin);
-    drawBatterSprite(ctx, bArgs);
-  }
-}
-
-const NAMES = { FB: '직구', SL: '슬라이더', CH: '체인지업', CU: '커브', SI: '투심', CT: '커터', FO: '포크' };
-const AT = new URLSearchParams(location.search).get('at');   // 확인용: ?at=0.7 → 같은 공의 70% 지점에서 멈춘 화면
-function loop(now) {
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  if (AT != null) {
-    if (!ball) { newPitch(0); ball.pitch.type = 'SL'; ball.pitch.plate = { x: 0.5, y: -0.4 }; ball.swing = false; }
-    now = ball.start + +AT * ball.pitch.travelMs + (now > 9000 ? 0 : now - 9000) * 0;
-  } else if (!ball || now > ball.start + ball.pitch.travelMs + 1300) newPitch(now);
-  if (d2) frame2D(now); else frame3D(now);
-  document.getElementById('note').textContent = `${d2 ? '2D(지금 게임)' : '3D 맛보기'} · ${NAMES[ball.pitch.type] || ''} · 공은 2~3초마다 자동으로 던져요`;
-  requestAnimationFrame(loop);
-}
-requestAnimationFrame(loop);
-
-document.querySelectorAll('[data-v]').forEach(b => b.onclick = () => {
-  view = b.dataset.v; document.querySelectorAll('[data-v]').forEach(x => x.classList.toggle('on', x === b));
+const pick = name => { const b = document.querySelector(`[data-cam=${name}]`); document.querySelectorAll('[data-cam]').forEach(x => x.classList.toggle('on', x === b)); };
+document.querySelectorAll('[data-cam]').forEach(b => b.onclick = () => {
+  const now = performance.now(); camFrom = camAt(now); yaw = 0; camTo = CAMS[b.dataset.cam]; camT0 = now; pick(b.dataset.cam);
 });
-document.getElementById('d2').onclick = e => { d2 = !d2; e.target.classList.toggle('on', d2); };
-if (location.hash === '#catcher') { view = 'catcher'; document.querySelectorAll('[data-v]').forEach(x => x.classList.toggle('on', x.dataset.v === 'catcher')); }
-if (location.search.includes('2d')) { d2 = true; document.getElementById('d2').classList.add('on'); }
+glc.addEventListener('pointerdown', e => { drag = { x: e.clientX, yaw }; });
+addEventListener('pointermove', e => { if (drag) yaw = drag.yaw - (e.clientX - drag.x) / innerWidth * 2.2; });
+addEventListener('pointerup', () => { drag = null; });
+if (CAMS[location.hash.slice(1)]) { camFrom = camTo = CAMS[location.hash.slice(1)]; pick(location.hash.slice(1)); }
+// 확인용: 동작을 t초에 멈춘다
+window.__seek = t => { if (action) { action.paused = true; action.time = t; mixers[0].update(0); return window.__info; } };
 </script>
 </body>
 </html>
