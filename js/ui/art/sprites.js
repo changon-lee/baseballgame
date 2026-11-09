@@ -317,6 +317,10 @@ const FIELD = {
   fielder: [{ w: 186, h: 250, ax: 92, hx: 95 }, { w: 177, h: 194, ax: 88, hx: 88 }, { w: 113, h: 330, ax: 56, hx: 64 }, { w: 117, h: 303, ax: 55, hx: 52 }],   // 준비, 땅볼, 뜬공, 서서 보기(정면)
   fthrow: [{ w: 234, h: 256, ax: 116, hx: 153 }, { w: 243, h: 263, ax: 118, hx: 133 }, { w: 243, h: 263, ax: 105, hx: 165 }, { w: 320, h: 171, ax: 22, hx: 238 }],   // 내딛기, 던질 준비, 릴리스, 다이빙
   rbase: [{ w: 75, h: 306, ax: 44, hx: 44 }, { w: 202, h: 249, ax: 99, hx: 158 }, { w: 268, h: 204, ax: 158, hx: 73 }, { w: 340, h: 152, ax: 12, hx: 239 }],   // 서 있기, 리드, 발 슬라이딩, 머리 슬라이딩
+  // 아래 셋은 tools/field_extra.py(초록 배경 이미지 한 장씩)
+  fstretch: [{ w: 244, h: 245, ax: 99, hx: 146 }],   // 송구 받기: 다리를 쭉 뻗고 글러브를 내민 옆모습
+  fback: [{ w: 111, h: 303, ax: 60, hx: 58 }, { w: 88, h: 330, ax: 42, hx: 43 }, { w: 168, h: 250, ax: 88, hx: 69 }],   // 뒷모습: 서서 보기, 뜬공 잡기, 준비
+  cback: [{ w: 133, h: 190, ax: 69, hx: 63 }],   // 포수 뒷모습(쪼그려 앉기)
   ump: [{ w: 104, h: 301, ax: 52, hx: 53 }, { w: 163, h: 246, ax: 81, hx: 82 }, { w: 136, h: 312, ax: 53, hx: 74 }],   // 심판 뒷모습: 서 있기, 앉기, 콜
 };
 // 투수·타자 그림(첫 화면)을 다 받은 뒤에 불러온다. 같이 받으면 첫 화면이 늦게 뜬다
@@ -341,6 +345,15 @@ export function fieldSprite(name, i, uni) {
   const f = FIELD[name]?.[i];
   if (!f || !f.ok) return null;
   return { img: uni ? tinted(f, uni) : f.img, w: f.w, h: f.h, ax: f.ax, hx: f.hx };
+}
+// 타구 장면의 투수: 투구 영상(앞모습)의 팔로스루 그림을 수비수 그림과 같은 크기(셋 자세 키 = 서 있는 수비수 키)로 맞춰 준다
+// ay = 발 기준점 높이(다리를 든 그림은 그림 아래 끝이 발보다 위라 h와 다르다)
+const FIELD_STAND_H = 303;                                // fielder_3(서서 보기) 그림 키
+export function pitcherFieldSprite(i, uni) {
+  const set = SETS.pitcher_front, f = set && set.frames[i];
+  if (!f || !f.img || !f.img.complete || !f.img.naturalWidth) return null;
+  const m = FIELD_STAND_H / set.h0;
+  return { img: uni ? tinted(f, uni) : f.img, w: f.w * m, h: f.h * m, ax: f.ax * m, ay: (f.ay ?? f.h) * m };
 }
 
 function shadowAt(ctx, w) {

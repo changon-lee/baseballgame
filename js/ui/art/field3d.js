@@ -3,7 +3,7 @@
 import { toSec, trackAt, ballAt, fenceAt, BASES, polar, FENCE_H, jumpZ } from './playscript.js';
 import { standsImage, groundTexture } from './stadium.js';
 import { drawBall } from './figures.js';
-import { fieldSprite, fieldCount, FIELD_PX } from './sprites.js';
+import { fieldSprite, fieldCount, FIELD_PX, pitcherFieldSprite } from './sprites.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -424,22 +424,27 @@ function spriteFor(kind, act, ph, since, view) {
     case 'throw': return [['fthrow', since < 0.12 ? 0 : since < 0.32 ? 1 : 2, 'mid', true]];
     case 'dive': return [['fthrow', 3, 'mid', true]];
     case 'field': return [['fielder', 1, 'foot']];
+    case 'tag': return [['fielder', 1, 'foot']];       // 태그: 글러브를 낮게 대는 자세(땅볼 잡는 그림)
+    // 타구 직후의 투수: 방금 던진 팔로스루(투구 영상 앞모습 마지막 그림들) → 수비 준비 자세
+    case 'pitch': return since < 1.1 ? [['pitch_front', since < 0.3 ? 22 : since < 0.6 ? 23 : 24, 'foot'], ['fielder', 0, 'foot']] : [['fielder', 0, 'foot']];
     case 'catch': case 'jump': return [...(view === 'back' ? [['fback', 1, 'foot']] : []), ['fielder', 2, 'foot']];
-    case 'ready': case 'set': case 'lead': case 'crouch': case 'cover': case 'receive': return [...(view === 'back' ? [['fback', 2, 'foot']] : []), ['fielder', 0, 'foot']];
+    case 'receive': return [['fstretch', 0, 'foot', true], ['fielder', 0, 'foot']];   // 송구 받기: 던진 쪽으로 다리를 뻗고 글러브를 내민다
+    case 'crouch': return [...(view === 'back' ? [['cback', 0, 'foot']] : []), ['fielder', 0, 'foot']];   // 포수: 쪼그려 앉은 뒷모습
+    case 'ready': case 'set': case 'lead': case 'cover': return [...(view === 'back' ? [['fback', 2, 'foot']] : []), ['fielder', 0, 'foot']];
     default: return [...(view === 'back' ? [['fback', 0, 'foot']] : []), ['fielder', 3, 'foot']];
   }
 }
 function drawSprite(ctx, x, y, s, u, kind, act, ph, since, dir, view) {
   for (const [set, i0, anchor, side] of spriteFor(kind, act, ph, since, view)) {
-    const n = fieldCount(set);
+    const n = set === 'pitch_front' ? 1 : fieldCount(set);
     const i = i0 === 'cyc' ? ((Math.floor(ph / (2 * Math.PI) * n) % n) + n) % n : i0;
-    const sp = n && fieldSprite(set, i, u);
+    const sp = n && (set === 'pitch_front' ? pitcherFieldSprite(i, u) : fieldSprite(set, i, u));
     if (!sp) continue;
     const k = s / FIELD_PX, ax = anchor === 'foot' ? sp.ax : anchor === 'head' ? sp.hx - sp.h * 0.1 : sp.w / 2;
     ctx.save();
     ctx.translate(x, y);
     if (side && dir < 0) ctx.scale(-1, 1);
-    ctx.drawImage(sp.img, -ax * k, -sp.h * k, sp.w * k, sp.h * k);
+    ctx.drawImage(sp.img, -ax * k, -(sp.ay ?? sp.h) * k, sp.w * k, sp.h * k);
     ctx.restore();
     return true;
   }
@@ -487,7 +492,7 @@ export function drawPlay3D(ctx, W, H, sc, ms, uni) {
     if (speed >= 0.5) {
       const c = (k.vx * ex + k.vy * ey) / (speed * el);
       view = c > 0.62 ? 'back' : c < -0.62 ? 'front' : 'side';
-    } else if (kind === 'f' && (act === 'watch' || act === 'stand' || act === 'catch' || act === 'camp')) {
+    } else if (kind === 'f' && (act === 'watch' || act === 'stand' || act === 'catch' || act === 'camp' || act === 'ready' || act === 'cover')) {
       // 서서 공을 볼 때: 공이 자기보다 한참 뒤(카메라 반대쪽)에 떠 있으면 등을 보인다
       const bp = ballNow, c = ((bp[0] - k.x) * ex + (bp[1] - k.y) * ey) / el;
       if (c > 25 && bp[2] > 3) view = 'back';
