@@ -8,7 +8,7 @@ const FILES = ['bat_crack', 'bat_hr', 'mitt_pop', 'glove_catch', 'swing_whoosh',
 const LOOPS = { crowd_loop: 30 };   // 반복 소리의 원래 길이(초): mp3 앞뒤 빈 소리를 빼고 이만큼만 돈다
 const RAW = {}, BUF = {};
 let fetching = false;
-const opts = { sfx: true, amb: true };
+const opts = { sfx: true, amb: true, sfxVol: 1, ambVol: 1 };
 const amb = { want: false, nodes: {} };
 
 // 파일은 미리 받아 두고(오디오를 깨우기 전에도 된다), 소리로 풀기는 오디오가 생긴 뒤에 한다
@@ -38,7 +38,7 @@ export function unlockAudio() {
       lim.threshold.value = -8; lim.knee.value = 6; lim.ratio.value = 10; lim.attack.value = 0.003; lim.release.value = 0.2;
       lim.connect(AC.destination);
       SFX = AC.createGain(); AMB = AC.createGain();
-      SFX.gain.value = opts.sfx ? 1 : 0; AMB.gain.value = opts.amb ? 1 : 0;
+      SFX.gain.value = opts.sfx ? opts.sfxVol : 0; AMB.gain.value = opts.amb ? opts.ambVol : 0;
       SFX.connect(lim); AMB.connect(lim);
       preloadAudio();
       for (const n of FILES) decode(n);
@@ -55,12 +55,16 @@ if (typeof document !== 'undefined') {
   });
 }
 
-export function setAudioOptions({ sfx = true, amb: a = true } = {}) {
-  opts.sfx = sfx; opts.amb = a;
+// sfxVol·ambVol: 0~1 소리 크기(효과음 / 관중·응원 배경음)
+export function setAudioOptions({ sfx = true, amb: a = true, sfxVol = 1, ambVol = 1 } = {}) {
+  const v = x => (Number.isFinite(+x) ? Math.max(0, Math.min(1, +x)) : 1);
+  opts.sfx = sfx; opts.amb = a; opts.sfxVol = v(sfxVol); opts.ambVol = v(ambVol);
   if (!AC) return;
-  SFX.gain.setTargetAtTime(sfx ? 1 : 0, AC.currentTime, 0.05);
-  AMB.gain.setTargetAtTime(a ? 1 : 0, AC.currentTime, 0.15);
+  SFX.gain.setTargetAtTime(sfx ? opts.sfxVol : 0, AC.currentTime, 0.05);
+  AMB.gain.setTargetAtTime(a ? opts.ambVol : 0, AC.currentTime, 0.15);
 }
+// 볼륨을 만질 때 들어 보는 소리
+export function previewSound(kind) { playSound(kind === 'amb' ? 'cheer' : 'hit', kind === 'amb' ? { gain: 0.6 } : { q: 0.8 }); }
 
 // 경기장 분위기: 관중 웅성거림
 export function setAmbience(on) {

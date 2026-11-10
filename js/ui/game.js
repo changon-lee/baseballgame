@@ -8,8 +8,9 @@ import { cpuChoosePitch, cpuSwing } from '../core/ai.js';
 import { pitchPts, swingPts } from '../core/practice.js';
 import { batReach, EASY, TIMING_GRACE_MS } from '../core/batting.js';
 import { loadPrefs, savePrefs, LEVELS, LEVEL_NAME } from './prefs.js';
+import { volRow, bindVol } from './volume.js';
 import { startLoop } from './loop.js';
-import { unlockAudio, playSound, vibrate, shake, preloadAudio, setAudioOptions, setAmbience } from './feedback.js';
+import { unlockAudio, playSound, vibrate, shake, preloadAudio, setAudioOptions, setAmbience, previewSound } from './feedback.js';
 import { makeView, toS, zoneRect, ballScreen, ballRadius, pitcherAnchor, batterAnchor, setReleaseOverride, PITCH_PATH } from './art/view.js';
 import { drawPitcherSprite, drawBatterSprite, drawCatcherSprite, spriteReleaseOffset, SWING_CONTACT_MS } from './art/sprites.js';
 import { buildBackdrop, standsReady } from './art/stadium.js';
@@ -558,6 +559,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       <p class="hint">${net ? '1:1 대결은 방을 만든 사람이 정한 난이도로 둘 다 같게 해요. ' : ''}${{ easy: '쉬움: 배트가 크고 잘 맞아요. 제구 게이지의 초록 구간이 넓고 느려요', normal: '보통: 배트가 작고, 제구 게이지가 좁고 빨라요. 공이 올 길은 대략 보여 줘요(선구안이 좋을수록 정확)', hard: '어려움: 배트가 더 작고 궤적 안내가 없어요. 제구 게이지가 가장 좁고 빨라요' }[lvl()]}</p>
       <div class="row2 snd"><button class="ghost" data-act="sfx">효과음 ${prefs.sfx ? '켜짐' : '꺼짐'}</button>
         <button class="ghost" data-act="amb">관중·응원 ${prefs.amb ? '켜짐' : '꺼짐'}</button></div>
+      <div class="vols">${volRow('🔊', '효과음', 'sfxVol', prefs.sfxVol)}${volRow('👏', '배경음', 'ambVol', prefs.ambVol)}</div>
       ${net ? '' : `<button class="ghost" data-act="half">이번 ${userPitching() ? '수비' : '공격'} 넘기기</button>
       <button class="ghost" data-act="inning">이번 이닝 넘기기</button>
       <button class="ghost" data-act="game">이번 경기 넘기기</button>`}
@@ -573,6 +575,10 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     on('guide', () => { prefs = { ...prefs, guide: !prefs.guide }; savePrefs(prefs); closeOverlay(); showMenu(); });
     on('level', () => { prefs = { ...prefs, level: LEVELS[(LEVELS.indexOf(prefs.level) + 1) % LEVELS.length] }; savePrefs(prefs); closeOverlay(); showMenu(); });
     const sound = (k) => { prefs = { ...prefs, [k]: !prefs[k] }; savePrefs(prefs); setAudioOptions(prefs); closeOverlay(); showMenu(); };
+    overlay.querySelectorAll('input[data-vol]').forEach(el => bindVol(el, v => {   // 0보다 크게 올리면 꺼져 있던 소리도 켠다
+      const flag = el.dataset.vol === 'sfxVol' ? 'sfx' : 'amb';
+      prefs = { ...prefs, [el.dataset.vol]: v, ...(v > 0 ? { [flag]: true } : {}) }; setAudioOptions(prefs);
+    }, () => { savePrefs(prefs); closeOverlay(); showMenu(); }));
     on('sfx', () => sound('sfx'));
     on('amb', () => sound('amb'));
     on('half', () => skip('half'));

@@ -391,3 +391,15 @@ button.primary{background:linear-gradient(180deg,#4c97ff,#1f6fe5 52%,#0a4fb8);bo
 /* 결과 화면 이모지 / 기록 숫자 위 이모지 */
 .re{text-align:center;font-size:52px;line-height:1;filter:drop-shadow(0 6px 14px rgba(0,0,0,.4))}
 .stats3 i{display:block;font-style:normal;font-size:24px;margin-bottom:4px}
+
+/* ═══ 소리 크기 바 ═══ */
+.vols{display:flex;flex-direction:column;gap:2px;margin:6px 0 2px}
+.vol{display:grid;grid-template-columns:86px 1fr 40px;align-items:center;gap:10px;margin:6px 0;font-size:13.5px;font-weight:700;color:var(--fg)}
+.vol em{font-style:normal;text-align:right;color:var(--accent);font-weight:800;font-size:13px}
+.vol input{-webkit-appearance:none;appearance:none;width:100%;height:30px;margin:0;background:transparent;touch-action:none;cursor:pointer}
+.vol input::-webkit-slider-runnable-track{height:8px;border-radius:6px;background:linear-gradient(90deg,var(--accent) var(--p,100%),rgba(255,255,255,.16) var(--p,100%))}
+.vol input::-moz-range-track{height:8px;border-radius:6px;background:rgba(255,255,255,.16)}
+.vol input::-moz-range-progress{height:8px;border-radius:6px;background:var(--accent)}
+.vol input::-webkit-slider-thumb{-webkit-appearance:none;width:26px;height:26px;margin-top:-9px;border-radius:50%;background:#fff;border:4px solid var(--accent);box-shadow:0 3px 10px rgba(0,0,0,.5)}
+.vol input::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:#fff;border:4px solid var(--accent);box-shadow:0 3px 10px rgba(0,0,0,.5)}
+.vol input:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:8px}

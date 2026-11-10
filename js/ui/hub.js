@@ -5,6 +5,9 @@ import { userTeamNow, userTeamTired } from '../core/career.js';
 import { avg, era, ip } from '../core/growth.js';
 import { PRACTICE, PRACTICE_STATS, practiceLeft } from '../core/practice.js';
 import { loadNow, daysToRecover } from '../core/fatigue.js';
+import { loadPrefs, savePrefs } from './prefs.js';
+import { setAudioOptions } from './feedback.js';
+import { volRow, bindVol } from './volume.js';
 
 const ME = USER_TEAM_ID;
 const STAT_KO = { power: '파워', contact: '컨택', eye: '선구안', control: '제구', stamina: '체력', velo: '구속' };
@@ -239,6 +242,9 @@ export function showHub(root, ctx) {
       <section class="card flush"><div class="card-h pad">📜 역대 시즌</div>
       ${h.length ? [...h].reverse().map(x => `<div class="hrow ${x.champion === ME ? 'gold' : ''}"><b>${x.year}</b><span>${x.rank}위 · ${x.w}승 ${x.l}패${x.d ? ' ' + x.d + '무' : ''}</span><em>${x.result}</em></div>`).join('')
         : '<p class="hint pad">아직 끝낸 시즌이 없어요</p>'}</section>
+      <section class="card"><div class="card-h">🔊 소리</div>
+        ${volRow('🔊', '효과음', 'sfxVol', loadPrefs().sfxVol)}${volRow('👏', '배경음', 'ambVol', loadPrefs().ambVol)}
+        <p class="hint">효과음은 방망이·글러브 소리, 배경음은 관중·응원 소리예요. 0%로 내리면 꺼져요. 바에서 손을 떼면 들어 볼 수 있어요.</p></section>
       <div class="actions"><button class="danger ghost" data-act="reset">🗑️ 커리어 처음부터</button></div>`;
   }
 
@@ -247,6 +253,11 @@ export function showHub(root, ctx) {
     root.querySelectorAll('[data-cyc]').forEach(b => { b.onclick = () => { ctx.setup.cycles = +b.dataset.cyc; render(); }; });
     root.querySelectorAll('[data-inn]').forEach(b => { b.onclick = () => { ctx.setup.innings = +b.dataset.inn; render(); }; });
     root.querySelectorAll('[data-sp]').forEach(b => { b.onclick = () => { ctx.starterId = b.dataset.sp; render(); }; });
+    let pr = loadPrefs();
+    root.querySelectorAll('input[data-vol]').forEach(el => bindVol(el, v => {   // 0보다 크게 올리면 꺼져 있던 소리도 켠다
+      const flag = el.dataset.vol === 'sfxVol' ? 'sfx' : 'amb';
+      pr = { ...pr, [el.dataset.vol]: v, ...(v > 0 ? { [flag]: true } : {}) }; setAudioOptions(pr);
+    }, () => savePrefs(pr)));
     root.querySelectorAll('[data-pp]').forEach(b => { b.onclick = () => { ctx.pr.pitchId = b.dataset.pp; render(); }; });
     root.querySelectorAll('[data-pb]').forEach(b => { b.onclick = () => { ctx.pr.batId = b.dataset.pb; render(); }; });
     root.querySelectorAll('[data-ps]').forEach(b => { b.onclick = () => { ctx.pr.pitchStat = b.dataset.ps; render(); }; });
