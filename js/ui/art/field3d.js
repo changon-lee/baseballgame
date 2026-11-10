@@ -1,7 +1,7 @@
 // 3D 타구 화면: playscript 대본을 중계 카메라처럼 그린다.
 // 경기장·공·선수를 3D 좌표(피트)로 두고, 홈 뒤 높은 곳의 카메라가 공과 수비수를 따라 돌고 당겨서(줌) 비춘다.
 import { toSec, trackAt, ballAt, fenceAt, BASES, polar, FENCE_H, jumpZ } from './playscript.js';
-import { standsImage, groundTexture } from './stadium.js';
+import { standsImage, groundTexture, isNight } from './stadium.js';
 import { drawBall } from './figures.js';
 import { fieldSprite, fieldCount, FIELD_PX, pitcherFieldSprite } from './sprites.js';
 
@@ -108,11 +108,18 @@ export function cameraAt(sc, t, W, H) {
 }
 
 // ── 배경 ──
-function drawSky(ctx, K, dusk) {
+function drawSky(ctx, K, dusk, night) {
   const g = ctx.createLinearGradient(0, 0, 0, K.H);
-  if (dusk) { g.addColorStop(0, '#5b4a6e'); g.addColorStop(0.12, '#b46a62'); g.addColorStop(0.28, '#f09a58'); g.addColorStop(0.5, '#f8c47e'); g.addColorStop(1, '#fbd99a'); }   // 연습장 그림처럼 노을
+  if (night) { g.addColorStop(0, '#03060d'); g.addColorStop(0.5, '#0b1428'); g.addColorStop(1, '#1b2a48'); }   // 밤 그림 하늘(짙은 남색)에 맞춤
+  else if (dusk) { g.addColorStop(0, '#5b4a6e'); g.addColorStop(0.12, '#b46a62'); g.addColorStop(0.28, '#f09a58'); g.addColorStop(0.5, '#f8c47e'); g.addColorStop(1, '#fbd99a'); }   // 연습장 그림처럼 노을
   else { g.addColorStop(0, '#4b98e6'); g.addColorStop(0.45, '#5ea5ea'); g.addColorStop(1, '#b9dcf6'); }   // 관중석 그림 윗부분 하늘색에 맞춤
   ctx.fillStyle = g; ctx.fillRect(0, 0, K.W, K.H);
+}
+// 밤 경기: 땅·벽을 조명 아래처럼 조금 어둡고 차갑게(관중석 그림은 이미 밤이라 그 전에)
+function nightGrade(ctx, W, H) {
+  ctx.save(); ctx.globalCompositeOperation = 'multiply';
+  ctx.fillStyle = '#9aa8c4'; ctx.fillRect(0, 0, W, H);
+  ctx.restore();
 }
 // 연습장 조명탑: 담장 너머에 기둥과 켜진 조명(연습장 배경 그림처럼)
 function drawTowers(ctx, K) {
@@ -260,10 +267,11 @@ function drawStands(ctx, K, crowdTint) {
   }
 }
 // 카메라 가까운 쪽 관중석: 아래층 관중 그림을 무늬로 깔고, 카메라를 따라 움직이게 한다
-let crowdPat = null;
+let crowdPat = null, crowdSrc = null;
 function drawOuter(ctx, K, empty) {
   const img = empty ? null : standsImage('field');
-  if (img && !crowdPat) {
+  if (img && crowdSrc !== img) {                         // 낮·밤 그림이 바뀌면 무늬도 다시
+    crowdSrc = img;
     const c = document.createElement('canvas'); c.width = Math.round(img.width * 0.35); c.height = Math.round(235 * 0.35);
     const x = c.getContext('2d');
     x.drawImage(img, 0, 440, img.width, 235, 0, 0, c.width, c.height);
@@ -484,15 +492,16 @@ function drawSprite(ctx, x, y, s, u, kind, act, ph, since, dir, view) {
 // uni = { field: 수비 팀 유니폼, bat: 공격 팀 유니폼 }, ms = 타구 후 지난 시간
 // opts.practice: 연습장(노을, 빈 관중석, 심판 없음). 수비수·주자는 practicePlay가 대본에서 이미 뺐다
 export function drawPlay3D(ctx, W, H, sc, ms, uni, opts = {}) {
-  const t = toSec(ms), P = !!opts.practice;
+  const t = toSec(ms), P = !!opts.practice, N = !P && isNight();
   const K = cameraAt(sc, t, W, H);
-  drawSky(ctx, K, P);
+  drawSky(ctx, K, P, N);
   if (P) drawTowers(ctx, K);                             // 연습장: 관중석 대신 담장 너머 조명탑
   drawOuter(ctx, K, P);                                     // 경기장 바깥(카메라 쪽 관중석)
   // 관중석은 땅·벽보다 나중에: 카메라(홈 뒤 높은 곳)는 파울 쪽 관중석 안쪽에 있어서 가까운 관중석이 벽·땅을 가린다.
   // 관중석은 모두 펜스·벽 꼭대기보다 높고 바깥이라, 나중에 그려도 땅·벽을 잘못 가리는 일은 없다(폴만 다시 위에)
   drawGround(ctx, K, null);
   drawWalls(ctx, K);
+  if (N) nightGrade(ctx, W, H);
   if (!P) drawStands(ctx, K, '#5b6a80');
   drawPoles(ctx, K);
 

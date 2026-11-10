@@ -15,7 +15,7 @@ import { startLoop } from './loop.js';
 import { unlockAudio, playSound, vibrate, shake, preloadAudio, setAudioOptions, setAmbience, previewSound } from './feedback.js';
 import { makeView, toS, zoneRect, ballScreen, ballRadius, pitcherAnchor, batterAnchor, setReleaseOverride, PITCH_PATH } from './art/view.js';
 import { drawPitcherSprite, drawBatterSprite, drawCatcherSprite, spriteReleaseOffset, SWING_CONTACT_MS } from './art/sprites.js';
-import { buildBackdrop, standsReady } from './art/stadium.js';
+import { buildBackdrop, standsReady, setNight } from './art/stadium.js';
 import { uniformFor } from './art/uniforms.js';
 import { pitcherPoseAt, batterPoseAt } from './art/rig.js';
 import { drawBatter, drawPitcher, drawCatcherAndUmpire, drawBall } from './art/figures.js';
@@ -66,6 +66,9 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   goFullscreen();
   const rng = createRng((Date.now() ^ (Math.random() * 1e9)) >>> 0);
   setReleaseOverride(spriteReleaseOffset);
+  // 낮·밤 경기: 프로야구는 저녁 경기가 많아서 60%는 밤. 연습장은 노을 그림이 따로 있고, 1:1 대결은 두 폰이 같게 낮
+  const nightQ = typeof location !== 'undefined' && /[?&]night=([01])/.exec(location.search);   // ?night=1 / ?night=0 로 고정(확인용)
+  setNight(!practice && !net && (nightQ ? nightQ[1] === '1' : rng() < 0.6));
   let match = createMatch({ userTeam, cpuTeam, userLineup: lineup, innings, rng, cpuStarterId, cpuLineup });
   if (practice) {                                    // 타격 연습은 내가 말 공격으로 시작한다
     practice = { ...practice, n: 0, pts: 0 };

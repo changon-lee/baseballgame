@@ -98,16 +98,25 @@ function plate(ctx, x, y, w, flip) {
 }
 
 // 관중석 일러스트(assets/stadium). 불러오기 전/실패하면 코드로 그린 관중석을 쓴다.
+// 밤 경기(setNight(true))면 같은 구도의 밤 그림(*_night.webp)을 쓴다. 밤 그림은 처음 밤 경기를 할 때 받는다
 const STANDS = {};
-if (typeof Image !== 'undefined') {
+let night = false;
+function loadStands(suffix) {
+  if (typeof Image === 'undefined') return;
   for (const k of ['catcher', 'pitcher', 'field']) {   // field: 타구 장면(3D) 관중석(멀리서 봐도 사람이 너무 커 보이지 않는 그림)
+    if (STANDS[k + suffix] !== undefined) continue;
+    STANDS[k + suffix] = null;
     const img = new Image();
-    img.onload = () => { STANDS[k] = img; };
-    img.src = new URL(`../../../assets/stadium/${k}.webp`, import.meta.url).href;
+    img.onload = () => { STANDS[k + suffix] = img; };
+    img.src = new URL(`../../../assets/stadium/${k}${suffix}.webp`, import.meta.url).href;
   }
 }
-export const standsReady = kind => !!STANDS[kind] && texLeft === 0;   // 잔디·흙 결까지 불러온 뒤에 배경을 다시 그린다
-export const standsImage = kind => STANDS[kind] || null;
+loadStands('');
+export function setNight(on) { night = !!on; if (night) loadStands('_night'); }
+export const isNight = () => night;
+const active = kind => (night ? STANDS[kind + '_night'] : STANDS[kind]) || null;
+export const standsReady = kind => !!active(kind) && texLeft === 0;   // 잔디·흙 결까지 불러온 뒤에 배경을 다시 그린다
+export const standsImage = kind => active(kind);
 // 그림 아래 끝(펜스 바로 아래 = 잔디 시작)을 bottom에 맞추고 가로를 꽉 채운다
 function drawStands(ctx, img, W, bottom) {
   const s = W / img.width, h = img.height * s;
@@ -123,7 +132,7 @@ export function buildBackdrop(kind, V, W, H, dpr, homeTeam) {
   const rng = createRng(kind === 'catcher' ? 7 : 11);
   const home = [homeTeam.colors.main, '#f4f6fa', homeTeam.colors.main, '#a8c2ea', '#e9e9e9', '#2b5fae', '#ffffff'];
 
-  const art = STANDS[kind];
+  const art = active(kind);
   c.ready = !!art && texLeft === 0;
   if (kind === 'catcher') {
     const wallY = art ? H * 0.25 : H * 0.2;
@@ -187,9 +196,16 @@ export function buildBackdrop(kind, V, W, H, dpr, homeTeam) {
     ctx.fillStyle = 'rgba(255,240,215,.18)'; ctx.beginPath(); ctx.ellipse(V.pitX, H * 1.05, W * 0.42, H * 0.1, 0, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#fafafa'; ctx.fillRect(V.pitX - 32, H * 0.985, 64, 5);
   }
+  // 밤: 관중석 그림 아래(잔디·흙)를 조명 아래처럼 조금 어둡고 차갑게
+  if (night) {
+    const top = kind === 'catcher' ? (art ? H * 0.25 : H * 0.2) + 9 : H * 0.13 + (art ? H * 0.065 + 2 : 0);
+    ctx.save(); ctx.globalCompositeOperation = 'multiply';
+    const g = ctx.createLinearGradient(0, top, 0, H); g.addColorStop(0, '#7f8fae'); g.addColorStop(0.5, '#a9b6cf'); g.addColorStop(1, '#8e9cb8');
+    ctx.fillStyle = g; ctx.fillRect(0, top, W, H - top); ctx.restore();
+  }
   // 비네트
   const vg = ctx.createRadialGradient(W / 2, H * 0.55, Math.min(W, H) * 0.35, W / 2, H * 0.55, Math.max(W, H) * 0.8);
-  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.35)');
+  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, `rgba(0,0,0,${night ? 0.5 : 0.35})`);
   ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
   return c;
 }
