@@ -16,8 +16,17 @@ const LENGTHS = [[1, '9경기'], [2, '18경기'], [4, '36경기'], [8, '72경기
 const STAT_ICON = { power: '💪', contact: '⚾', eye: '👀', control: '🎯', stamina: '💚', velo: '🔥' };
 const asset = path => new URL('../../assets/' + path, import.meta.url).href;
 const hashId = s => [...String(s)].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
-// 선수 얼굴(일러스트 윗부분을 동그랗게 오려 쓴다). 같은 선수는 늘 같은 그림
-export const face = (id, kind, cls = '') => `<i class="av ${cls}" style="background-image:url('${asset(kind === 'p' ? `sprites/pitcher_front_${hashId(id) % 25}.webp` : `sprites/batter_idle_front_${hashId(id) % 24}.webp`)}')"></i>`;
+// 선수 얼굴(assets/faces: 3x3 격자 사진에서 오린 투수 9명·타자 9명, tools/faces.py). 같은 선수는 늘 같은 얼굴.
+// 외국인 선수(이름이 한국 성으로 시작하지 않거나 네 글자 이상)는 외국인 얼굴(4·6번)에서, 나머지는 한국인 얼굴에서 고르고,
+// 한 팀 안에서는 명단 번호(id 끝 숫자)대로 돌려 써서 겹치는 얼굴이 적다
+const FACE_FOREIGN = [4, 6], FACE_KOREAN = [0, 1, 2, 3, 5, 7, 8];
+const SURNAMES = new Set('김이박최정강조윤장임한오서신권황안송류전홍고문양손배백허유남심노하곽성차주우구민진나지엄채원천방공현함변염여추도소석선설마길연위표명기반왕금옥육인맹제모탁국어은편용예봉경사부');
+export const isForeign = name => { const n = String(name || ''); return n.length >= 4 || (n.length > 0 && !SURNAMES.has(n[0])); };
+const faceNo = pl => {
+  const pool = isForeign(pl.name) ? FACE_FOREIGN : FACE_KOREAN, m = /^(.*)-[bp](\d+)$/.exec(String(pl.id));
+  return pool[(m ? hashId(m[1]) + +m[2] - 1 : hashId(pl.id)) % pool.length];
+};
+export const face = (pl, kind, cls = '') => `<i class="av ph ${cls}" style="background-image:url('${asset(`faces/${kind === 'p' ? 'p' : 'b'}_${faceNo(pl)}.webp`)}')"></i>`;
 
 export const badge = (id, size = '') => {
   const t = getTeam(id);
@@ -91,7 +100,7 @@ export function showHub(root, ctx) {
       </div>
       <div class="probables"><span>🆚 상대 선발 <b>${oppSp.name}</b> <small>${oppSp.velo}km · 제구 ${oppSp.control}</small></span></div>
       <div class="label">🔥 오늘의 선발</div>
-      <div class="chips">${sps.map(p => `<button class="chip sp ${p.id === starter ? 'on' : ''}" data-sp="${p.id}"><span class="sp-top">${face(p.id, 'p')}<b>${esc(p.name)}</b></span>
+      <div class="chips">${sps.map(p => `<button class="chip sp ${p.id === starter ? 'on' : ''}" data-sp="${p.id}"><span class="sp-top">${face(p, 'p')}<b>${esc(p.name)}</b></span>
         <span class="ms"><span>🔥 구속</span><i><u style="width:${Math.max(6, Math.min(100, (p.velo - 125) / 37 * 100))}%"></u></i><em>${p.velo}</em></span>
         <span class="ms"><span>🎯 제구</span><i><u style="width:${Math.min(100, p.control)}%"></u></i><em>${p.control}</em></span>${tiredTag(c, p.id)}</button>`).join('')}</div>
       <div class="actions">
@@ -178,14 +187,14 @@ export function showHub(root, ctx) {
     const xpBar = id => { const x = c.growth.xp[id] || {}; const m = Math.max(0, ...Object.values(x)); return `<i class="xp"><i style="width:${Math.min(100, m / 12 * 100)}%"></i></i>`; };
     return `<div class="seg sticky">${[['season', '이번 시즌'], ['total', '통산']].map(([k, l]) => `<button data-sv="${k}" class="${view === k ? 'on' : ''}">${l}</button>`).join('')}</div>
     <section class="card flush"><div class="card-h pad">🧢 타자</div>
-      ${team.batters.map(b => { const s = bat[b.id]; return `<div class="prow">
+      ${team.batters.map(b => { const s = bat[b.id]; return `<div class="prow wa">${face(b, 'b')}
         <div class="pn"><b>${esc(b.name)}</b><small>${b.pos} · ${b.bats === 'L' ? '좌' : b.bats === 'R' ? '우' : '양'}타</small>${xpBar(b.id)}</div>
         <div class="pr">${up(b.id, 'power', b.power)}${up(b.id, 'contact', b.contact)}${up(b.id, 'eye', b.eye)}</div>
         <div class="ps">${s ? `<b>${avg(s)}</b><small>${s.hr}홈런 ${s.rbi}타점</small>` : '<small>-</small>'}</div></div>`; }).join('')}
       <div class="legend">💪 파워 · ⚾ 컨택 · 👀 선구안</div>
     </section>
     <section class="card flush"><div class="card-h pad">🔥 투수</div>
-      ${team.pitchers.map(p => { const s = pit[p.id]; return `<div class="prow">
+      ${team.pitchers.map(p => { const s = pit[p.id]; return `<div class="prow wa">${face(p, 'p')}
         <div class="pn"><b>${esc(p.name)}</b><small>${p.role === 'SP' ? '선발' : '불펜'} · ${p.throws === 'L' ? '좌' : '우'}투</small>${xpBar(p.id)}</div>
         <div class="pr">${up(p.id, 'velo', p.velo)}${up(p.id, 'control', p.control)}${up(p.id, 'stamina', p.stamina)}</div>
         <div class="ps">${s ? `<b>${era(s)}</b><small>${ip(s)}이닝 ${s.so}K</small>` : '<small>-</small>'}</div></div>`; }).join('')}
@@ -212,19 +221,19 @@ export function showHub(root, ctx) {
     <section class="card">
       <div class="card-h">🎯 투구 연습장</div>
       <div class="label">연습할 투수</div>
-      <div class="chips">${team.pitchers.map(p => `<button class="chip ${p.id === pit.id ? 'on' : ''}" data-pp="${p.id}">${esc(p.name)}<small>${p.role === 'SP' ? '선발' : '불펜'} · ${p.velo}km · 제구 ${p.control}</small></button>`).join('')}</div>
+      <div class="chips">${team.pitchers.map(p => `<button class="chip ${p.id === pit.id ? 'on' : ''}" data-pp="${p.id}"><span class="sp-top">${face(p, 'p', 'sm')}<b>${esc(p.name)}</b></span><small>${p.role === 'SP' ? '선발' : '불펜'} · ${p.velo}km · 제구 ${p.control}</small></button>`).join('')}</div>
       <div class="label">올릴 능력치</div>${statBtns(pit, PRACTICE_STATS.pitch, pStat, 'ps')}
       <div class="actions"><button class="primary big" data-act="pitchprac"${dis}>${left > 0 ? `🎯 투구 연습 시작 · ${PRACTICE.goal.pitch}구` : '오늘은 그만 쉬어요'}</button></div>
     </section>
     <section class="card">
       <div class="card-h">💥 타격 연습장</div>
       <div class="label">연습할 타자</div>
-      <div class="chips">${team.batters.map(b => `<button class="chip ${b.id === bat.id ? 'on' : ''}" data-pb="${b.id}">${esc(b.name)}<small>${b.pos} · 파워 ${b.power} · 컨택 ${b.contact}</small></button>`).join('')}</div>
+      <div class="chips">${team.batters.map(b => `<button class="chip ${b.id === bat.id ? 'on' : ''}" data-pb="${b.id}"><span class="sp-top">${face(b, 'b', 'sm')}<b>${esc(b.name)}</b></span><small>${b.pos} · 파워 ${b.power} · 컨택 ${b.contact}</small></button>`).join('')}</div>
       <div class="label">올릴 능력치</div>${statBtns(bat, PRACTICE_STATS.bat, bStat, 'bs')}
       <div class="actions"><button class="primary big" data-act="batprac"${dis}>${left > 0 ? `💥 타격 연습 시작 · ${PRACTICE.goal.bat}번` : '오늘은 그만 쉬어요'}</button></div>
     </section>
     <section class="card flush"><div class="card-h pad">🩺 투수 컨디션</div>
-      ${tired.pitchers.map(p => { const L = loadNow(c, p.id); return `<div class="prow cond">
+      ${tired.pitchers.map(p => { const L = loadNow(c, p.id); return `<div class="prow cond wa">${face(p, 'p')}
         <div class="pn"><b>${esc(p.name)}</b><small>${p.role === 'SP' ? '선발' : '불펜'} · 💚 체력 ${p.stamina}${L ? ` <em>(−${Math.round(0.4 * L * 100)}%)</em>` : ''}</small></div>
         <i class="fbar"><i style="width:${Math.round(L * 100)}%"></i></i>
         <div class="ps">${L ? `<b>${Math.round(L * 100)}%</b><small>회복 ${daysToRecover(L)}일</small>` : '<b class="fresh">😎 최상</b>'}</div></div>`; }).join('')}
