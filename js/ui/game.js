@@ -6,6 +6,8 @@ import { availableRelievers } from '../core/team.js';
 import { createMatch, matchup, playUserPitch, cpuPitchToUser, resolveUserSwing, changePitcher, cpuMaybeChangePitcher, simulateHalf, simulateInning, lastPitch, simulateRest, applyDecision } from '../core/match.js';
 import { cpuChoosePitch, cpuSwing } from '../core/ai.js';
 import { pitchPts, swingPts } from '../core/practice.js';
+import { createCutins, cutinFor, CUT_MS, HR_NAME } from './cutin.js';
+import { decoratePractice, practiceArtSettled } from './art/practice.js';
 import { batReach, graceMs } from '../core/batting.js';
 import { loadPrefs, savePrefs, LEVELS, LEVEL_NAME } from './prefs.js';
 import { volRow, bindVol } from './volume.js';
@@ -88,11 +90,12 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       </div>
       <div class="sub"><span class="mu"></span>${title ? `<span class="ttl">${title}</span>` : ''}</div>
     </div>
-    <div class="stage"><canvas></canvas><div class="pitch-pick"></div><div class="side-pick"></div><div class="controls"></div><div class="overlay hidden"></div></div>
+    <div class="stage"><canvas></canvas><div class="pitch-pick"></div><div class="side-pick"></div><div class="controls"></div><div class="overlay hidden"></div><div class="cutin-layer"></div></div>
   </div>`;
   const $ = s => root.querySelector(s);
   const cv = $('canvas'), stage = $('.stage'), controls = $('.controls'), overlay = $('.overlay'), picker = $('.pitch-pick'), sidePick = $('.side-pick');
   const ctx = cv.getContext('2d');
+  const cutins = createCutins($('.cutin-layer'));   // 홈런·삼진·승리 컷인
 
   let W = 0, H = 0, DPR = 1, V = null;
   const bg = {};
@@ -143,8 +146,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       : `<b>${mu.pitcher.name}</b> <small>${match.pitchCount[mu.pitchingSide]}구</small> <span class="vs">vs</span> <small>${g.battingIndex[mu.battingSide] + 1}번</small> <b>${mu.batter.name}</b>`;
   }
   const setControls = html => { controls.innerHTML = html; if (!['aim', 'pick'].includes(mode)) hideBullpenChip(); };
-  function showMsg(text, color, ms, sub, then) {
-    msg = { text, color, sub };
+  function showMsg(text, color, ms, sub, then, hidden = false) {   // hidden: 컷인이 대신 보여 주므로 글자는 숨긴다
+    msg = { text, color, sub, hidden };
     later(() => { msg = null; if (then) then(); }, ms);
   }
 
@@ -470,7 +473,10 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     const g = match.game;
     const halfOver = !g.over && (g.half !== prev.half || g.inning !== prev.inning);
     updateBoard();
-    showMsg(label, color, r.event === 'HR' ? 2000 : 1300, sub, () => {
+    // 컷인: 내가 친 홈런·맞은 홈런·내가 잡은 삼진. 연습·자동 진행에서는 건너뛴다
+    const cut = !practice && !auto ? cutinFor(r, prev, userPitched) : null;
+    if (cut) cutins.play(cut, { sub: cut === 'homerun' ? (HR_NAME[r.runs] || '홈런!!') : cut === 'homerun_bad' ? (HR_NAME[r.runs] || '') : '' });
+    showMsg(label, color, cut ? CUT_MS[cut] : r.event === 'HR' ? 2000 : 1300, sub, () => {
       if (practice && practice.n >= practice.goal) return finishPractice();
       if (match.game.over) return showEnd();
       if (halfOver) {
@@ -478,7 +484,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
         return showMsg('공수교대', '#9fb3cc', 1200, `${g.inning}회${g.half === 'top' ? '초' : '말'}`, nextPlay);
       }
       nextPlay();
-    });
+    }, !!cut);
   }
 
   // 홈 관중(우리 팀 팬)의 반응. 홈런은 친 순간·넘어가는 순간에 따로 낸다
@@ -529,7 +535,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       <button class="ghost" data-act="log">경기 기록 보기</button></div>`;
     overlay.classList.remove('hidden');
     overlay.querySelector('[data-act=log]').onclick = () => showLog(match.log, '경기 기록', showEnd);
-    if (won) { playSound('roar'); playSound('jingle'); vibrate([80, 60, 80, 60, 160]); }
+    if (won) { playSound('roar'); playSound('jingle'); vibrate([80, 60, 80, 60, 160]); cutins.play('win'); }
     overlay.querySelector('[data-act=menu]').onclick = () => (net ? exit() : exit({
       home: g.score.home, away: g.score.away, log: match.log, starterId: lineup.starterId }));
     setControls('');
@@ -589,6 +595,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   }
   // 넘기기: 진행 중이던 공·타구 화면은 취소하고(아직 경기에 반영 전), 지금 상황부터 컴퓨터끼리 진행한다
   function skip(kind) {
+    cutins.clear();
     closeOverlay();
     timers.forEach(clearTimeout); timers = [];
     ball = null; play = null; msg = null; hold = null; swingAt = null; pitchAt = 0; mode = 'msg';
@@ -769,7 +776,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     });
   }
   function drawMsg() {
-    if (!msg) return;
+    if (!msg || msg.hidden) return;
     const y = V && V.kind === 'pitcher' && !play ? H * 0.2 : H * 0.14;
     ctx.textAlign = 'center'; ctx.lineJoin = 'round';
     ctx.font = '900 40px system-ui,sans-serif'; ctx.lineWidth = 7; ctx.strokeStyle = 'rgba(0,0,0,.65)';
@@ -814,7 +821,11 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       }
       ctx.restore();
     };
-    if (!bg[V.kind] || bg[V.kind].ready !== standsReady(V.kind)) bg[V.kind] = buildBackdrop(V.kind, V, W, H, DPR, userTeam);
+    const bgReady = standsReady(V.kind) && (!practice || practiceArtSettled());
+    if (!bg[V.kind] || bg[V.kind].ready !== bgReady) {
+      bg[V.kind] = buildBackdrop(V.kind, V, W, H, DPR, userTeam);
+      if (practice) decoratePractice(bg[V.kind], practice.kind, W, H, DPR, userTeam);   // 연습장 분위기(케이지·불펜)를 덧입힌다
+    }
     ctx.drawImage(bg[V.kind], 0, 0, W, H);
     const mu = shownMu();
     const bp = ball && !ball.hitAt && now >= ball.start ? ballScreen(V, ball.pitch, ball.start, mode === 'netarrive' ? Math.min(now, ball.arrival) : now) : null;

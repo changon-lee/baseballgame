@@ -403,3 +403,62 @@ button.primary{background:linear-gradient(180deg,#4c97ff,#1f6fe5 52%,#0a4fb8);bo
 .vol input::-webkit-slider-thumb{-webkit-appearance:none;width:26px;height:26px;margin-top:-9px;border-radius:50%;background:#fff;border:4px solid var(--accent);box-shadow:0 3px 10px rgba(0,0,0,.5)}
 .vol input::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:#fff;border:4px solid var(--accent);box-shadow:0 3px 10px rgba(0,0,0,.5)}
 .vol input:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:8px}
+
+/* ═══ 컷인: 홈런 · 삼진 · 승리 ═══ */
+.cutin-layer{position:absolute;inset:0;z-index:7;pointer-events:none;overflow:hidden}
+.cutin{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;
+  animation:c-life var(--ms,2s) linear forwards}
+@keyframes c-life{0%,86%{opacity:1}100%{opacity:0}}
+.cutin>*{position:absolute}
+.cutin .c-media{inset:0;width:100%;height:100%;object-fit:cover}
+.cutin .c-flash{inset:0;background:#fff;opacity:0;animation:c-flash .55s ease-out}
+@keyframes c-flash{0%{opacity:.95}100%{opacity:0}}
+.cutin .c-dim{inset:0;background:radial-gradient(120% 90% at 50% 45%,rgba(4,8,18,.35),rgba(4,8,18,.88));animation:c-fadein .25s ease-out}
+@keyframes c-fadein{from{opacity:0}to{opacity:1}}
+
+/* 홈런 */
+.cutin .c-rays{inset:-40%;background:repeating-conic-gradient(from 0deg at 50% 46%,rgba(255,214,64,.2) 0 6deg,transparent 6deg 16deg);
+  animation:c-spin 6s linear infinite,c-fadein .4s ease-out;mask-image:radial-gradient(circle at 50% 46%,#000 8%,transparent 62%);-webkit-mask-image:radial-gradient(circle at 50% 46%,#000 8%,transparent 62%)}
+@keyframes c-spin{to{transform:rotate(360deg)}}
+.cutin .c-band{left:-10%;right:-10%;top:36%;height:clamp(62px,11vh,96px);display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(100deg,#7a4a00,#ffd23f 30%,#fff3b0 52%,#ffd23f 74%,#7a4a00);
+  transform:skewY(-6deg);box-shadow:0 10px 36px rgba(0,0,0,.55),0 0 0 3px rgba(255,255,255,.65);
+  animation:c-slide .34s cubic-bezier(.2,.9,.25,1) both}
+@keyframes c-slide{from{transform:translateX(-120%) skewY(-6deg)}to{transform:translateX(0) skewY(-6deg)}}
+.cutin .c-band b{font-size:clamp(38px,9vw,58px);font-weight:900;font-style:italic;letter-spacing:.06em;color:#1c1500;
+  text-shadow:0 2px 0 rgba(255,255,255,.55);transform:skewY(6deg)}
+.cutin .c-sub{top:calc(36% + clamp(62px,11vh,96px) + 14px);font-size:clamp(20px,5vw,26px);font-weight:900;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.8),0 0 18px rgba(255,210,63,.7);
+  animation:c-pop .4s .22s cubic-bezier(.2,1.4,.4,1) both}
+@keyframes c-pop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
+.cutin .c-ball{font-style:normal;font-size:clamp(54px,14vw,84px);left:-12%;bottom:8%;filter:drop-shadow(0 6px 10px rgba(0,0,0,.5));
+  animation:c-fly 1.5s .15s cubic-bezier(.3,.6,.5,1) both}
+@keyframes c-fly{0%{transform:translate(0,0) rotate(0) scale(1);opacity:1}100%{transform:translate(120vw,-72vh) rotate(900deg) scale(.35);opacity:.9}}
+
+/* 색종이 */
+.cutin .c-conf{top:-14px;width:var(--s);height:calc(var(--s)*.6);border-radius:2px;opacity:.95;
+  animation:c-fall var(--d) var(--de) linear both}
+@keyframes c-fall{0%{transform:translateY(0) rotate(0)}100%{transform:translateY(110vh) rotate(var(--r))}}
+
+/* 피홈런 */
+.cutin .c-emoji{top:30%;font-size:clamp(70px,18vw,110px);animation:c-shake .5s ease-out both}
+@keyframes c-shake{0%{transform:scale(.3)}40%{transform:scale(1.2) rotate(-6deg)}60%{transform:scale(1) rotate(5deg)}80%{transform:rotate(-3deg)}100%{transform:rotate(0)}}
+.cutin.k-homerun_bad .c-title{top:calc(30% + clamp(86px,22vw,132px));color:#ff8a8a}
+.cutin .c-title{font-size:clamp(34px,9vw,52px);font-weight:900;font-style:italic;letter-spacing:.08em;color:#fff;text-shadow:0 3px 14px rgba(0,0,0,.8);
+  animation:c-pop .35s .12s cubic-bezier(.2,1.4,.4,1) both}
+.cutin.k-homerun_bad .c-sub{top:calc(30% + clamp(86px,22vw,132px) + 56px);color:#d7dff0;font-size:clamp(15px,4vw,19px);text-shadow:0 2px 8px #000}
+
+/* 삼진 */
+.cutin .c-k{top:14%;font-size:clamp(150px,44vw,240px);line-height:1;font-weight:900;font-style:italic;color:#ff4d4d;
+  -webkit-text-stroke:4px #fff;text-shadow:0 10px 40px rgba(255,60,60,.7);animation:c-kpop .45s cubic-bezier(.2,1.5,.4,1) both}
+@keyframes c-kpop{0%{transform:scale(2.6) rotate(-14deg);opacity:0}100%{transform:scale(1) rotate(0);opacity:1}}
+.cutin .c-slash{left:-20%;right:-20%;top:36%;height:6px;background:linear-gradient(90deg,transparent,#fff 18%,#fff 82%,transparent);transform:rotate(-24deg);
+  box-shadow:0 0 22px #fff;animation:c-cut .38s .08s ease-out both}
+@keyframes c-cut{from{transform:translateX(-110%) rotate(-24deg);opacity:0}30%{opacity:1}to{transform:translateX(0) rotate(-24deg);opacity:.0}}
+.cutin.k-strikeout .c-title{top:calc(14% + clamp(150px,44vw,240px) + 4px);color:#fff}
+.cutin.k-strikeout .c-sub{top:calc(14% + clamp(150px,44vw,240px) + 62px);color:#ffd7d7;font-size:clamp(20px,5vw,26px)}
+
+/* 승리 */
+.cutin .c-trophy{top:18%;font-size:clamp(90px,24vw,140px);filter:drop-shadow(0 10px 22px rgba(0,0,0,.55));animation:c-kpop .6s cubic-bezier(.2,1.5,.4,1) both,c-bob 1.6s .6s ease-in-out infinite}
+@keyframes c-bob{50%{transform:translateY(-8px) scale(1.04)}}
+.cutin.k-win .c-title{top:calc(18% + clamp(110px,28vw,160px));color:#ffd23f;-webkit-text-stroke:2px rgba(60,40,0,.8)}
+@media (prefers-reduced-motion:reduce){.cutin .c-rays,.cutin .c-ball{display:none}}
