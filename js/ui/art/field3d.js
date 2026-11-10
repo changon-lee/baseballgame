@@ -1,7 +1,7 @@
 // 3D 타구 화면: playscript 대본을 중계 카메라처럼 그린다.
 // 경기장·공·선수를 3D 좌표(피트)로 두고, 홈 뒤 높은 곳의 카메라가 공과 수비수를 따라 돌고 당겨서(줌) 비춘다.
 import { toSec, trackAt, ballAt, fenceAt, BASES, polar, FENCE_H, jumpZ } from './playscript.js';
-import { standsImage, groundTexture, isNight } from './stadium.js';
+import { standsImage, groundTexture, isNight, duskLevel, duskGrade } from './stadium.js';
 import { drawBall } from './figures.js';
 import { fieldSprite, fieldCount, FIELD_PX, pitcherFieldSprite } from './sprites.js';
 
@@ -135,19 +135,6 @@ function drawTowers(ctx, K) {
     ctx.fillStyle = g; ctx.fillRect(t.x - lw * 2.2, t.y - lw * 2.2, lw * 4.4, lw * 4.4);
     ctx.fillStyle = '#fff6dc'; ctx.fillRect(t.x - lw / 2, t.y - lh, lw, lh);
   }
-}
-// 연습장 노을빛: 장면 전체를 따뜻하고 어둡게(곱하기) 물들이고, 지평선 쪽에 햇빛 번짐을 얹는다
-function duskGrade(ctx, W, H) {
-  ctx.save();
-  ctx.globalCompositeOperation = 'multiply';
-  const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, '#e6d2d2'); g.addColorStop(0.45, '#f6d6b0'); g.addColorStop(1, '#d9bf9c');
-  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-  ctx.globalCompositeOperation = 'screen';
-  const r = ctx.createRadialGradient(W * 0.5, H * 0.25, 0, W * 0.5, H * 0.25, Math.max(W, H) * 0.8);
-  r.addColorStop(0, 'rgba(255,160,70,.22)'); r.addColorStop(1, 'rgba(255,160,70,0)');
-  ctx.fillStyle = r; ctx.fillRect(0, 0, W, H);
-  ctx.restore();
 }
 // 그림 속 삼각형(u,v)을 화면 삼각형(x,y)에 붙인다(경계를 살짝 넓혀 이음새가 안 보이게)
 function imgTri(ctx, img, s0, s1, s2, d0, d1, d2) {
@@ -492,9 +479,9 @@ function drawSprite(ctx, x, y, s, u, kind, act, ph, since, dir, view) {
 // uni = { field: 수비 팀 유니폼, bat: 공격 팀 유니폼 }, ms = 타구 후 지난 시간
 // opts.practice: 연습장(노을, 빈 관중석, 심판 없음). 수비수·주자는 practicePlay가 대본에서 이미 뺐다
 export function drawPlay3D(ctx, W, H, sc, ms, uni, opts = {}) {
-  const t = toSec(ms), P = !!opts.practice, N = !P && isNight();
+  const t = toSec(ms), P = !!opts.practice, N = !P && isNight(), D = P ? 1 : duskLevel();   // D: 노을 세기(연습장은 늘 노을)
   const K = cameraAt(sc, t, W, H);
-  drawSky(ctx, K, P, N);
+  drawSky(ctx, K, D > 0, N);
   if (P) drawTowers(ctx, K);                             // 연습장: 관중석 대신 담장 너머 조명탑
   drawOuter(ctx, K, P);                                     // 경기장 바깥(카메라 쪽 관중석)
   // 관중석은 땅·벽보다 나중에: 카메라(홈 뒤 높은 곳)는 파울 쪽 관중석 안쪽에 있어서 가까운 관중석이 벽·땅을 가린다.
@@ -572,7 +559,7 @@ export function drawPlay3D(ctx, W, H, sc, ms, uni, opts = {}) {
     e.draw();
   }
   if (bp && !ballDrawn && !B.held) drawBall(ctx, bp.x, bp.y, Math.max(2.2, bp.s * 0.3), ms / 30);
-  if (P) duskGrade(ctx, W, H);
+  if (D > 0) duskGrade(ctx, W, H, D, P ? 'soft' : 'game');
 
   // 비거리
   const shownAt = sc.landT ?? (sc.fly && sc.outs.length ? sc.outs[0] : null);

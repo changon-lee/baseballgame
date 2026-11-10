@@ -98,9 +98,9 @@ function plate(ctx, x, y, w, flip) {
 }
 
 // 관중석 일러스트(assets/stadium). 불러오기 전/실패하면 코드로 그린 관중석을 쓴다.
-// 밤 경기(setNight(true))면 같은 구도의 밤 그림(*_night.webp)을 쓴다. 밤 그림은 처음 밤 경기를 할 때 받는다
+// 경기 시간대: 낮 → 노을 → 밤(timeOfDay). 밤이면 같은 구도의 밤 그림(*_night.webp)을 쓴다. 밤 그림은 경기를 시작할 때 미리 받는다
 const STANDS = {};
-let night = false;
+let night = false, dusk = 0;
 function loadStands(suffix) {
   if (typeof Image === 'undefined') return;
   for (const k of ['catcher', 'pitcher', 'field']) {   // field: 타구 장면(3D) 관중석(멀리서 봐도 사람이 너무 커 보이지 않는 그림)
@@ -112,9 +112,68 @@ function loadStands(suffix) {
   }
 }
 loadStands('');
-export function setNight(on) { night = !!on; if (night) loadStands('_night'); }
+// 이닝으로 정하는 시간대: 앞 1/3은 낮, 가운데 1/3은 노을(k: 점점 짙게 0.55 → 1), 나머지(연장 포함)는 밤
+export function timeOfDay(inning, innings = 9) {
+  const n = Math.max(1, innings || 9), a = Math.max(1, Math.round(n / 3)), b = Math.max(a, Math.round(n * 2 / 3));
+  if (inning <= a) return { phase: 'day', k: 0 };
+  if (inning <= b) return { phase: 'dusk', k: b > a + 1 ? 0.55 + 0.45 * (inning - a - 1) / (b - a - 1) : 1 };
+  return { phase: 'night', k: 1 };
+}
+// tod = { phase, k }. 바뀌었으면 true(배경을 다시 그려야 한다)
+export function setTimeOfDay(tod) {
+  const n = tod.phase === 'night', d = tod.phase === 'dusk' ? tod.k : 0;
+  if (n === night && d === dusk) return false;
+  night = n; dusk = d; return true;
+}
+export const preloadNight = () => loadStands('_night');
 export const isNight = () => night;
-const active = kind => (night ? STANDS[kind + '_night'] : STANDS[kind]) || null;
+export const duskLevel = () => dusk;
+// 노을빛: 따뜻하고 어둡게(곱하기, 세기 k) 물들이고 위쪽에 햇빛 번짐을 얹는다.
+// 연습장은 그림이 이미 노을이라 옅게(soft), 경기 중 노을은 낮 그림 위에 입히니 진하게
+const DUSK_TONE = {
+  soft: { stops: ['#e6d2d2', '#f6d6b0', '#d9bf9c'], glow: 0.22 },
+  game: { stops: ['#c98f86', '#e9ae84', '#bf9474'], glow: 0.3 },
+};
+export function duskGrade(ctx, W, H, k = 1, tone = 'soft') {
+  if (k <= 0) return;
+  const T = DUSK_TONE[tone] || DUSK_TONE.soft;
+  ctx.save();
+  ctx.globalCompositeOperation = 'multiply'; ctx.globalAlpha = Math.min(1, k);
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, T.stops[0]); g.addColorStop(0.45, T.stops[1]); g.addColorStop(1, T.stops[2]);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.globalCompositeOperation = 'screen';
+  const r = ctx.createRadialGradient(W * 0.5, H * 0.2, 0, W * 0.5, H * 0.2, Math.max(W, H) * 0.8);
+  r.addColorStop(0, `rgba(255,150,60,${T.glow})`); r.addColorStop(1, 'rgba(255,150,60,0)');
+  ctx.fillStyle = r; ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+// 노을: 낮 그림의 하늘(맨 위에서 세로로 이어진 파란 하늘·구름)만 노을 하늘색으로 바꾼 사본을 쓴다(그림마다 한 번 만든다)
+const DUSKED = new WeakMap();
+function duskSky(img) {
+  if (DUSKED.has(img)) return DUSKED.get(img);
+  let out = img;
+  try {
+    const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+    const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(img, 0, 0);
+    const d = x.getImageData(0, 0, c.width, c.height), p = d.data, W = c.width, H = c.height, sky = H * 0.38;
+    const top = [217, 119, 74], low = [247, 184, 122], cloud = [255, 217, 184];
+    for (let i = 0; i < W; i++) for (let y = 0; y < H; y++) {
+      const o = (y * W + i) * 4, r = p[o], g = p[o + 1], b = p[o + 2], mn = Math.min(r, g, b), mx = Math.max(r, g, b);
+      if (!((b >= r + 25 && b > 150) || (mn > 185 && b >= r - 5))) break;      // 하늘이 끝나는 곳(지붕·관중석)에서 멈춘다
+      const t = Math.min(1, y / sky), k = Math.max(0, Math.min(1, (mn - 150) / 80)) * Math.max(0, 1 - (mx - mn) / mx * 2) * 0.85;
+      for (let j = 0; j < 3; j++) p[o + j] = (top[j] + (low[j] - top[j]) * t) * (1 - k) + cloud[j] * k;
+    }
+    x.putImageData(d, 0, 0); out = c;
+  } catch (e) { /* 못 읽으면 그대로 */ }
+  DUSKED.set(img, out);
+  return out;
+}
+const active = kind => {
+  if (night) return STANDS[kind + '_night'] || null;
+  const img = STANDS[kind] || null;
+  return img && dusk ? duskSky(img) : img;
+};
 export const standsReady = kind => !!active(kind) && texLeft === 0;   // 잔디·흙 결까지 불러온 뒤에 배경을 다시 그린다
 export const standsImage = kind => active(kind);
 // 그림 아래 끝(펜스 바로 아래 = 잔디 시작)을 bottom에 맞추고 가로를 꽉 채운다

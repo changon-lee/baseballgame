@@ -15,7 +15,7 @@ import { startLoop } from './loop.js';
 import { unlockAudio, playSound, vibrate, shake, preloadAudio, setAudioOptions, setAmbience, previewSound } from './feedback.js';
 import { makeView, toS, zoneRect, ballScreen, ballRadius, pitcherAnchor, batterAnchor, setReleaseOverride, PITCH_PATH } from './art/view.js';
 import { drawPitcherSprite, drawBatterSprite, drawCatcherSprite, spriteReleaseOffset, SWING_CONTACT_MS, loadSprites } from './art/sprites.js';
-import { buildBackdrop, standsReady, setNight } from './art/stadium.js';
+import { buildBackdrop, standsReady, timeOfDay, setTimeOfDay, preloadNight, duskLevel, duskGrade } from './art/stadium.js';
 import { uniformFor } from './art/uniforms.js';
 import { pitcherPoseAt, batterPoseAt } from './art/rig.js';
 import { drawBatter, drawPitcher, drawCatcherAndUmpire, drawBall } from './art/figures.js';
@@ -67,9 +67,13 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   loadSprites();                                     // 메인 화면에서 아직 다 못 받았으면 지금 바로
   const rng = createRng((Date.now() ^ (Math.random() * 1e9)) >>> 0);
   setReleaseOverride(spriteReleaseOffset);
-  // 낮·밤 경기: 프로야구는 저녁 경기가 많아서 60%는 밤. 연습장은 노을 그림이 따로 있고, 1:1 대결은 두 폰이 같게 낮
-  const nightQ = typeof location !== 'undefined' && /[?&]night=([01])/.exec(location.search);   // ?night=1 / ?night=0 로 고정(확인용)
-  setNight(!practice && !net && (nightQ ? nightQ[1] === '1' : rng() < 0.6));
+  // 시간대: 낮에 시작해서 이닝이 지나면 노을 → 밤(조명)으로. 이닝으로 정하니 1:1 대결도 두 폰이 같다. 연습장은 노을 그림이 따로 있다
+  const nightQ = typeof location !== 'undefined' && /[?&]night=(0|1|dusk)/.exec(location.search);   // ?night=0/dusk/1 로 고정(확인용)
+  const todAt = inning => practice ? timeOfDay(1, 9)
+    : nightQ ? (nightQ[1] === '1' ? { phase: 'night', k: 1 } : nightQ[1] === 'dusk' ? { phase: 'dusk', k: 0.8 } : { phase: 'day', k: 0 })
+    : timeOfDay(inning, innings);
+  setTimeOfDay(todAt(1));
+  if (!practice) preloadNight();
   let match = createMatch({ userTeam, cpuTeam, userLineup: lineup, innings, rng, cpuStarterId, cpuLineup });
   if (practice) {                                    // 타격 연습은 내가 말 공격으로 시작한다
     practice = { ...practice, n: 0, pts: 0 };
@@ -486,7 +490,9 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       if (match.game.over) return showEnd();
       if (halfOver) {
         play = null; ball = null;
-        return showMsg('공수교대', '#9fb3cc', 1200, `${g.inning}회${g.half === 'top' ? '초' : '말'}`, nextPlay);
+        const was = todAt(prev.inning).phase, now = todAt(g.inning).phase;
+        const note = now !== was ? (now === 'night' ? ' · 조명이 켜졌어요' : now === 'dusk' ? ' · 해가 지고 있어요' : '') : '';
+        return showMsg('공수교대', '#9fb3cc', 1200, `${g.inning}회${g.half === 'top' ? '초' : '말'}${note}`, nextPlay);
       }
       nextPlay();
     }, !!cut);
@@ -826,6 +832,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       }
       ctx.restore();
     };
+    if (setTimeOfDay(todAt(match.game.inning))) for (const k in bg) delete bg[k];   // 이닝이 넘어가 시간대가 바뀌면 배경을 다시 그린다
     const bgReady = standsReady(V.kind) && (!practice || practiceArtSettled());
     if (!bg[V.kind] || bg[V.kind].ready !== bgReady) {
       bg[V.kind] = buildBackdrop(V.kind, V, W, H, DPR, userTeam);
@@ -862,6 +869,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       if (bp && bp.prog <= 1.02) { drawTrail(now); drawBall(ctx, bp.x, bp.y, bp.r, bp.spin); }
       drawBat(now, mu.batter);
     }
+    if (duskLevel()) duskGrade(ctx, W, H, duskLevel(), 'game');   // 노을: 배경·선수 모두 같은 빛으로(배경 캐시에는 안 넣는다)
     drawHUD();
     drawGauge(now);
     if (mode !== 'pick') hidePicker();              // 넘기기·자동 진행 등으로 고르기가 끝났으면 칩을 걷는다
