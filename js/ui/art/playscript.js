@@ -640,3 +640,24 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
   sc.endMs = toMs(sc.end);
   return sc;
 }
+
+// 연습장 장면: 수비수·주자 없이 공만. 수비수가 잡던 순간부터는 공이 그대로 떨어져 구른다(그 뒤 송구는 지운다)
+export function practicePlay(sc) {
+  const out = { ...sc, fielders: {}, runners: [], watch: [], ballUntil: undefined };
+  const segs = sc.ball, hi = segs.findIndex(q => q.type === 'hold');
+  let stopT = sc.landT ?? 0;
+  if (hi >= 0) {
+    const th = segs[hi].t0, pre = segs.slice(0, hi), dt = 1 / 30;
+    const at = t => ballAt({ ball: pre }, t).p;
+    const p = at(th), q = at(Math.max(0, th - dt));
+    const v = [(p[0] - q[0]) / dt, (p[1] - q[1]) / dt, (p[2] - q[2]) / dt];
+    const roll = simGround([p[0], p[1], Math.max(0, p[2])], v, th);
+    out.ball = [...pre, roll];
+    stopT = Math.max(stopT, th + Math.min(1.2, roll.t1 - th));
+  } else out.ball = segs.slice();
+  out.sounds = sc.sounds.filter(x => x.name !== 'mitt' && x.name !== 'cheer' && (hi < 0 || x.t <= segs[hi].t0 || x.name === 'fence'));
+  out.decisive = Math.max(0.8, Math.min(sc.decisive, stopT + 0.6));
+  out.end = out.decisive + 1;
+  out.decisiveMs = toMs(out.decisive); out.endMs = toMs(out.end);
+  return out;
+}

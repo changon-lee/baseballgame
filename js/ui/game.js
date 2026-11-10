@@ -19,7 +19,7 @@ import { buildBackdrop, standsReady } from './art/stadium.js';
 import { uniformFor } from './art/uniforms.js';
 import { pitcherPoseAt, batterPoseAt } from './art/rig.js';
 import { drawBatter, drawPitcher, drawCatcherAndUmpire, drawBall } from './art/figures.js';
-import { buildPlay, toMs } from './art/playscript.js';
+import { buildPlay, practicePlay, toMs } from './art/playscript.js';
 import { drawPlay3D } from './art/field3d.js';
 
 const LABEL = {
@@ -449,6 +449,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     const batter = matchup(match).batter;
     // 대결이면 서버가 준 씨앗으로: 두 폰에서 같은 장면이 나온다
     play = buildPlay({ event: r.event, fly: r.fly, style: r.style, contact: r.contact, bats: batter.bats, bases: prev.bases, rng: r.seed != null ? createRng(r.seed) : rng });
+    if (practice) play = practicePlay(play);            // 연습장: 수비수·주자 없이 공만
     play.sounds.sort((a, b) => a.t - b.t);
     play.start = performance.now() + 320; play.si = 0;
     play.then = finish;
@@ -794,7 +795,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
 
     if (play && now >= play.start) {
       const mu = shownMu(), ms = now - play.start;
-      drawPlay3D(ctx, W, H, play, ms, { field: uni[mu.pitchingSide], bat: uni[mu.battingSide] });
+      drawPlay3D(ctx, W, H, play, ms, { field: uni[mu.pitchingSide], bat: uni[mu.battingSide] }, { practice: !!practice });
       while (play.si < play.sounds.length && toMs(play.sounds[play.si].t) <= ms) playCue(play.sounds[play.si++].name);
       if (ms >= play.decisiveMs && !play.landed) {
         play.landed = true;
