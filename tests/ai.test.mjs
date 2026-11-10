@@ -29,3 +29,22 @@ test('changing speeds throws off timing; the same pitch again is easier to time'
   assert.ok(afterFb > none * 1.2, `none ${none} afterFb ${afterFb}`);
   assert.ok(timingSpread(fb, { k: 'FB', v: 145 }) < timingSpread(fb, null), 'same pitch twice');
 });
+
+
+// ── 볼카운트에 따른 타자 성향 ──
+const countRate = (p, balls, strikes, b = batter, n = 20000) => { const rng = createRng(9); let s = 0; for (let i = 0; i < n; i++) s += cpuSwing({ batter: b, pitch: p, balls, strikes, rng }).swing; return s / n; };
+test('count: 3-0 batters mostly take, but sluggers sometimes swing away', () => {
+  const p = pitch('FB', 0.2, 0.1, 145);
+  const take = countRate(p, 3, 0), normal = countRate(p, 1, 1), slugger = countRate(p, 3, 0, { ...batter, power: 90 });
+  assert.ok(take < normal * 0.45, `3-0 ${take} vs 1-1 ${normal}`);
+  assert.ok(slugger > take * 1.8, `slugger ${slugger} vs ${take}`);
+});
+test('count: hitters chase less when ahead (2-0) than with two strikes (0-2)', () => {
+  const p = pitch('SL', 1.3, -0.4, 132);
+  assert.ok(!p.isStrike);
+  assert.ok(countRate(p, 2, 0) < countRate(p, 0, 2) * 0.6);
+});
+test('count: first pitch is taken a little more than 1-1', () => {
+  const p = pitch('FB', 0.2, 0.1, 145);
+  assert.ok(countRate(p, 0, 0) < countRate(p, 1, 1));
+});
