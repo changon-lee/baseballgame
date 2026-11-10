@@ -463,3 +463,15 @@ button.primary{background:linear-gradient(180deg,#4c97ff,#1f6fe5 52%,#0a4fb8);bo
 @keyframes c-bob{50%{transform:translateY(-8px) scale(1.04)}}
 .cutin.k-win .c-title{top:calc(18% + clamp(110px,28vw,160px));color:#ffd23f;-webkit-text-stroke:2px rgba(60,40,0,.8)}
 @media (prefers-reduced-motion:reduce){.cutin .c-rays,.cutin .c-ball{display:none}}
+
+/* 업적 */
+.achs{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ach{position:relative;display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:12px;background:rgba(255,255,255,.04);opacity:.5;min-width:0}
+.ach i{font-style:normal;font-size:22px;filter:grayscale(1);flex:none}
+.ach b{display:block;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ach small{display:block;font-size:11px;color:var(--dim);line-height:1.3}
+.ach.on{opacity:1;background:linear-gradient(135deg,rgba(255,210,63,.16),rgba(255,255,255,.04));box-shadow:inset 0 0 0 1px rgba(255,210,63,.35)}
+.ach.on i{filter:none}
+.ach>div{min-width:0}
+.ach .new{position:absolute;top:-6px;right:-3px;font-style:normal;font-size:10px;font-weight:800;color:#1a1300;background:#ffd23f;border-radius:6px;padding:1px 5px}
+.achv-new .ach{margin-top:8px}

@@ -66,7 +66,7 @@ function mergeUps(ups) {
 
 function afterGame(r, title) {
   career = r.career; hubCtx.starterId = null; persist();
-  showResult(app, { career, game: r.game, ups: r.ups, title }, () => { hubCtx.tab = 'home'; hub(); });
+  showResult(app, { career, game: r.game, ups: r.ups, achv: r.achv, title }, () => { hubCtx.tab = 'home'; hub(); });
 }
 
 async function loadGame() {

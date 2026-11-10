@@ -1,5 +1,6 @@
 // 시즌 허브: 홈(다음 경기) · 순위 · 선수 · 기록 탭, 새 시즌 설정, 경기 결과 화면
 import { USER_TEAM_ID, getTeam } from '../data/rosters.js';
+import { ACHIEVEMENTS, achievementById } from '../core/achievements.js';
 import { standings, nextUserGame, nextStarter } from '../core/season.js';
 import { userTeamNow, userTeamTired } from '../core/career.js';
 import { avg, era, ip } from '../core/growth.js';
@@ -244,12 +245,22 @@ export function showHub(root, ctx) {
   }
 
   // ── 기록 탭 ──
+  // 업적: 달성한 것은 색과 달성 연도, 못 한 것은 흐리게(어떻게 하는지 설명). 지난 시즌에 새로 딴 것은 NEW
+  function achvCard(c) {
+    const got = c.achv || {}, fresh = new Set(c.achvNew || []), n = ACHIEVEMENTS.filter(a => got[a.id]).length;
+    return `<section class="card"><div class="card-h">🏅 업적<span class="pill">${n} / ${ACHIEVEMENTS.length}</span></div><div class="achs">${ACHIEVEMENTS.map(a => {
+      const g = got[a.id];
+      return `<div class="ach ${g ? 'on' : ''}"><i>${a.icon}</i><div><b>${esc(a.name)}${fresh.has(a.id) ? ' <em class="new">NEW</em>' : ''}</b><small>${g ? `${g.year}년 달성${g.n > 1 ? ` · ${g.n}번` : ''}` : esc(a.desc)}</small></div></div>`;
+    }).join('')}</div></section>`;
+  }
+
   function recordsTab(c) {
     const h = c.history;
     const titles = h.filter(x => x.champion === ME).length;
     const w = h.reduce((a, x) => a + x.w, 0), l = h.reduce((a, x) => a + x.l, 0);
     return `<section class="card"><div class="stats3">
         <div><i>📅</i><b>${h.length}</b><small>시즌</small></div><div><i>🏆</i><b>${titles}</b><small>우승</small></div><div><i>⚔️</i><b>${w}-${l}</b><small>통산 승패</small></div></div></section>
+      ${achvCard(c)}
       <section class="card flush"><div class="card-h pad">📜 역대 시즌</div>
       ${h.length ? [...h].reverse().map(x => `<div class="hrow ${x.champion === ME ? 'gold' : ''}"><b>${x.year}</b><span>${x.rank}위 · ${x.w}승 ${x.l}패${x.d ? ' ' + x.d + '무' : ''}</span><em>${x.result}</em></div>`).join('')
         : '<p class="hint pad">아직 끝낸 시즌이 없어요</p>'}</section>
@@ -311,7 +322,7 @@ export function showPracticeResult(root, { career, kind, playerId, stat, n, pts,
 }
 
 // 경기 결과 화면
-export function showResult(root, { career, game, ups, title, heading }, onDone) {
+export function showResult(root, { career, game, ups, title, heading, achv = [] }, onDone) {
   const team = userTeamNow(career);
   const nameOf = id => (team.batters.find(b => b.id === id) || team.pitchers.find(p => p.id === id) || {}).name || id;
   const s = career.season;
@@ -325,6 +336,7 @@ export function showResult(root, { career, game, ups, title, heading }, onDone) 
     <h1 class="res ${res === '승리' ? 'win' : res === '패배' ? 'lose' : ''}">${res}</h1>
     ${game ? `<div class="scoreline">${badge(game.away, 'lg')}<b>${game.as}</b><i>:</i><b>${game.hs}</b>${badge(game.home, 'lg')}</div>` : ''}
     ${s.phase === 'regular' || !s.post ? `<p class="hint center">시즌 ${me.w}승 ${me.l}패${me.d ? ' ' + me.d + '무' : ''} · ${me.rank}위</p>` : seriesLine(s)}
+    ${achv.length ? `<section class="card achv-new"><div class="card-h">🏅 업적 달성</div>${achv.map(id => { const a = achievementById(id); return `<div class="ach on"><i>${a.icon}</i><div><b>${esc(a.name)}</b><small>${esc(a.desc)}</small></div></div>`; }).join('')}</section>` : ''}
     ${ups.length ? `<section class="card"><div class="card-h">📈 성장한 선수</div><div class="ups">${ups.map(u => `<div><b>${esc(nameOf(u.id))}</b><span>${STAT_ICON[u.stat]} ${STAT_KO[u.stat]} <em>+${u.n}${u.stat === 'velo' ? 'km' : ''}</em></span></div>`).join('')}</div></section>` : ''}
     <div class="actions"><button class="primary big" id="ok">확인</button></div>
   </div>`;
