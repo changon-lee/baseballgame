@@ -10,6 +10,12 @@ const ME = USER_TEAM_ID;
 const STAT_KO = { power: '파워', contact: '컨택', eye: '선구안', control: '제구', stamina: '체력', velo: '구속' };
 const LENGTHS = [[1, '9경기'], [2, '18경기'], [4, '36경기'], [8, '72경기'], [16, '144경기']];
 
+const STAT_ICON = { power: '💪', contact: '⚾', eye: '👀', control: '🎯', stamina: '💚', velo: '🔥' };
+const asset = path => new URL('../../assets/' + path, import.meta.url).href;
+const hashId = s => [...String(s)].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
+// 선수 얼굴(일러스트 윗부분을 동그랗게 오려 쓴다). 같은 선수는 늘 같은 그림
+export const face = (id, kind, cls = '') => `<i class="av ${cls}" style="background-image:url('${asset(kind === 'p' ? `sprites/pitcher_front_${hashId(id) % 25}.webp` : `sprites/batter_idle_front_${hashId(id) % 24}.webp`)}')"></i>`;
+
 export const badge = (id, size = '') => {
   const t = getTeam(id);
   return `<span class="badge ${size}" style="--c:${t.colors.main};--s:${t.colors.sub}">${t.short}</span>`;
@@ -26,6 +32,7 @@ export function showHub(root, ctx) {
     root.innerHTML = `
     <div class="screen hub">
       <header class="top-hero">
+        <img class="hero-man" alt="" src="${asset('sprites/batter_idle_front_0.webp')}">
         <div class="eyebrow">${s ? `${s.year} SEASON · ${s.phase === 'regular' ? '정규시즌' : s.phase === 'post' ? '포스트시즌' : '시즌 종료'}` : 'KBO LEAGUE · 커리어 모드'}</div>
         <div class="hero-row">
           ${badge(ME, 'xl')}
@@ -35,7 +42,7 @@ export function showHub(root, ctx) {
       <main class="tab-body">${tab === 'home' ? homeTab(c) : tab === 'table' ? tableTab(c) : tab === 'players' ? playersTab(c) : tab === 'practice' ? practiceTab(c) : recordsTab(c)}</main>
       ${ctx.saveOk === false ? '<p class="note center">이 브라우저에서는 저장이 안 돼요. 창을 닫으면 진행이 사라져요.</p>' : ''}
     </div>
-    <nav class="tabbar">${[['home', '홈', '⌂'], ['table', '순위', '≡'], ['players', '선수', '◔'], ['practice', '연습', '✦'], ['records', '기록', '★']].map(([k, l, i]) =>
+    <nav class="tabbar">${[['home', '홈', '🏠'], ['table', '순위', '📊'], ['players', '선수', '🧢'], ['practice', '연습', '🏋️'], ['records', '기록', '🏆']].map(([k, l, i]) =>
       `<button data-tab="${k}" class="${tab === k ? 'on' : ''}"><span>${i}</span>${l}</button>`).join('')}</nav>`;
     bind();
   };
@@ -59,10 +66,10 @@ export function showHub(root, ctx) {
     const post = s.phase === 'post' ? bracket(s) : '';
     if (!g.userGame) {
       return `<section class="card">
-        <div class="card-h">${g.label}</div>
+        <div class="card-h">⚾ ${g.label}</div>
         <div class="vs-row">${badge(g.away, 'lg')}<span class="vs">VS</span>${badge(g.home, 'lg')}</div>
         <p class="hint center">삼성은 이번 시리즈에 나가지 않아요</p>
-        <div class="actions"><button class="primary" data-act="auto">이 경기 진행</button><button class="ghost" data-act="automany">포스트시즌 끝까지</button></div>
+        <div class="actions"><button class="primary" data-act="auto">▶ 이 경기 진행</button><button class="ghost" data-act="automany">⏩ 포스트시즌 끝까지</button></div>
       </section>${post}`;
     }
     const opp = getTeam(g.opponentId);
@@ -73,43 +80,44 @@ export function showHub(root, ctx) {
     const oppSp = opp.pitchers.find(p => p.id === nextStarter(s, opp.id));
     const st = standings(s), oppRank = st.find(x => x.id === opp.id);
     return `<section class="card next">
-      <div class="card-h">${g.label}<span class="pill">${s.innings}이닝</span></div>
+      <div class="card-h">⚾ ${g.label}<span class="pill">⏱ ${s.innings}이닝</span></div>
       <div class="vs-row">
-        <div class="side" style="--c:${opp.colors.main}">${badge(opp.id, 'lg')}<b>${opp.short}</b><small>${oppRank.rank}위 · ${oppRank.w}-${oppRank.l}</small></div>
+        <div class="side" style="--c:${opp.colors.main}">${badge(opp.id, 'lg')}<b>${opp.short}</b><small>✈️ 원정 · ${oppRank.rank}위 · ${oppRank.w}-${oppRank.l}</small></div>
         <span class="vs">VS</span>
-        <div class="side" style="--c:${team.colors.main}">${badge(ME, 'lg')}<b>삼성</b><small>HOME</small></div>
+        <div class="side" style="--c:${team.colors.main}">${badge(ME, 'lg')}<b>삼성</b><small>🏠 홈 경기</small></div>
       </div>
-      <div class="probables"><span>상대 선발 <b>${oppSp.name}</b> <small>${oppSp.velo}km · 제구 ${oppSp.control}</small></span></div>
-      <div class="label">오늘의 선발</div>
-      <div class="chips">${sps.map(p => `<button class="chip sp ${p.id === starter ? 'on' : ''}" data-sp="${p.id}"><b>${esc(p.name)}</b>
-        <span class="ms"><span>구속</span><i><u style="width:${Math.max(6, Math.min(100, (p.velo - 125) / 37 * 100))}%"></u></i><em>${p.velo}</em></span>
-        <span class="ms"><span>제구</span><i><u style="width:${Math.min(100, p.control)}%"></u></i><em>${p.control}</em></span>${tiredTag(c, p.id)}</button>`).join('')}</div>
+      <div class="probables"><span>🆚 상대 선발 <b>${oppSp.name}</b> <small>${oppSp.velo}km · 제구 ${oppSp.control}</small></span></div>
+      <div class="label">🔥 오늘의 선발</div>
+      <div class="chips">${sps.map(p => `<button class="chip sp ${p.id === starter ? 'on' : ''}" data-sp="${p.id}"><span class="sp-top">${face(p.id, 'p')}<b>${esc(p.name)}</b></span>
+        <span class="ms"><span>🔥 구속</span><i><u style="width:${Math.max(6, Math.min(100, (p.velo - 125) / 37 * 100))}%"></u></i><em>${p.velo}</em></span>
+        <span class="ms"><span>🎯 제구</span><i><u style="width:${Math.min(100, p.control)}%"></u></i><em>${p.control}</em></span>${tiredTag(c, p.id)}</button>`).join('')}</div>
       <div class="actions">
-        <button class="primary big" data-act="play">경기 시작</button>
-        <button class="ghost" data-act="auto">자동 진행</button>
+        <button class="primary big" data-act="play">▶ 경기 시작</button>
+        <button class="ghost" data-act="auto">⚡ 자동 진행</button>
       </div>
-      ${s.phase === 'regular' && s.schedule.length - s.round > 1 ? `<button class="link" data-act="automany">남은 정규시즌 자동 진행 (${s.schedule.length - s.round}경기)</button>` : ''}
-      <button class="link" data-act="lineup">타순 편집</button>
+      ${s.phase === 'regular' && s.schedule.length - s.round > 1 ? `<button class="link" data-act="automany">⏩ 남은 정규시즌 자동 진행 (${s.schedule.length - s.round}경기)</button>` : ''}
+      <button class="link" data-act="lineup">📋 타순 편집</button>
     </section>
     ${s.phase === 'regular' ? miniTable(s) : post}`;
   }
 
   function setupCard(c) {
     const set = ctx.setup;
-    return `<section class="card">
-      <div class="card-h">${c.nextYear} 시즌 시작</div>
-      <div class="label">정규시즌 경기 수 <small>(9개 구단과 고르게)</small></div>
+    return `<section class="card setup">
+      <div class="stadium-banner"><b>${c.nextYear}</b><span>SEASON</span></div>
+      <div class="card-h">🗓️ ${c.nextYear} 시즌 시작</div>
+      <div class="label">📅 정규시즌 경기 수 <small>(9개 구단과 고르게)</small></div>
       <div class="seg wrap">${LENGTHS.map(([n, l]) => `<button data-cyc="${n}" class="${set.cycles === n ? 'on' : ''}">${l}</button>`).join('')}</div>
-      <div class="label">경기당 이닝</div>
+      <div class="label">⏱ 경기당 이닝</div>
       <div class="seg">${[3, 5, 9].map(n => `<button data-inn="${n}" class="${set.innings === n ? 'on' : ''}">${n}이닝</button>`).join('')}</div>
       <p class="hint">정규시즌 5위까지 가을야구. 와일드카드 → 준플레이오프 → 플레이오프 → 한국시리즈. 경기를 할수록 삼성 선수들이 성장하고, 성장은 다음 시즌에도 이어져요.</p>
-      <div class="actions"><button class="primary big" data-act="start">시즌 시작</button></div>
+      <div class="actions"><button class="primary big" data-act="start">🚀 시즌 시작</button></div>
     </section>
     <section class="card slim">
-      <div class="card-h">친선 경기 · 1:1 대결</div>
+      <div class="card-h">🤝 친선 경기 · 1:1 대결</div>
       <p class="hint">기록에 남지 않는 한 경기. 1:1 대결은 같은 와이파이의 폰 두 대로 겨뤄요</p>
-      <div class="actions"><button class="ghost" data-act="exhibition">친선 경기</button><button class="ghost" data-act="versus">1:1 대결</button></div>
-      <div class="actions" style="margin-top:8px"><button class="ghost" data-act="lineup">타순 편집</button></div>
+      <div class="actions"><button class="ghost" data-act="exhibition">🤝 친선 경기</button><button class="ghost" data-act="versus">📱 1:1 대결</button></div>
+      <div class="actions" style="margin-top:8px"><button class="ghost" data-act="lineup">📋 타순 편집</button></div>
     </section>`;
   }
 
@@ -121,13 +129,13 @@ export function showHub(root, ctx) {
       <div class="center">${badge(champ, 'xl')}</div>
       <h2 class="center">${getTeam(champ).name}</h2>
       <p class="hint center">${won ? '삼성 라이온즈가 정상에 올랐어요!' : '다음 시즌을 노려봐요'}</p>
-      <div class="actions"><button class="primary big" data-act="finish">시즌 마무리 → ${s.year + 1} 시즌</button></div>
+      <div class="actions"><button class="primary big" data-act="finish">🎊 시즌 마무리 → ${s.year + 1} 시즌</button></div>
     </section>${bracket(s)}`;
   }
 
   function miniTable(s) {
     const st = standings(s);
-    return `<section class="card slim"><div class="card-h">순위<button class="link inline" data-tab="table">전체 보기</button></div>
+    return `<section class="card slim"><div class="card-h">📊 순위<button class="link inline" data-tab="table">전체 보기</button></div>
       <div class="mini">${st.slice(0, 5).map(x => `<div class="${x.id === ME ? 'me' : ''}"><i>${x.rank}</i>${badge(x.id, 'sm')}<span>${teamName(x.id)}</span><b>${x.w}-${x.l}${x.d ? '-' + x.d : ''}</b><small>${x.gb ? x.gb : '-'}</small></div>`).join('')}
       ${st.findIndex(x => x.id === ME) >= 5 ? (() => { const x = st.find(y => y.id === ME); return `<div class="me"><i>${x.rank}</i>${badge(x.id, 'sm')}<span>삼성</span><b>${x.w}-${x.l}${x.d ? '-' + x.d : ''}</b><small>${x.gb}</small></div>`; })() : ''}
       </div></section>`;
@@ -136,7 +144,7 @@ export function showHub(root, ctx) {
   function bracket(s) {
     if (!s.post) return '';
     const ser = s.post.series;
-    return `<section class="card slim"><div class="card-h">포스트시즌</div><div class="bracket">${ser.map((x, i) => {
+    return `<section class="card slim"><div class="card-h">🏆 포스트시즌</div><div class="bracket">${ser.map((x, i) => {
       const [a, b] = x.teams;
       const live = s.phase === 'post' && s.post.current === i;
       const done = x.wins.includes(x.need);
@@ -166,24 +174,24 @@ export function showHub(root, ctx) {
     const up = (id, k, v) => { const d = (c.growth.delta[id] || {})[k]; return `<span class="rt">${v}${d ? `<sup>+${d}</sup>` : ''}</span>`; };
     const xpBar = id => { const x = c.growth.xp[id] || {}; const m = Math.max(0, ...Object.values(x)); return `<i class="xp"><i style="width:${Math.min(100, m / 12 * 100)}%"></i></i>`; };
     return `<div class="seg sticky">${[['season', '이번 시즌'], ['total', '통산']].map(([k, l]) => `<button data-sv="${k}" class="${view === k ? 'on' : ''}">${l}</button>`).join('')}</div>
-    <section class="card flush"><div class="card-h pad">타자</div>
-      ${team.batters.map(b => { const s = bat[b.id]; return `<div class="prow">
+    <section class="card flush"><div class="card-h pad">🧢 타자</div>
+      ${team.batters.map(b => { const s = bat[b.id]; return `<div class="prow wa">${face(b.id, 'b')}
         <div class="pn"><b>${esc(b.name)}</b><small>${b.pos} · ${b.bats === 'L' ? '좌' : b.bats === 'R' ? '우' : '양'}타</small>${xpBar(b.id)}</div>
         <div class="pr">${up(b.id, 'power', b.power)}${up(b.id, 'contact', b.contact)}${up(b.id, 'eye', b.eye)}</div>
         <div class="ps">${s ? `<b>${avg(s)}</b><small>${s.hr}홈런 ${s.rbi}타점</small>` : '<small>-</small>'}</div></div>`; }).join('')}
-      <div class="legend">능력치: 파워 · 컨택 · 선구안</div>
+      <div class="legend">💪 파워 · ⚾ 컨택 · 👀 선구안</div>
     </section>
-    <section class="card flush"><div class="card-h pad">투수</div>
-      ${team.pitchers.map(p => { const s = pit[p.id]; return `<div class="prow">
+    <section class="card flush"><div class="card-h pad">🔥 투수</div>
+      ${team.pitchers.map(p => { const s = pit[p.id]; return `<div class="prow wa">${face(p.id, 'p')}
         <div class="pn"><b>${esc(p.name)}</b><small>${p.role === 'SP' ? '선발' : '불펜'} · ${p.throws === 'L' ? '좌' : '우'}투</small>${xpBar(p.id)}</div>
         <div class="pr">${up(p.id, 'velo', p.velo)}${up(p.id, 'control', p.control)}${up(p.id, 'stamina', p.stamina)}</div>
         <div class="ps">${s ? `<b>${era(s)}</b><small>${ip(s)}이닝 ${s.so}K</small>` : '<small>-</small>'}</div></div>`; }).join('')}
-      <div class="legend">능력치: 구속 · 제구 · 체력 &nbsp;|&nbsp; 기록: 평균자책</div>
+      <div class="legend">🔥 구속 · 🎯 제구 · 💚 체력 &nbsp;|&nbsp; 기록: 평균자책</div>
     </section>`;
   }
 
   // ── 연습 탭 ──
-  const tiredTag = (c, id) => { const L = loadNow(c, id); return L > 0 ? `<small class="tired">피로 ${Math.round(L * 100)}% · 회복 ${daysToRecover(L)}일</small>` : '<small class="fresh">컨디션 최상</small>'; };
+  const tiredTag = (c, id) => { const L = loadNow(c, id); return L > 0 ? `<small class="tired">😴 피로 ${Math.round(L * 100)}% · 회복 ${daysToRecover(L)}일</small>` : '<small class="fresh">😎 컨디션 최상</small>'; };
   function practiceTab(c) {
     const team = userTeamNow(c), tired = userTeamTired(c), left = practiceLeft(c), pr = ctx.pr = ctx.pr || {};
     const pit = team.pitchers.find(p => p.id === pr.pitchId) || team.pitchers.find(p => p.role === 'SP');
@@ -192,31 +200,31 @@ export function showHub(root, ctx) {
     const bStat = PRACTICE_STATS.bat.includes(pr.batStat) ? pr.batStat : 'contact';
     pr.pitchId = pit.id; pr.pitchStat = pStat; pr.batId = bat.id; pr.batStat = bStat;
     const xpOf = (id, stat) => Math.min(100, ((c.growth.xp[id] || {})[stat] || 0) / 12 * 100);
-    const statBtns = (who, stats, cur, attr) => `<div class="seg">${stats.map(k => `<button data-${attr}="${k}" class="${cur === k ? 'on' : ''}">${STAT_KO[k]} ${who[k]}<i class="xp wide"><i style="width:${xpOf(who.id, k)}%"></i></i></button>`).join('')}</div>`;
+    const statBtns = (who, stats, cur, attr) => `<div class="seg">${stats.map(k => `<button data-${attr}="${k}" class="${cur === k ? 'on' : ''}">${STAT_ICON[k]} ${STAT_KO[k]} ${who[k]}<i class="xp wide"><i style="width:${xpOf(who.id, k)}%"></i></i></button>`).join('')}</div>`;
     const dis = left <= 0 ? ' disabled' : '';
     return `<section class="card">
-      <div class="card-h">연습장<span class="pill">오늘 ${left}/${PRACTICE.perDay}회 남음</span></div>
+      <div class="card-h">🏟️ 연습장<span class="pill">오늘 ${left}/${PRACTICE.perDay}회 남음</span></div>
       <p class="hint">${PRACTICE.goal}구를 채우면 고른 선수의 능력치 경험치가 쌓여요. 잘 던지고 잘 칠수록 더 많이 쌓여요. 경기를 하루 치르면 연습 횟수가 다시 채워져요.</p>
     </section>
     <section class="card">
-      <div class="card-h">투구 연습장</div>
+      <div class="card-h">🎯 투구 연습장</div>
       <div class="label">연습할 투수</div>
-      <div class="chips">${team.pitchers.map(p => `<button class="chip ${p.id === pit.id ? 'on' : ''}" data-pp="${p.id}">${esc(p.name)}<small>${p.role === 'SP' ? '선발' : '불펜'} · ${p.velo}km · 제구 ${p.control}</small></button>`).join('')}</div>
+      <div class="chips">${team.pitchers.map(p => `<button class="chip ${p.id === pit.id ? 'on' : ''}" data-pp="${p.id}"><span class="sp-top">${face(p.id, 'p', 'sm')}<b>${esc(p.name)}</b></span><small>${p.role === 'SP' ? '선발' : '불펜'} · ${p.velo}km · 제구 ${p.control}</small></button>`).join('')}</div>
       <div class="label">올릴 능력치</div>${statBtns(pit, PRACTICE_STATS.pitch, pStat, 'ps')}
-      <div class="actions"><button class="primary big" data-act="pitchprac"${dis}>${left > 0 ? `투구 연습 시작 · ${PRACTICE.goal}구` : '오늘은 그만 쉬어요'}</button></div>
+      <div class="actions"><button class="primary big" data-act="pitchprac"${dis}>${left > 0 ? `🎯 투구 연습 시작 · ${PRACTICE.goal}구` : '오늘은 그만 쉬어요'}</button></div>
     </section>
     <section class="card">
-      <div class="card-h">타격 연습장</div>
+      <div class="card-h">💥 타격 연습장</div>
       <div class="label">연습할 타자</div>
-      <div class="chips">${team.batters.map(b => `<button class="chip ${b.id === bat.id ? 'on' : ''}" data-pb="${b.id}">${esc(b.name)}<small>${b.pos} · 파워 ${b.power} · 컨택 ${b.contact}</small></button>`).join('')}</div>
+      <div class="chips">${team.batters.map(b => `<button class="chip ${b.id === bat.id ? 'on' : ''}" data-pb="${b.id}"><span class="sp-top">${face(b.id, 'b', 'sm')}<b>${esc(b.name)}</b></span><small>${b.pos} · 파워 ${b.power} · 컨택 ${b.contact}</small></button>`).join('')}</div>
       <div class="label">올릴 능력치</div>${statBtns(bat, PRACTICE_STATS.bat, bStat, 'bs')}
-      <div class="actions"><button class="primary big" data-act="batprac"${dis}>${left > 0 ? `타격 연습 시작 · ${PRACTICE.goal}구` : '오늘은 그만 쉬어요'}</button></div>
+      <div class="actions"><button class="primary big" data-act="batprac"${dis}>${left > 0 ? `💥 타격 연습 시작 · ${PRACTICE.goal}구` : '오늘은 그만 쉬어요'}</button></div>
     </section>
-    <section class="card flush"><div class="card-h pad">투수 컨디션</div>
-      ${tired.pitchers.map(p => { const L = loadNow(c, p.id); return `<div class="prow cond">
-        <div class="pn"><b>${esc(p.name)}</b><small>${p.role === 'SP' ? '선발' : '불펜'} · 체력 ${p.stamina}${L ? ` <em>(−${Math.round(0.4 * L * 100)}%)</em>` : ''}</small></div>
+    <section class="card flush"><div class="card-h pad">🩺 투수 컨디션</div>
+      ${tired.pitchers.map(p => { const L = loadNow(c, p.id); return `<div class="prow cond wa">${face(p.id, 'p')}
+        <div class="pn"><b>${esc(p.name)}</b><small>${p.role === 'SP' ? '선발' : '불펜'} · 💚 체력 ${p.stamina}${L ? ` <em>(−${Math.round(0.4 * L * 100)}%)</em>` : ''}</small></div>
         <i class="fbar"><i style="width:${Math.round(L * 100)}%"></i></i>
-        <div class="ps">${L ? `<b>${Math.round(L * 100)}%</b><small>회복 ${daysToRecover(L)}일</small>` : '<b class="fresh">최상</b>'}</div></div>`; }).join('')}
+        <div class="ps">${L ? `<b>${Math.round(L * 100)}%</b><small>회복 ${daysToRecover(L)}일</small>` : '<b class="fresh">😎 최상</b>'}</div></div>`; }).join('')}
       <div class="legend">던진 투수는 다음 경기에도 지친 채로 나오고, 3일이 지나야 완전히 회복해요</div>
     </section>`;
   }
@@ -227,11 +235,11 @@ export function showHub(root, ctx) {
     const titles = h.filter(x => x.champion === ME).length;
     const w = h.reduce((a, x) => a + x.w, 0), l = h.reduce((a, x) => a + x.l, 0);
     return `<section class="card"><div class="stats3">
-        <div><b>${h.length}</b><small>시즌</small></div><div><b>${titles}</b><small>우승</small></div><div><b>${w}-${l}</b><small>통산 승패</small></div></div></section>
-      <section class="card flush"><div class="card-h pad">역대 시즌</div>
+        <div><i>📅</i><b>${h.length}</b><small>시즌</small></div><div><i>🏆</i><b>${titles}</b><small>우승</small></div><div><i>⚔️</i><b>${w}-${l}</b><small>통산 승패</small></div></div></section>
+      <section class="card flush"><div class="card-h pad">📜 역대 시즌</div>
       ${h.length ? [...h].reverse().map(x => `<div class="hrow ${x.champion === ME ? 'gold' : ''}"><b>${x.year}</b><span>${x.rank}위 · ${x.w}승 ${x.l}패${x.d ? ' ' + x.d + '무' : ''}</span><em>${x.result}</em></div>`).join('')
         : '<p class="hint pad">아직 끝낸 시즌이 없어요</p>'}</section>
-      <div class="actions"><button class="danger ghost" data-act="reset">커리어 처음부터</button></div>`;
+      <div class="actions"><button class="danger ghost" data-act="reset">🗑️ 커리어 처음부터</button></div>`;
   }
 
   function bind() {
@@ -268,11 +276,12 @@ export function showPracticeResult(root, { career, kind, playerId, stat, n, pts,
   const cur = Math.round(((career.growth.xp[playerId] || {})[stat] || 0) / 12 * 100);
   root.innerHTML = `<div class="screen result">
     <div class="eyebrow center">${kind === 'pitch' ? '투구 연습장' : '타격 연습장'}</div>
+    <div class="re">💪</div>
     <h1 class="res win">연습 끝!</h1>
     <p class="hint center">${esc(who)} · ${n}구 · 연습 점수 ${pts.toFixed(1)}</p>
     ${saved ? `<section class="card"><div class="card-h">${STAT_KO[stat]} 경험치 +${xp.toFixed(1)}</div>
       <i class="xp wide"><i style="width:${cur}%"></i></i>
-      ${ups.length ? `<div class="ups"><div><b>${esc(who)}</b><span>${STAT_KO[stat]} <em>+${ups[0].n}${stat === 'velo' ? 'km' : ''}</em></span></div></div>` : `<p class="hint">다음 성장까지 ${cur}% 찼어요</p>`}</section>`
+      ${ups.length ? `<div class="ups"><div><b>${esc(who)}</b><span>${STAT_ICON[stat]} ${STAT_KO[stat]} <em>+${ups[0].n}${stat === 'velo' ? 'km' : ''}</em></span></div></div>` : `<p class="hint">다음 성장까지 ${cur}% 찼어요</p>`}</section>`
       : '<p class="hint center">오늘 연습 횟수를 다 써서 경험치는 쌓이지 않았어요</p>'}
     <div class="actions"><button class="primary big" id="ok">확인</button></div>
   </div>`;
@@ -290,10 +299,11 @@ export function showResult(root, { career, game, ups, title, heading }, onDone) 
   const me = standings(s).find(x => x.id === ME);
   root.innerHTML = `<div class="screen result">
     <div class="eyebrow center">${esc(title || '')}</div>
+    <div class="re">${res === '승리' ? '🎉' : res === '패배' ? '😢' : '⚾'}</div>
     <h1 class="res ${res === '승리' ? 'win' : res === '패배' ? 'lose' : ''}">${res}</h1>
     ${game ? `<div class="scoreline">${badge(game.away, 'lg')}<b>${game.as}</b><i>:</i><b>${game.hs}</b>${badge(game.home, 'lg')}</div>` : ''}
     ${s.phase === 'regular' || !s.post ? `<p class="hint center">시즌 ${me.w}승 ${me.l}패${me.d ? ' ' + me.d + '무' : ''} · ${me.rank}위</p>` : seriesLine(s)}
-    ${ups.length ? `<section class="card"><div class="card-h">성장한 선수</div><div class="ups">${ups.map(u => `<div><b>${esc(nameOf(u.id))}</b><span>${STAT_KO[u.stat]} <em>+${u.n}${u.stat === 'velo' ? 'km' : ''}</em></span></div>`).join('')}</div></section>` : ''}
+    ${ups.length ? `<section class="card"><div class="card-h">📈 성장한 선수</div><div class="ups">${ups.map(u => `<div><b>${esc(nameOf(u.id))}</b><span>${STAT_ICON[u.stat]} ${STAT_KO[u.stat]} <em>+${u.n}${u.stat === 'velo' ? 'km' : ''}</em></span></div>`).join('')}</div></section>` : ''}
     <div class="actions"><button class="primary big" id="ok">확인</button></div>
   </div>`;
   root.querySelector('#ok').onclick = onDone;
