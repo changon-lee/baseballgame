@@ -1,7 +1,7 @@
 // 한 경기 진행. 사용자 팀 = 홈(말 공격), 컴퓨터 팀 = 원정(초 공격).
 import { createGameState, applyEvent, battingSide } from './rules.js';
 import { CONFIG } from '../config.js';
-import { computePitch, fatigue, pitchMiss } from './pitch.js';
+import { computePitch, fatigue, pitchMiss, ZONE_K } from './pitch.js';
 import { swingResult } from './batting.js';
 import { battedBallInfo } from './outcome.js';
 import { cpuChoosePitch, cpuSwing } from './ai.js';
@@ -94,10 +94,14 @@ export function playUserPitch(m, { type, target, gaugePos, level = 'easy' }, rng
   return { match: c.match, pitch, swing: swing.swing ? swing : null, event: d.event, contact: d.contact, fly: d.fly, style: d.style, runs: c.runs, paEnded: c.paEnded };
 }
 
-export function cpuPitchToUser(m, rng) {
+// strikeOnly(타격 연습): 무조건 스트라이크. 제구가 흔들려 존을 벗어나면 존 안쪽으로 끌어 넣는다
+export function cpuPitchToUser(m, rng, { strikeOnly = false } = {}) {
   const mu = matchup(m);
-  const c = cpuChoosePitch({ pitcher: mu.pitcher, balls: m.game.balls, strikes: m.game.strikes, rng });
-  return computePitch({ pitcher: mu.pitcher, ...c, pitchCount: m.pitchCount[mu.pitchingSide], rng });
+  const c = cpuChoosePitch({ pitcher: mu.pitcher, balls: m.game.balls, strikes: m.game.strikes, rng, strikeOnly });
+  const p = computePitch({ pitcher: mu.pitcher, ...c, pitchCount: m.pitchCount[mu.pitchingSide], rng });
+  if (!strikeOnly || p.isStrike) return p;
+  const lim = ZONE_K * 0.9, clamp = v => Math.max(-lim, Math.min(lim, v));
+  return { ...p, plate: { x: clamp(p.plate.x), y: clamp(p.plate.y) }, isStrike: true };
 }
 
 // 1:1 대결: 서버가 판정(decideSwing, 난수 사용)하고, 서버와 두 폰이 같은 판정을 각자 경기에 반영(applyDecision, 난수 없음)한다

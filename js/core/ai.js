@@ -6,11 +6,12 @@ import { ZONE_K, BALL_R } from './pitch.js';
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const EDGE = ZONE_K + BALL_R;        // 공이 존에 걸치는 끝(isStrike와 같다)
 
-export function cpuChoosePitch({ pitcher, balls, strikes, rng }) {
+// strikeOnly: 타격 연습용. 늘 스트라이크존 안을 노린다
+export function cpuChoosePitch({ pitcher, balls, strikes, rng, strikeOnly = false }) {
   const ws = pitcher.pitches.map(k => (k === 'FB' || k === 'SI' ? 3 : 1.5));
   let r = rng() * ws.reduce((a, c) => a + c, 0), i = 0;
   while ((r -= ws[i]) > 0 && i < ws.length - 1) i++;
-  const inZone = rng() < CONFIG.BALANCE.CPU_ZONE + (balls >= 3 ? 0.25 : 0) - (strikes === 2 ? 0.2 : 0);
+  const inZone = strikeOnly || rng() < CONFIG.BALANCE.CPU_ZONE + (balls >= 3 ? 0.25 : 0) - (strikes === 2 ? 0.2 : 0);
   let target;
   if (inZone) target = { x: (rng() * 2 - 1) * 0.85 * ZONE_K, y: (rng() * 2 - 1) * 0.85 * ZONE_K };
   else { const a = rng() * Math.PI * 2, rr = 1.2 + rng() * 0.4; target = { x: Math.cos(a) * rr, y: Math.sin(a) * rr }; }

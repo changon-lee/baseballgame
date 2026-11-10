@@ -365,7 +365,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   }
 
   function throwCpuPitch() {
-    const pitch = net ? netPitch : cpuPitchToUser(match, rng);
+    const pitch = net ? netPitch : cpuPitchToUser(match, rng, { strikeOnly: !!practice });
     netIdle = false;
     ball = { pitch, start: pitchAt, wind: CONFIG.WIND_CPU_MS, arrival: pitchAt + pitch.travelMs, result: null, swung: false };
     // 궤적 안내는 '대략 이쯤': 타자 선구안이 좋을수록 범위가 좁고 가운데가 정확하다(화면용이라 경기 난수는 쓰지 않는다)
