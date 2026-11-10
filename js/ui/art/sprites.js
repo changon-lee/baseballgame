@@ -144,19 +144,29 @@ const SETS = {
   umpire: { h0: 1177, frames: [{ w: 633, h: 1177, ax: 316 }] },
 };
 
-// 묶음마다 다 받으면 바로 쓴다(못 받은 묶음만 코드로 그린 사람). 경기는 투구 시점(1회초)부터라 그 그림을 먼저 받는다
-let loaded = 0, total = 0, failed = false;
-for (const name of ['pitcher_back', 'batter_front', 'catcher', 'umpire', 'pitcher_front', 'batter_back']) {
-  const set = SETS[name];
-  set.got = 0;
-  set.frames.forEach((f, i) => {
-    total++;
-    const img = new Image();
-    img.onload = () => { loaded++; set.got++; if (loaded === total) { loadIdle(); loadField(); } };
-    img.onerror = () => { failed = true; set.bad = true; loadField(); };
-    img.src = `${BASE}${name}_${i}.webp`;
-    f.img = img;
-  });
+// 묶음마다 다 받으면 바로 쓴다(못 받은 묶음만 코드로 그린 사람). 경기는 투구 시점(1회초)부터라 그 그림을 먼저 받는다.
+// 경기 그림(2MB 넘음)은 메인 화면(글꼴·얼굴·배경)을 먼저 띄우고 받는다: 페이지가 다 뜬 뒤 한가할 때, 또는 경기를 시작하면 바로
+let loaded = 0, total = 0, failed = false, started = false;
+export function loadSprites() {
+  if (started || typeof Image === 'undefined') return;
+  started = true;
+  for (const name of ['pitcher_back', 'batter_front', 'catcher', 'umpire', 'pitcher_front', 'batter_back']) {
+    const set = SETS[name];
+    set.got = 0;
+    set.frames.forEach((f, i) => {
+      total++;
+      const img = new Image();
+      img.onload = () => { loaded++; set.got++; if (loaded === total) { loadIdle(); loadField(); } };
+      img.onerror = () => { failed = true; set.bad = true; loadField(); };
+      img.src = `${BASE}${name}_${i}.webp`;
+      f.img = img;
+    });
+  }
+  setTimeout(() => { loadIdle(); loadField(); }, 8000);                           // 첫 화면 그림이 끝내 안 오더라도 타구 장면 그림은 받는다
+}
+if (typeof window !== 'undefined') {
+  const later = () => (window.requestIdleCallback ? requestIdleCallback(loadSprites, { timeout: 2500 }) : setTimeout(loadSprites, 800));
+  if (document.readyState === 'complete') later(); else window.addEventListener('load', later, { once: true });
 }
 const setReady = (...names) => names.every(n => !SETS[n].bad && SETS[n].got === SETS[n].frames.length);
 
@@ -350,7 +360,6 @@ function loadField() {
     });
   }
 }
-setTimeout(() => { loadIdle(); loadField(); }, 8000);                             // 첫 화면 그림이 끝내 안 오더라도 타구 장면 그림은 받는다
 export const fieldCount = name => FIELD[name]?.length || 0;
 export const fieldReady = () => Object.values(FIELD).every(fr => fr.every(f => f.ok));   // 미리보기에서 다 불러올 때까지 기다리는 용도
 // 그림 한 장(uni가 있으면 팀 색을 입힌다). 없는 그림이거나 아직 못 불러왔으면 null

@@ -14,7 +14,7 @@ import { volRow, bindVol } from './volume.js';
 import { startLoop } from './loop.js';
 import { unlockAudio, playSound, vibrate, shake, preloadAudio, setAudioOptions, setAmbience, previewSound } from './feedback.js';
 import { makeView, toS, zoneRect, ballScreen, ballRadius, pitcherAnchor, batterAnchor, setReleaseOverride, PITCH_PATH } from './art/view.js';
-import { drawPitcherSprite, drawBatterSprite, drawCatcherSprite, spriteReleaseOffset, SWING_CONTACT_MS } from './art/sprites.js';
+import { drawPitcherSprite, drawBatterSprite, drawCatcherSprite, spriteReleaseOffset, SWING_CONTACT_MS, loadSprites } from './art/sprites.js';
 import { buildBackdrop, standsReady, setNight } from './art/stadium.js';
 import { uniformFor } from './art/uniforms.js';
 import { pitcherPoseAt, batterPoseAt } from './art/rig.js';
@@ -64,6 +64,7 @@ function goFullscreen() {
 // practice(연습장): { kind: 'pitch'|'bat', playerId, stat, goal } — 아웃·이닝 없이 goal구를 채우면 onExit({ practice: { kind, playerId, stat, n, pts } })
 export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterId, title, net = null, cpuLineup = null, practice = null }, onExit) {
   goFullscreen();
+  loadSprites();                                     // 메인 화면에서 아직 다 못 받았으면 지금 바로
   const rng = createRng((Date.now() ^ (Math.random() * 1e9)) >>> 0);
   setReleaseOverride(spriteReleaseOffset);
   // 낮·밤 경기: 프로야구는 저녁 경기가 많아서 60%는 밤. 연습장은 노을 그림이 따로 있고, 1:1 대결은 두 폰이 같게 낮
