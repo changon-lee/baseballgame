@@ -26,7 +26,9 @@ const faceNo = pl => {
   const pool = isForeign(pl.name) ? FACE_FOREIGN : FACE_KOREAN, m = /^(.*)-[bp](\d+)$/.exec(String(pl.id));
   return pool[(m ? hashId(m[1]) + +m[2] - 1 : hashId(pl.id)) % pool.length];
 };
-export const face = (pl, kind, cls = '') => `<i class="av ph ${cls}" style="background-image:url('${asset(`faces/${kind === 'p' ? 'p' : 'b'}_${faceNo(pl)}.webp`)}')"></i>`;
+// 동그라미 배경은 그 선수 팀 색(id 앞부분 = 팀 id)
+const faceBg = pl => { const t = getTeam(String(pl.id).replace(/-[bp]\d+$/, '')); return t ? `background-color:${t.colors.main};` : ''; };
+export const face = (pl, kind, cls = '') => `<i class="av ph ${cls}" style="${faceBg(pl)}background-image:url('${asset(`faces/${kind === 'p' ? 'p' : 'b'}_${faceNo(pl)}.webp`)}')"></i>`;
 
 export const badge = (id, size = '') => {
   const t = getTeam(id);
