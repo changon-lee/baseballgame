@@ -3,9 +3,9 @@
 import { gainXp } from './growth.js';
 
 export const PRACTICE = {
-  goal: 20,          // 한 번의 연습 공 수
+  goal: { pitch: 5, bat: 10 },   // 한 번의 연습 공 수: 투구 5구, 타격 10번
   perDay: 2,         // 하루 연습 횟수
-  ptsPerXp: 6,       // 연습 점수 6 = 경험치 1
+  ptsPerXp: { pitch: 1.5, bat: 3 },   // 연습 점수 이만큼 = 경험치 1 (공 수가 적은 투구가 점수당 더 값지다)
 };
 export const PRACTICE_STATS = { pitch: ['velo', 'control', 'stamina'], bat: ['power', 'contact', 'eye'] };
 
@@ -26,7 +26,7 @@ export function swingPts(contact) {                         // contact: 안 쳤�
 // 연습 결과를 커리어에 반영. 오늘 남은 횟수가 없거나 능력치가 안 맞으면 아무것도 안 한다
 export function applyPractice(c, { kind, playerId, stat, pts }) {
   if (practiceLeft(c) <= 0 || !(PRACTICE_STATS[kind] || []).includes(stat) || !(pts > 0)) return { career: c, ups: [], xp: 0 };
-  const xp = pts / PRACTICE.ptsPerXp;
+  const xp = pts / PRACTICE.ptsPerXp[kind];
   const { growth, ups } = gainXp(c.growth, playerId, stat, xp);
   const used = (c.practice && c.practice.day === c.day ? c.practice.used : 0) + 1;
   return { career: { ...c, growth, practice: { day: c.day, used } }, ups, xp };

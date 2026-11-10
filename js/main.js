@@ -83,7 +83,7 @@ async function playPractice(kind, playerId, stat) {
   const lu = kind === 'pitch' ? { ...base, starterId: playerId } : { ...base, order: Array(9).fill(playerId) };
   mod.showGame(app, {
     userTeam: team, cpuTeam: getTeam('lg'), lineup: lu, innings: 99, title: `${kind === 'pitch' ? '투구' : '타격'} 연습장 · ${player.name}`,
-    practice: { kind, playerId, stat, goal: PRACTICE.goal },
+    practice: { kind, playerId, stat, goal: PRACTICE.goal[kind] },
   }, result => {
     const pr = result && result.practice;
     if (!pr) return hub();

@@ -204,21 +204,21 @@ export function showHub(root, ctx) {
     const dis = left <= 0 ? ' disabled' : '';
     return `<section class="card">
       <div class="card-h">🏟️ 연습장<span class="pill">오늘 ${left}/${PRACTICE.perDay}회 남음</span></div>
-      <p class="hint">${PRACTICE.goal}구를 채우면 고른 선수의 능력치 경험치가 쌓여요. 잘 던지고 잘 칠수록 더 많이 쌓여요. 경기를 하루 치르면 연습 횟수가 다시 채워져요.</p>
+      <p class="hint">투구는 ${PRACTICE.goal.pitch}구, 타격은 ${PRACTICE.goal.bat}번을 채우면 고른 선수의 능력치 경험치가 쌓여요. 잘 던지고 잘 칠수록 더 많이 쌓여요. 경기를 하루 치르면 연습 횟수가 다시 채워져요.</p>
     </section>
     <section class="card">
       <div class="card-h">🎯 투구 연습장</div>
       <div class="label">연습할 투수</div>
       <div class="chips">${team.pitchers.map(p => `<button class="chip ${p.id === pit.id ? 'on' : ''}" data-pp="${p.id}">${esc(p.name)}<small>${p.role === 'SP' ? '선발' : '불펜'} · ${p.velo}km · 제구 ${p.control}</small></button>`).join('')}</div>
       <div class="label">올릴 능력치</div>${statBtns(pit, PRACTICE_STATS.pitch, pStat, 'ps')}
-      <div class="actions"><button class="primary big" data-act="pitchprac"${dis}>${left > 0 ? `🎯 투구 연습 시작 · ${PRACTICE.goal}구` : '오늘은 그만 쉬어요'}</button></div>
+      <div class="actions"><button class="primary big" data-act="pitchprac"${dis}>${left > 0 ? `🎯 투구 연습 시작 · ${PRACTICE.goal.pitch}구` : '오늘은 그만 쉬어요'}</button></div>
     </section>
     <section class="card">
       <div class="card-h">💥 타격 연습장</div>
       <div class="label">연습할 타자</div>
       <div class="chips">${team.batters.map(b => `<button class="chip ${b.id === bat.id ? 'on' : ''}" data-pb="${b.id}">${esc(b.name)}<small>${b.pos} · 파워 ${b.power} · 컨택 ${b.contact}</small></button>`).join('')}</div>
       <div class="label">올릴 능력치</div>${statBtns(bat, PRACTICE_STATS.bat, bStat, 'bs')}
-      <div class="actions"><button class="primary big" data-act="batprac"${dis}>${left > 0 ? `💥 타격 연습 시작 · ${PRACTICE.goal}구` : '오늘은 그만 쉬어요'}</button></div>
+      <div class="actions"><button class="primary big" data-act="batprac"${dis}>${left > 0 ? `💥 타격 연습 시작 · ${PRACTICE.goal.bat}번` : '오늘은 그만 쉬어요'}</button></div>
     </section>
     <section class="card flush"><div class="card-h pad">🩺 투수 컨디션</div>
       ${tired.pitchers.map(p => { const L = loadNow(c, p.id); return `<div class="prow cond">

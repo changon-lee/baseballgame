@@ -49,9 +49,9 @@ test('practice: points become xp for the chosen stat, +1 at 12 xp; limited per d
   let c = newCareer();
   assert.equal(practiceLeft(c), PRACTICE.perDay);
   const before = userTeamNow(c).pitchers.find(p => p.id === sp).control;
-  let r = applyPractice(c, { kind: 'pitch', playerId: sp, stat: 'control', pts: 30 });   // 30점 = 5xp
+  let r = applyPractice(c, { kind: 'pitch', playerId: sp, stat: 'control', pts: 7.5 });   // 투구 7.5점 = 5xp
   assert.equal(r.xp, 5); assert.equal(r.ups.length, 0);
-  r = applyPractice(r.career, { kind: 'pitch', playerId: sp, stat: 'control', pts: 48 });   // 8xp → 총 13xp → +1
+  r = applyPractice(r.career, { kind: 'pitch', playerId: sp, stat: 'control', pts: 12 });   // 8xp → 총 13xp → +1
   assert.equal(r.ups[0].stat, 'control'); assert.equal(r.ups[0].n, 1);
   assert.equal(userTeamNow(r.career).pitchers.find(p => p.id === sp).control, before + 1);
   assert.equal(practiceLeft(r.career), 0);
