@@ -26,7 +26,7 @@ export function showHub(root, ctx) {
     root.innerHTML = `
     <div class="screen hub">
       <header class="top-hero">
-        <div class="eyebrow">${s ? `${s.year} 시즌 · ${s.phase === 'regular' ? '정규시즌' : s.phase === 'post' ? '포스트시즌' : '시즌 종료'}` : 'KBO 리그 · 커리어 모드'}</div>
+        <div class="eyebrow">${s ? `${s.year} SEASON · ${s.phase === 'regular' ? '정규시즌' : s.phase === 'post' ? '포스트시즌' : '시즌 종료'}` : 'KBO LEAGUE · 커리어 모드'}</div>
         <div class="hero-row">
           ${badge(ME, 'xl')}
           <div class="hero-text"><h1>삼성 라이온즈</h1>${recordLine(c)}</div>
@@ -47,7 +47,7 @@ export function showHub(root, ctx) {
       return `<p class="sub">${c.history.length ? `${c.history.length}시즌 · 우승 ${titles}회` : '첫 시즌을 시작해 보세요'}</p>`;
     }
     const me = standings(s).find(x => x.id === ME);
-    return `<p class="sub"><b>${me.w}</b>승 <b>${me.l}</b>패${me.d ? ` <b>${me.d}</b>무` : ''} · <b>${me.rank}</b>위${me.gb ? ` <small>(${me.gb} 게임차)</small>` : ''}</p>`;
+    return `<div class="rec"><span><b>${me.w}</b><small>승</small></span><span><b>${me.l}</b><small>패</small></span>${me.d ? `<span><b>${me.d}</b><small>무</small></span>` : ''}<span class="rk"><b>${me.rank}</b><small>위</small></span></div>${me.gb ? `<p class="gb">1위와 ${me.gb} 게임차</p>` : ''}`;
   }
 
   // ── 홈 탭 ──
@@ -75,13 +75,15 @@ export function showHub(root, ctx) {
     return `<section class="card next">
       <div class="card-h">${g.label}<span class="pill">${s.innings}이닝</span></div>
       <div class="vs-row">
-        <div class="side">${badge(opp.id, 'lg')}<b>${opp.short}</b><small>${oppRank.rank}위 · ${oppRank.w}-${oppRank.l}</small></div>
+        <div class="side" style="--c:${opp.colors.main}">${badge(opp.id, 'lg')}<b>${opp.short}</b><small>${oppRank.rank}위 · ${oppRank.w}-${oppRank.l}</small></div>
         <span class="vs">VS</span>
-        <div class="side">${badge(ME, 'lg')}<b>삼성</b><small>홈</small></div>
+        <div class="side" style="--c:${team.colors.main}">${badge(ME, 'lg')}<b>삼성</b><small>HOME</small></div>
       </div>
       <div class="probables"><span>상대 선발 <b>${oppSp.name}</b> <small>${oppSp.velo}km · 제구 ${oppSp.control}</small></span></div>
-      <div class="label">우리 선발</div>
-      <div class="chips">${sps.map(p => `<button class="chip ${p.id === starter ? 'on' : ''}" data-sp="${p.id}">${esc(p.name)}<small>${p.velo}km · 제구 ${p.control}</small>${tiredTag(c, p.id)}</button>`).join('')}</div>
+      <div class="label">오늘의 선발</div>
+      <div class="chips">${sps.map(p => `<button class="chip sp ${p.id === starter ? 'on' : ''}" data-sp="${p.id}"><b>${esc(p.name)}</b>
+        <span class="ms"><span>구속</span><i><u style="width:${Math.max(6, Math.min(100, (p.velo - 125) / 37 * 100))}%"></u></i><em>${p.velo}</em></span>
+        <span class="ms"><span>제구</span><i><u style="width:${Math.min(100, p.control)}%"></u></i><em>${p.control}</em></span>${tiredTag(c, p.id)}</button>`).join('')}</div>
       <div class="actions">
         <button class="primary big" data-act="play">경기 시작</button>
         <button class="ghost" data-act="auto">자동 진행</button>
