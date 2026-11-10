@@ -6,7 +6,7 @@ import { availableRelievers } from '../core/team.js';
 import { createMatch, matchup, playUserPitch, cpuPitchToUser, resolveUserSwing, changePitcher, cpuMaybeChangePitcher, simulateHalf, simulateInning, lastPitch, simulateRest, applyDecision } from '../core/match.js';
 import { cpuChoosePitch, cpuSwing } from '../core/ai.js';
 import { pitchPts, swingPts } from '../core/practice.js';
-import { batReach, EASY, TIMING_GRACE_MS } from '../core/batting.js';
+import { batReach, graceMs } from '../core/batting.js';
 import { loadPrefs, savePrefs, LEVELS, LEVEL_NAME } from './prefs.js';
 import { volRow, bindVol } from './volume.js';
 import { startLoop } from './loop.js';
@@ -899,7 +899,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   // 배트 표시: 노란 타원 = 이 안으로 공이 오면 맞는다(공 반지름 포함). 가운데 막대 = 배트, 안쪽 작은 타원 = 정타
   // 타이밍 신호: 공이 도착하는 때와 정타 여유(grace) 안이면 초록으로 바뀐다 = 지금 손을 떼면 잘 맞는다. 궤적 안내와 같이 켜고 끄고, 어려움에서는 없다
   const timingOn = now => !!ball && !ball.swung && !ball.hitAt && mode === 'bflight' && prefs.guide && lvl() !== 'hard'
-    && Math.abs(now - ball.arrival) <= (lvl() === 'easy' ? EASY.grace : TIMING_GRACE_MS);
+    && Math.abs(now - ball.arrival) <= graceMs(lvl());
   function drawBat(now, batter) {
     const flash = batFlash && now - batFlash.at < 450 ? batFlash : null;
     if (auto || (!flash && mode !== 'bwait' && mode !== 'bflight')) return;
