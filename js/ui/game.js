@@ -824,7 +824,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     const bgReady = standsReady(V.kind) && (!practice || practiceArtSettled());
     if (!bg[V.kind] || bg[V.kind].ready !== bgReady) {
       bg[V.kind] = buildBackdrop(V.kind, V, W, H, DPR, userTeam);
-      if (practice) decoratePractice(bg[V.kind], practice.kind, W, H, DPR, userTeam);   // 연습장 분위기(케이지·불펜)를 덧입힌다
+      if (practice) decoratePractice(bg[V.kind], practice.kind, W, H, DPR, userTeam, V);   // 연습장 분위기(케이지·불펜)를 덧입힌다
     }
     ctx.drawImage(bg[V.kind], 0, 0, W, H);
     const mu = shownMu();

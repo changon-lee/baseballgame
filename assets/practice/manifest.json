@@ -1,1 +1,4 @@
-{}
+{
+  "bat": { "file": "batting_cage.webp", "at": [0.5, 0.472], "zoom": 1.25 },
+  "pitch": { "file": "bullpen.webp", "at": [0.503, 0.58], "zoom": 1.5 }
+}

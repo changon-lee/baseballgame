@@ -1,6 +1,8 @@
 // 연습장 배경: 경기장 배경(buildBackdrop) 위에 연습장 분위기를 입힌다.
 //   타격 연습 = 배팅 케이지(그물 터널 + 간판), 투구 연습 = 불펜(철망 + 간판). 조명은 어둡게.
 // assets/practice/manifest.json 에 { "bat": "파일", "pitch": "파일" }을 적어 두면 그 그림을 배경 전체로 대신 쓴다.
+//   { "file": "파일", "at": [가로, 세로], "zoom": 배율 }로 적으면 그림 속 한 점(0~1 비율)을 게임의 기준점에 맞춘다:
+//   타격 연습(bat) = 투수 발(마운드 투수판), 투구 연습(pitch) = 홈플레이트 가운데. zoom은 화면을 꽉 채우는 크기 대비 배율
 const BASE = new URL('../../../assets/practice/', import.meta.url);
 let manifest = null, loading = false, pending = 0;
 const IMG = {};
@@ -10,15 +12,20 @@ function load() {
   fetch(new URL('manifest.json', BASE)).then(r => (r.ok ? r.json() : {})).catch(() => ({})).then(m => {
     manifest = m && typeof m === 'object' ? m : {};
     for (const k of ['bat', 'pitch']) {
-      const f = manifest[k];
+      const e = manifest[k], f = e && typeof e === 'object' ? e.file : e;
       if (typeof f !== 'string' || /[\\/]/.test(f) || typeof Image === 'undefined') continue;
       pending++;
       const img = new Image();
-      img.onload = () => { IMG[k] = img; pending--; };
+      img.onload = () => { IMG[k] = { img, fit: fitOf(e) }; pending--; };
       img.onerror = () => { pending--; };
       img.src = new URL(f, BASE).href;
     }
   });
+}
+const num = (v, a, b, d) => (typeof v === 'number' && v >= a && v <= b ? v : d);
+function fitOf(e) {
+  if (!e || typeof e !== 'object' || !Array.isArray(e.at)) return null;
+  return { fx: num(e.at[0], 0, 1, 0.5), fy: num(e.at[1], 0, 1, 0.5), zoom: num(e.zoom, 1, 4, 1) };
 }
 // 파일 목록과 그림 불러오기가 끝났나(끝나기 전에 그린 배경은 끝난 뒤 한 번 다시 그린다)
 export const practiceArtSettled = () => manifest !== null && pending === 0;
@@ -82,14 +89,24 @@ function bullpen(ctx, W, H, team) {
   ctx.fillText('— PRACTICE —', W / 2, H * 0.045 + Math.max(26, H * 0.04) + Math.max(14, H * 0.022)); ctx.restore();
 }
 
-// c: buildBackdrop이 만든 캐시 캔버스(그 위에 덧그린다). kind: 'bat'(타격 연습) | 'pitch'(투구 연습)
-export function decoratePractice(c, kind, W, H, dpr, team) {
+// 그림을 화면에 놓을 자리: 꽉 채우는 크기 × zoom, 그림 속 기준점(fx, fy)을 화면의 (tx, ty)에 맞추되 빈틈이 생기지 않게 민다
+export function practiceImageRect(iw, ih, W, H, fit, tx, ty) {
+  const s = Math.max(W / iw, H / ih) * (fit ? fit.zoom : 1), w = iw * s, h = ih * s;
+  if (!fit) return { x: (W - w) / 2, y: (H - h) / 2, w, h };
+  const clamp = (v, lo) => Math.min(0, Math.max(lo, v));
+  return { x: clamp(tx - fit.fx * w, W - w), y: clamp(ty - fit.fy * h, H - h), w, h };
+}
+
+// c: buildBackdrop이 만든 캐시 캔버스(그 위에 덧그린다). kind: 'bat'(타격 연습) | 'pitch'(투구 연습). V: 시점(기준점 위치)
+export function decoratePractice(c, kind, W, H, dpr, team, V) {
   load();
   const ctx = c.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const img = IMG[kind];
-  if (img) {                                                       // 직접 만든 배경 그림이 있으면 화면 전체를 그걸로
-    const s = Math.max(W / img.width, H / img.height), w = img.width * s, h = img.height * s;
-    ctx.drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
+  const art = IMG[kind];
+  if (art) {                                                       // 직접 만든 배경 그림이 있으면 화면 전체를 그걸로
+    // 기준점: 타격 시점은 투수 발(투수판), 투구 시점은 홈플레이트 가운데(stadium.js가 feetY+2에 깊이 12로 그린다)
+    const [tx, ty] = !V ? [W / 2, H / 2] : V.kind === 'catcher' ? [V.pitX, V.pitY] : [V.cx, V.feetY + 8];
+    const r = practiceImageRect(art.img.width, art.img.height, W, H, art.fit, tx, ty);
+    ctx.drawImage(art.img, r.x, r.y, r.w, r.h);
   } else if (kind === 'bat') cage(ctx, W, H, team);
   else bullpen(ctx, W, H, team);
   c.ready = c.ready && practiceArtSettled();
