@@ -6,7 +6,7 @@ import { availableRelievers } from '../core/team.js';
 import { createMatch, matchup, playUserPitch, cpuPitchToUser, resolveUserSwing, changePitcher, cpuMaybeChangePitcher, simulateHalf, simulateInning, lastPitch, simulateRest, applyDecision } from '../core/match.js';
 import { cpuChoosePitch, cpuSwing } from '../core/ai.js';
 import { pitchPts, swingPts } from '../core/practice.js';
-import { batReach } from '../core/batting.js';
+import { batReach, EASY, TIMING_GRACE_MS } from '../core/batting.js';
 import { loadPrefs, savePrefs, LEVELS, LEVEL_NAME } from './prefs.js';
 import { startLoop } from './loop.js';
 import { unlockAudio, playSound, vibrate, shake, preloadAudio, setAudioOptions, setAmbience } from './feedback.js';
@@ -891,16 +891,21 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     ctx.restore();
   }
   // 배트 표시: 노란 타원 = 이 안으로 공이 오면 맞는다(공 반지름 포함). 가운데 막대 = 배트, 안쪽 작은 타원 = 정타
+  // 타이밍 신호: 공이 도착하는 때와 정타 여유(grace) 안이면 초록으로 바뀐다 = 지금 손을 떼면 잘 맞는다. 궤적 안내와 같이 켜고 끄고, 어려움에서는 없다
+  const timingOn = now => !!ball && !ball.swung && !ball.hitAt && mode === 'bflight' && prefs.guide && lvl() !== 'hard'
+    && Math.abs(now - ball.arrival) <= (lvl() === 'easy' ? EASY.grace : TIMING_GRACE_MS);
   function drawBat(now, batter) {
     const flash = batFlash && now - batFlash.at < 450 ? batFlash : null;
     if (auto || (!flash && mode !== 'bwait' && mode !== 'bflight')) return;
     const { rx, ry } = batReach(batter.contact, lvl());
     const at = flash || batAim;
     const [cx, cy] = toS(V, at.x, at.y), RX = rx * V.zw / 2, RY = ry * V.zh / 2;
-    const col = flash ? (flash.hit ? '46,204,113' : '255,107,94') : '255,214,64';
+    const sweet = !flash && timingOn(now);
+    const col = flash ? (flash.hit ? '46,204,113' : '255,107,94') : sweet ? '61,220,132' : '255,214,64';
     const a = flash ? 1 - (now - flash.at) / 450 : batDrag ? 1 : 0.8;
-    ctx.save(); ctx.globalAlpha = a;
-    ctx.fillStyle = `rgba(${col},.12)`; ctx.strokeStyle = `rgba(${col},.95)`; ctx.lineWidth = 2.2;
+    ctx.save(); ctx.globalAlpha = sweet ? 1 : a;
+    ctx.fillStyle = `rgba(${col},${sweet ? .28 : .12})`; ctx.strokeStyle = `rgba(${col},.95)`; ctx.lineWidth = sweet ? 3.2 : 2.2;
+    if (sweet) { ctx.shadowColor = `rgba(${col},.9)`; ctx.shadowBlur = 14; }
     ctx.beginPath(); ctx.ellipse(cx, cy, RX, RY, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     ctx.strokeStyle = `rgba(${col},.45)`; ctx.lineWidth = 1.2;
     ctx.beginPath(); ctx.ellipse(cx, cy, RX * 0.4, RY * 0.4, 0, 0, Math.PI * 2); ctx.stroke();
