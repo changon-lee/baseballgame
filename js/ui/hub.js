@@ -175,14 +175,14 @@ export function showHub(root, ctx) {
     const xpBar = id => { const x = c.growth.xp[id] || {}; const m = Math.max(0, ...Object.values(x)); return `<i class="xp"><i style="width:${Math.min(100, m / 12 * 100)}%"></i></i>`; };
     return `<div class="seg sticky">${[['season', '이번 시즌'], ['total', '통산']].map(([k, l]) => `<button data-sv="${k}" class="${view === k ? 'on' : ''}">${l}</button>`).join('')}</div>
     <section class="card flush"><div class="card-h pad">🧢 타자</div>
-      ${team.batters.map(b => { const s = bat[b.id]; return `<div class="prow wa">${face(b.id, 'b')}
+      ${team.batters.map(b => { const s = bat[b.id]; return `<div class="prow">
         <div class="pn"><b>${esc(b.name)}</b><small>${b.pos} · ${b.bats === 'L' ? '좌' : b.bats === 'R' ? '우' : '양'}타</small>${xpBar(b.id)}</div>
         <div class="pr">${up(b.id, 'power', b.power)}${up(b.id, 'contact', b.contact)}${up(b.id, 'eye', b.eye)}</div>
         <div class="ps">${s ? `<b>${avg(s)}</b><small>${s.hr}홈런 ${s.rbi}타점</small>` : '<small>-</small>'}</div></div>`; }).join('')}
       <div class="legend">💪 파워 · ⚾ 컨택 · 👀 선구안</div>
     </section>
     <section class="card flush"><div class="card-h pad">🔥 투수</div>
-      ${team.pitchers.map(p => { const s = pit[p.id]; return `<div class="prow wa">${face(p.id, 'p')}
+      ${team.pitchers.map(p => { const s = pit[p.id]; return `<div class="prow">
         <div class="pn"><b>${esc(p.name)}</b><small>${p.role === 'SP' ? '선발' : '불펜'} · ${p.throws === 'L' ? '좌' : '우'}투</small>${xpBar(p.id)}</div>
         <div class="pr">${up(p.id, 'velo', p.velo)}${up(p.id, 'control', p.control)}${up(p.id, 'stamina', p.stamina)}</div>
         <div class="ps">${s ? `<b>${era(s)}</b><small>${ip(s)}이닝 ${s.so}K</small>` : '<small>-</small>'}</div></div>`; }).join('')}
@@ -209,19 +209,19 @@ export function showHub(root, ctx) {
     <section class="card">
       <div class="card-h">🎯 투구 연습장</div>
       <div class="label">연습할 투수</div>
-      <div class="chips">${team.pitchers.map(p => `<button class="chip ${p.id === pit.id ? 'on' : ''}" data-pp="${p.id}"><span class="sp-top">${face(p.id, 'p', 'sm')}<b>${esc(p.name)}</b></span><small>${p.role === 'SP' ? '선발' : '불펜'} · ${p.velo}km · 제구 ${p.control}</small></button>`).join('')}</div>
+      <div class="chips">${team.pitchers.map(p => `<button class="chip ${p.id === pit.id ? 'on' : ''}" data-pp="${p.id}">${esc(p.name)}<small>${p.role === 'SP' ? '선발' : '불펜'} · ${p.velo}km · 제구 ${p.control}</small></button>`).join('')}</div>
       <div class="label">올릴 능력치</div>${statBtns(pit, PRACTICE_STATS.pitch, pStat, 'ps')}
       <div class="actions"><button class="primary big" data-act="pitchprac"${dis}>${left > 0 ? `🎯 투구 연습 시작 · ${PRACTICE.goal}구` : '오늘은 그만 쉬어요'}</button></div>
     </section>
     <section class="card">
       <div class="card-h">💥 타격 연습장</div>
       <div class="label">연습할 타자</div>
-      <div class="chips">${team.batters.map(b => `<button class="chip ${b.id === bat.id ? 'on' : ''}" data-pb="${b.id}"><span class="sp-top">${face(b.id, 'b', 'sm')}<b>${esc(b.name)}</b></span><small>${b.pos} · 파워 ${b.power} · 컨택 ${b.contact}</small></button>`).join('')}</div>
+      <div class="chips">${team.batters.map(b => `<button class="chip ${b.id === bat.id ? 'on' : ''}" data-pb="${b.id}">${esc(b.name)}<small>${b.pos} · 파워 ${b.power} · 컨택 ${b.contact}</small></button>`).join('')}</div>
       <div class="label">올릴 능력치</div>${statBtns(bat, PRACTICE_STATS.bat, bStat, 'bs')}
       <div class="actions"><button class="primary big" data-act="batprac"${dis}>${left > 0 ? `💥 타격 연습 시작 · ${PRACTICE.goal}구` : '오늘은 그만 쉬어요'}</button></div>
     </section>
     <section class="card flush"><div class="card-h pad">🩺 투수 컨디션</div>
-      ${tired.pitchers.map(p => { const L = loadNow(c, p.id); return `<div class="prow cond wa">${face(p.id, 'p')}
+      ${tired.pitchers.map(p => { const L = loadNow(c, p.id); return `<div class="prow cond">
         <div class="pn"><b>${esc(p.name)}</b><small>${p.role === 'SP' ? '선발' : '불펜'} · 💚 체력 ${p.stamina}${L ? ` <em>(−${Math.round(0.4 * L * 100)}%)</em>` : ''}</small></div>
         <i class="fbar"><i style="width:${Math.round(L * 100)}%"></i></i>
         <div class="ps">${L ? `<b>${Math.round(L * 100)}%</b><small>회복 ${daysToRecover(L)}일</small>` : '<b class="fresh">😎 최상</b>'}</div></div>`; }).join('')}
