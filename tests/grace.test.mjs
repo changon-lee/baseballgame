@@ -1,4 +1,4 @@
-// 정타 여유(ms): 쉬움 60, 보통 42, 어려움 30. 이 안의 타이밍 차이는 완벽한 타이밍과 같은 타구질
+// 정타 여유(ms): 쉬움 75, 보통 42, 어려움 30. 이 안의 타이밍 차이는 완벽한 타이밍과 같은 타구질
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRng } from '../js/core/rng.js';
@@ -8,8 +8,8 @@ const batter = { contact: 50, power: 50, eye: 50 };
 const pitch = { plate: { x: 0, y: 0 }, breakX: 0, breakY: 0, speedKmh: 145, isStrike: true };
 const q = (level, diff) => swingResult({ timingDiffMs: diff, batter, pitch, rng: createRng(1), bat: { x: 0, y: 0, level } }).quality;
 
-test('grace window: easy 60ms > normal 42ms > hard 30ms', () => {
-  assert.deepEqual(GRACE_MS, { easy: 60, normal: 42, hard: 30 });
+test('grace window: easy 75ms > normal 42ms > hard 30ms', () => {
+  assert.deepEqual(GRACE_MS, { easy: 75, normal: 42, hard: 30 });
   assert.ok(graceMs('easy') > graceMs('normal') && graceMs('normal') > graceMs('hard'));
   assert.equal(graceMs(undefined), 30);                     // 난이도를 모르면 예전처럼 30
 });
