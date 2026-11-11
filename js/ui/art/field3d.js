@@ -110,7 +110,8 @@ export function cameraAt(sc, t, W, H) {
 // ── 배경 ──
 function drawSky(ctx, K, dusk, night) {
   const g = ctx.createLinearGradient(0, 0, 0, K.H);
-  if (night) { g.addColorStop(0, '#03060d'); g.addColorStop(0.5, '#0b1428'); g.addColorStop(1, '#1b2a48'); }   // 밤 그림 하늘(짙은 남색)에 맞춤
+  if (dusk === 'game') { g.addColorStop(0, '#34416f'); g.addColorStop(0.45, '#5a6ca2'); g.addColorStop(1, '#7387b8'); }   // 경기 중 노을: 노을 그림 하늘 윗부분(푸른 보라)에 맞춤
+  else if (night) { g.addColorStop(0, '#03060d'); g.addColorStop(0.5, '#0b1428'); g.addColorStop(1, '#1b2a48'); }   // 밤 그림 하늘(짙은 남색)에 맞춤
   else if (dusk) { g.addColorStop(0, '#5b4a6e'); g.addColorStop(0.12, '#b46a62'); g.addColorStop(0.28, '#f09a58'); g.addColorStop(0.5, '#f8c47e'); g.addColorStop(1, '#fbd99a'); }   // 연습장 그림처럼 노을
   else { g.addColorStop(0, '#4b98e6'); g.addColorStop(0.45, '#5ea5ea'); g.addColorStop(1, '#b9dcf6'); }   // 관중석 그림 윗부분 하늘색에 맞춤
   ctx.fillStyle = g; ctx.fillRect(0, 0, K.W, K.H);
@@ -119,6 +120,12 @@ function drawSky(ctx, K, dusk, night) {
 function nightGrade(ctx, W, H) {
   ctx.save(); ctx.globalCompositeOperation = 'multiply';
   ctx.fillStyle = '#9aa8c4'; ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+// 노을 경기: 땅·벽을 해 질 녘처럼 조금 어둡고 살짝 분홍빛으로(관중석은 노을 그림이라 그 전에)
+function duskGround(ctx, W, H) {
+  ctx.save(); ctx.globalCompositeOperation = 'multiply';
+  ctx.fillStyle = '#d8ccd2'; ctx.fillRect(0, 0, W, H);
   ctx.restore();
 }
 // 연습장 조명탑: 담장 너머에 기둥과 켜진 조명(연습장 배경 그림처럼)
@@ -481,7 +488,7 @@ function drawSprite(ctx, x, y, s, u, kind, act, ph, since, dir, view) {
 export function drawPlay3D(ctx, W, H, sc, ms, uni, opts = {}) {
   const t = toSec(ms), P = !!opts.practice, N = !P && isNight(), D = P ? 1 : duskLevel();   // D: 노을 세기(연습장은 늘 노을)
   const K = cameraAt(sc, t, W, H);
-  drawSky(ctx, K, D > 0, N);
+  drawSky(ctx, K, P ? 'practice' : D > 0 ? 'game' : null, N);
   if (P) drawTowers(ctx, K);                             // 연습장: 관중석 대신 담장 너머 조명탑
   drawOuter(ctx, K, P);                                     // 경기장 바깥(카메라 쪽 관중석)
   // 관중석은 땅·벽보다 나중에: 카메라(홈 뒤 높은 곳)는 파울 쪽 관중석 안쪽에 있어서 가까운 관중석이 벽·땅을 가린다.
@@ -489,6 +496,7 @@ export function drawPlay3D(ctx, W, H, sc, ms, uni, opts = {}) {
   drawGround(ctx, K, null);
   drawWalls(ctx, K);
   if (N) nightGrade(ctx, W, H);
+  else if (!P && D > 0) duskGround(ctx, W, H);
   if (!P) drawStands(ctx, K, '#5b6a80');
   drawPoles(ctx, K);
 
@@ -559,7 +567,7 @@ export function drawPlay3D(ctx, W, H, sc, ms, uni, opts = {}) {
     e.draw();
   }
   if (bp && !ballDrawn && !B.held) drawBall(ctx, bp.x, bp.y, Math.max(2.2, bp.s * 0.3), ms / 30);
-  if (D > 0) duskGrade(ctx, W, H, D, P ? 'soft' : 'game');
+  if (P) duskGrade(ctx, W, H);
 
   // 비거리
   const shownAt = sc.landT ?? (sc.fly && sc.outs.length ? sc.outs[0] : null);

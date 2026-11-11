@@ -98,7 +98,7 @@ function plate(ctx, x, y, w, flip) {
 }
 
 // 관중석 일러스트(assets/stadium). 불러오기 전/실패하면 코드로 그린 관중석을 쓴다.
-// 경기 시간대: 낮 → 노을 → 밤(timeOfDay). 밤이면 같은 구도의 밤 그림(*_night.webp)을 쓴다. 밤 그림은 경기를 시작할 때 미리 받는다
+// 경기 시간대: 낮 → 노을 → 밤(timeOfDay). 노을·밤이면 같은 구도의 그림(*_dusk.webp, *_night.webp)을 쓴다. 둘 다 경기를 시작할 때 미리 받는다
 const STANDS = {};
 let night = false, dusk = 0;
 function loadStands(suffix) {
@@ -125,14 +125,13 @@ export function setTimeOfDay(tod) {
   if (n === night && d === dusk) return false;
   night = n; dusk = d; return true;
 }
-export const preloadNight = () => loadStands('_night');
+export const preloadEvening = () => { loadStands('_dusk'); loadStands('_night'); };
 export const isNight = () => night;
 export const duskLevel = () => dusk;
 // 노을빛: 따뜻하고 어둡게(곱하기, 세기 k) 물들이고 위쪽에 햇빛 번짐을 얹는다.
 // 연습장은 그림이 이미 노을이라 옅게(soft), 경기 중 노을은 낮 그림 위에 입히니 진하게
 const DUSK_TONE = {
   soft: { stops: ['#e6d2d2', '#f6d6b0', '#d9bf9c'], glow: 0.22 },
-  game: { stops: ['#c98f86', '#e9ae84', '#bf9474'], glow: 0.3 },
 };
 export function duskGrade(ctx, W, H, k = 1, tone = 'soft') {
   if (k <= 0) return;
@@ -142,39 +141,17 @@ export function duskGrade(ctx, W, H, k = 1, tone = 'soft') {
   const g = ctx.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, T.stops[0]); g.addColorStop(0.45, T.stops[1]); g.addColorStop(1, T.stops[2]);
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  if (!T.glow) { ctx.restore(); return; }
   ctx.globalCompositeOperation = 'screen';
   const r = ctx.createRadialGradient(W * 0.5, H * 0.2, 0, W * 0.5, H * 0.2, Math.max(W, H) * 0.8);
   r.addColorStop(0, `rgba(255,150,60,${T.glow})`); r.addColorStop(1, 'rgba(255,150,60,0)');
   ctx.fillStyle = r; ctx.fillRect(0, 0, W, H);
   ctx.restore();
 }
-// 노을: 낮 그림의 하늘(맨 위에서 세로로 이어진 파란 하늘·구름)만 노을 하늘색으로 바꾼 사본을 쓴다(그림마다 한 번 만든다)
-const DUSKED = new WeakMap();
-function duskSky(img) {
-  if (DUSKED.has(img)) return DUSKED.get(img);
-  let out = img;
-  try {
-    const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
-    const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(img, 0, 0);
-    const d = x.getImageData(0, 0, c.width, c.height), p = d.data, W = c.width, H = c.height, sky = H * 0.38;
-    const top = [217, 119, 74], low = [247, 184, 122], cloud = [255, 217, 184];
-    for (let i = 0; i < W; i++) for (let y = 0; y < H; y++) {
-      const o = (y * W + i) * 4, r = p[o], g = p[o + 1], b = p[o + 2], mn = Math.min(r, g, b), mx = Math.max(r, g, b);
-      if (!((b >= r + 25 && b > 150) || (mn > 185 && b >= r - 5))) break;      // 하늘이 끝나는 곳(지붕·관중석)에서 멈춘다
-      const t = Math.min(1, y / sky), k = Math.max(0, Math.min(1, (mn - 150) / 80)) * Math.max(0, 1 - (mx - mn) / mx * 2) * 0.85;
-      for (let j = 0; j < 3; j++) p[o + j] = (top[j] + (low[j] - top[j]) * t) * (1 - k) + cloud[j] * k;
-    }
-    x.putImageData(d, 0, 0); out = c;
-  } catch (e) { /* 못 읽으면 그대로 */ }
-  DUSKED.set(img, out);
-  return out;
-}
-const active = kind => {
-  if (night) return STANDS[kind + '_night'] || null;
-  const img = STANDS[kind] || null;
-  return img && dusk ? duskSky(img) : img;
-};
-export const standsReady = kind => !!active(kind) && texLeft === 0;   // 잔디·흙 결까지 불러온 뒤에 배경을 다시 그린다
+const suffix = () => (night ? '_night' : dusk ? '_dusk' : '');
+// 지금 시간대 그림. 노을 그림을 받는 중이면 낮 그림으로 대신한다(밤은 받기 전엔 코드로 그린 관중석)
+const active = kind => STANDS[kind + suffix()] || (dusk && !night ? STANDS[kind] : null) || null;
+export const standsReady = kind => !!STANDS[kind + suffix()] && texLeft === 0;   // 잔디·흙 결까지 불러온 뒤에 배경을 다시 그린다
 export const standsImage = kind => active(kind);
 // 그림 아래 끝(펜스 바로 아래 = 잔디 시작)을 bottom에 맞추고 가로를 꽉 채운다
 function drawStands(ctx, img, W, bottom) {
@@ -192,7 +169,7 @@ export function buildBackdrop(kind, V, W, H, dpr, homeTeam) {
   const home = [homeTeam.colors.main, '#f4f6fa', homeTeam.colors.main, '#a8c2ea', '#e9e9e9', '#2b5fae', '#ffffff'];
 
   const art = active(kind);
-  c.ready = !!art && texLeft === 0;
+  c.ready = standsReady(kind);
   if (kind === 'catcher') {
     const wallY = art ? H * 0.25 : H * 0.2;
     if (art) { drawStands(ctx, art, W, wallY + 9); grass(ctx, W, H, wallY + 9, W / 2, W * 0.36, rng); }
@@ -255,16 +232,18 @@ export function buildBackdrop(kind, V, W, H, dpr, homeTeam) {
     ctx.fillStyle = 'rgba(255,240,215,.18)'; ctx.beginPath(); ctx.ellipse(V.pitX, H * 1.05, W * 0.42, H * 0.1, 0, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#fafafa'; ctx.fillRect(V.pitX - 32, H * 0.985, 64, 5);
   }
-  // 밤: 관중석 그림 아래(잔디·흙)를 조명 아래처럼 조금 어둡고 차갑게
-  if (night) {
+  // 밤: 관중석 그림 아래(잔디·흙)를 조명 아래처럼 조금 어둡고 차갑게. 노을: 해가 낮아 조금 어둡고 살짝 분홍빛
+  if (night || dusk) {
     const top = kind === 'catcher' ? (art ? H * 0.25 : H * 0.2) + 9 : H * 0.13 + (art ? H * 0.065 + 2 : 0);
     ctx.save(); ctx.globalCompositeOperation = 'multiply';
-    const g = ctx.createLinearGradient(0, top, 0, H); g.addColorStop(0, '#7f8fae'); g.addColorStop(0.5, '#a9b6cf'); g.addColorStop(1, '#8e9cb8');
+    const g = ctx.createLinearGradient(0, top, 0, H);
+    if (night) { g.addColorStop(0, '#7f8fae'); g.addColorStop(0.5, '#a9b6cf'); g.addColorStop(1, '#8e9cb8'); }
+    else { g.addColorStop(0, '#c4bccb'); g.addColorStop(0.5, '#e2d8da'); g.addColorStop(1, '#d2c8cc'); }
     ctx.fillStyle = g; ctx.fillRect(0, top, W, H - top); ctx.restore();
   }
   // 비네트
   const vg = ctx.createRadialGradient(W / 2, H * 0.55, Math.min(W, H) * 0.35, W / 2, H * 0.55, Math.max(W, H) * 0.8);
-  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, `rgba(0,0,0,${night ? 0.5 : 0.35})`);
+  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, `rgba(0,0,0,${night ? 0.5 : dusk ? 0.42 : 0.35})`);
   ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
   return c;
 }
