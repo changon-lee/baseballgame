@@ -1,9 +1,10 @@
 // 한 경기 진행. 사용자 팀 = 홈(말 공격), 컴퓨터 팀 = 원정(초 공격).
-import { createGameState, applyEvent, battingSide } from './rules.js';
+import { createGameState, applyEvent, battingSide, stealRunners } from './rules.js';
 import { CONFIG } from '../config.js';
 import { computePitch, fatigue, pitchMiss, ZONE_K } from './pitch.js';
 import { swingResult } from './batting.js';
 import { battedBallInfo } from './outcome.js';
+import { buntResult, stealChance } from './bunt.js';
 import { cpuChoosePitch, cpuSwing } from './ai.js';
 import { defaultLineup, availableRelievers } from './team.js';
 
@@ -40,9 +41,11 @@ export function matchup(m) {
 
 // 타석 결과 이름 (볼넷·삼진은 마지막 공 이벤트와 다르다). 기록에는 공식 기록 이름으로 남긴다:
 // 내야안타·홈 보살 안타 = 안타, 직선타 병살 = 병살. 원래 장면 이름은 play에 따로 둔다
-const PA_OF = { BALL: 'WALK', STRIKE: 'STRIKEOUT', INFIELD_SINGLE: 'SINGLE', SINGLE_HOME_OUT: 'SINGLE', LINE_DP: 'DOUBLE_PLAY' };
+// 번트: 번트 안타 = 안타, 야수 선택 = 범타, 스리번트 파울 = 삼진
+const PA_OF = { BALL: 'WALK', STRIKE: 'STRIKEOUT', INFIELD_SINGLE: 'SINGLE', SINGLE_HOME_OUT: 'SINGLE', LINE_DP: 'DOUBLE_PLAY',
+  BUNT_SINGLE: 'SINGLE', BUNT_FC: 'OUT', BUNT_FOUL: 'STRIKEOUT' };
 const paEvent = e => PA_OF[e] || e;
-const OUTS_OF = { STRIKE: 1, OUT: 1, SAC_FLY: 1, DOUBLE_PLAY: 2, LINE_DP: 2, SINGLE_HOME_OUT: 1 };
+const OUTS_OF = { STRIKE: 1, OUT: 1, SAC_FLY: 1, DOUBLE_PLAY: 2, LINE_DP: 2, SINGLE_HOME_OUT: 1, SAC_BUNT: 1, BUNT_FC: 1, BUNT_FOUL: 1 };
 
 // 공 하나의 결과를 경기에 반영
 function commit(m, event, ps, pitch, fly, style) {
@@ -62,8 +65,8 @@ function commit(m, event, ps, pitch, fly, style) {
   return { match: { ...m, game: state, log, pa, pitchCount: { ...m.pitchCount, [ps]: m.pitchCount[ps] + 1 } }, runs, paEnded };
 }
 
-// 스윙(또는 노스윙) → 이벤트
-function decide(m, batter, pitch, timingDiffMs, rng, bat = null) {
+// 스윙(또는 노스윙) → 이벤트. bunt: 번트 자세(손을 떼면 번트를 댄다)
+function decide(m, batter, pitch, timingDiffMs, rng, bat = null, bunt = false) {
   if (timingDiffMs == null) {
     if (pitch.isStrike) return { event: 'STRIKE', contact: null, fly: false, swung: false };
     // 안 친 볼: 너무 몸에 붙으면 사구, 너무 멀면 포수가 놓쳐 폭투(주자가 있고 4구째가 아닐 때만 뜻이 있다)
@@ -72,6 +75,7 @@ function decide(m, batter, pitch, timingDiffMs, rng, bat = null) {
     if (miss === 'WILD' && g.balls < 3 && g.bases.some(Boolean) && rng() < B.WILD_CHANCE) return { event: 'WILD', contact: null, fly: false, swung: false };
     return { event: 'BALL', contact: null, fly: false, swung: false };
   }
+  if (bunt) return { ...buntResult({ timingDiffMs, batter, pitch, bat, bases: m.game.bases, rng }), swung: true };
   const contact = swingResult({ timingDiffMs, batter, pitch, rng, bat });
   if (contact.kind === 'MISS') return { event: 'STRIKE', contact, fly: false, swung: true };
   if (contact.kind === 'FOUL') return { event: 'FOUL', contact, fly: false, swung: true };
@@ -112,10 +116,25 @@ export function applyDecision(m, pitch, d) {
 }
 
 // bat: 배트를 댄 곳({ x, y, hard }, 존 좌표). 없으면 위치는 따지지 않는다(자동 진행)
-export function resolveUserSwing(m, pitch, timingDiffMs, rng, bat = null) {
-  const r = applyDecision(m, pitch, decideSwing(m, pitch, timingDiffMs, rng, bat));
+// tactic(내 작전): { bunt: 번트, steal: 이번 공에 주자가 뛴다 }
+export function resolveUserSwing(m, pitch, timingDiffMs, rng, bat = null, tactic = null) {
+  const bunt = !!(tactic && tactic.bunt) && timingDiffMs != null;
+  const r = applyDecision(m, pitch, decide(m, matchup(m).batter, pitch, timingDiffMs, rng, bat, bunt));
+  if (tactic && tactic.steal) {
+    const s = runSteal(m.game, r, pitch, rng);
+    if (s) { r.steal = s; r.match = { ...r.match, game: s.game }; }
+  }
   delete r.pitch; delete r.swing;
   return r;
+}
+// 도루: 공을 안 치거나 헛스윙(볼넷·몸에 맞는 공·폭투·삼진으로 이닝 끝은 빼고)일 때만 성공/실패가 갈린다
+// 돌려주는 것: { ok, lead: 뛴 앞 주자(0=1루, 1=2루), game: 도루를 반영한 경기 상태 } 또는 null(뛸 일이 없었다)
+export function runSteal(before, r, pitch, rng) {
+  const st = stealRunners(before.bases), g = r.match.game;
+  if (!st || !['BALL', 'STRIKE'].includes(r.event) || r.paEnded && r.event === 'BALL') return null;
+  if (g.inning !== before.inning || g.half !== before.half || g.over) return null;   // 삼진으로 이닝이 끝났다
+  const ok = rng() < stealChance(before.bases, pitch);
+  return { ok, lead: st.lead, game: applyEvent(g, ok ? 'STEAL' : 'CAUGHT_STEALING').state };
 }
 
 export function changePitcher(m, side, pitcherId) {

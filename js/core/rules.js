@@ -24,6 +24,21 @@ export function groundAdvance(bases) {
   return [b1 ? 2 : null, b2 ? (b1 ? 3 : 2) : null, b3 ? (b1 && b2 ? 4 : 3) : null];
 }
 
+// 번트 야수 선택 때 잡으러 가는 주자(베이스 번호 0=1루 주자): 밀려나는(포스) 주자 중 가장 앞, 포스가 없으면 가장 앞 주자
+export function buntLead(bases) {
+  let i = -1;
+  while (i < 2 && bases[i + 1]) i++;                 // 1루부터 꽉 찬 데까지가 포스
+  if (i >= 0) return i;
+  for (let j = 2; j >= 0; j--) if (bases[j]) return j;
+  return -1;
+}
+// 도루할 주자: { lead: 뛰는 앞 주자(0=1루, 1=2루), trail: 같이 뛰는 뒤 주자 } 또는 null(뛸 수 없음). 홈 스틸은 없다
+export function stealRunners(bases) {
+  if (bases[1] && !bases[2]) return { lead: 1, trail: bases[0] ? 0 : null };
+  if (bases[0] && !bases[1]) return { lead: 0, trail: null };
+  return null;
+}
+
 // opts.ground: 땅볼(OUT·DOUBLE_PLAY)이면 주자가 진루한다
 export function applyEvent(prev, type, opts = {}) {
   const s = { ...prev, bases: [...prev.bases], score: { ...prev.score }, battingIndex: { ...prev.battingIndex } };
@@ -55,6 +70,27 @@ export function applyEvent(prev, type, opts = {}) {
     // 직선타 병살: 타자 아웃 + 뛰어나갔던 앞쪽 주자(가장 낮은 베이스)가 귀루하지 못해 아웃
     case 'LINE_DP': { s.outs += 2; const i = b.findIndex(Boolean); if (i >= 0) b[i] = false; paEnded = true; break; }
     case 'STRIKE': if (++s.strikes >= 3) { s.outs++; paEnded = true; } break;
+    case 'BUNT_FOUL': if (++s.strikes >= 3) { s.outs++; paEnded = true; } break;     // 투 스트라이크 번트 파울은 삼진
+    // 희생번트: 타자 아웃, 주자 모두 한 베이스 / 번트 안타: 타자 1루, 주자 모두 한 베이스
+    case 'SAC_BUNT': s.outs++; runs = +b[2]; s.bases = [false, b[0], b[1]]; paEnded = true; break;
+    case 'BUNT_SINGLE': runs = +b[2]; s.bases = [true, b[0], b[1]]; paEnded = true; break;
+    // 번트 야수 선택: 앞 주자(buntLead)가 아웃, 나머지 주자는 한 베이스, 타자 1루
+    case 'BUNT_FC': {
+      const lead = buntLead(b); s.outs++;
+      const nb = [true, false, false];
+      b.forEach((on, i) => { if (!on || i === lead) return; if (i === 2) runs++; else nb[i + 1] = true; });
+      s.bases = nb; paEnded = true; break;
+    }
+    // 도루(타석 도중): 뛴 주자가 한 베이스씩 / 도루 실패: 앞 주자 아웃, 같이 뛴 뒤 주자는 진루
+    case 'STEAL': case 'CAUGHT_STEALING': {
+      const st = stealRunners(b);
+      if (!st) break;
+      const nb = [...b];
+      nb[st.lead] = false;
+      if (type === 'STEAL') nb[st.lead + 1] = true; else s.outs++;
+      if (st.trail != null) { nb[st.trail] = false; nb[st.trail + 1] = true; }
+      s.bases = nb; break;
+    }
     case 'FOUL': if (s.strikes < 2) s.strikes++; break;
     case 'OUT': s.outs++; if (opts.ground) advance(); paEnded = true; break;
     case 'SAC_FLY': s.outs++; if (s.outs < 3 && b[2]) { runs = 1; b[2] = false; } paEnded = true; break;

@@ -48,7 +48,7 @@ export function gameAchievements(game, log, me) {
   if (opBat.filter(e => e.event === 'STRIKEOUT').length >= 10) out.push('ten_k');
   const opHits = opBat.filter(e => HIT.has(e.event)).length;
   if (win && opBat.length && opHits === 0) out.push('no_hitter');
-  if (win && opBat.length && opBat.every(e => ['OUT', 'STRIKEOUT', 'DOUBLE_PLAY', 'SAC_FLY', 'LINE_DP'].includes(e.event))) out.push('perfect');
+  if (win && opBat.length && opBat.every(e => ['OUT', 'STRIKEOUT', 'DOUBLE_PLAY', 'SAC_FLY', 'SAC_BUNT', 'LINE_DP'].includes(e.event))) out.push('perfect');
   if (myBat.filter(e => HIT.has(e.event)).length >= 15) out.push('hits15');
   if (myBat.some(e => e.event === 'HR' && e.bases && e.bases.every(Boolean))) out.push('grand_slam');
   const by = {};

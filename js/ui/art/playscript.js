@@ -2,7 +2,7 @@
 // 결과(안타/아웃 등)는 이미 정해져 있고, 그 결과가 자연스럽게 나오도록 움직임을 맞춘다.
 // 좌표: 피트. 홈 = (0,0), +y = 중견수 쪽, +x = 1루 쪽, z = 높이. 시간: 실제 초. 화면에선 SPEED배 빠르게 보여준다.
 import { randNormal } from '../../core/rng.js';
-import { groundAdvance } from '../../core/rules.js';
+import { groundAdvance, buntLead } from '../../core/rules.js';
 
 export const SPEED = 1.3;
 export const toMs = t => t * 1000 / SPEED;
@@ -143,7 +143,7 @@ const hang = H => 2 * Math.sqrt(2 * H / G) * 0.95;
 const cutAt = (segs, t) => { const s = segs[segs.length - 1]; s.t1 = Math.min(s.t1, t); };
 
 // ── 대본 만들기 ──
-// event: SINGLE/DOUBLE/TRIPLE/HR/OUT/SAC_FLY/DOUBLE_PLAY/INFIELD_SINGLE/ERROR/SINGLE_HOME_OUT/LINE_DP, fly: 뜬공 여부,
+// event: SINGLE/DOUBLE/TRIPLE/HR/OUT/SAC_FLY/DOUBLE_PLAY/INFIELD_SINGLE/ERROR/SINGLE_HOME_OUT/LINE_DP/SAC_BUNT/BUNT_SINGLE/BUNT_FC, fly: 뜬공 여부,
 // style: 같은 결과의 다른 장면(dive, wall, liner, home_safe, fumble, throw), contact.pull, bats: 'L'|'R'|'S', bases: 치기 전 주자
 export function buildPlay({ event, fly, contact, bats, bases = [false, false, false], rng, style = null }) {
   const hand = bats === 'L' ? 1 : bats === 'R' ? -1 : (rng() < 0.5 ? 1 : -1);
@@ -242,7 +242,48 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
     return arr;
   };
 
-  if (event === 'HR') {
+  const bunt = event === 'SAC_BUNT' || event === 'BUNT_SINGLE' || event === 'BUNT_FC' || (event === 'OUT' && style === 'bunt');
+  if (bunt) {
+    // 번트: 공이 홈 앞으로 느리게 구르고, 투수·1루수·3루수가 달려 나와 잡아 던진다
+    const side = rng() < 0.55 ? -1 : 1;                                       // -1 = 3루 쪽
+    ang = side * (8 + rng() * 26);
+    const who = Math.abs(ang) < 15 ? 'P' : side < 0 ? '3B' : '1B';
+    const path = groundPath(ang, 26 + rng() * 10, -16);
+    const I = fieldBall(who, path, 0.5);
+    const lead = event === 'BUNT_FC' ? buntLead(bases) : -1;
+    const tB = batterTo1B(event === 'BUNT_FC' || event === 'BUNT_SINGLE' ? null : I.t + 0.9);
+    let decisive;
+    if (lead >= 0) {
+      // 야수 선택: 앞 주자를 잡으러 그 다음 베이스(또는 홈)로 던진다. 타자는 1루에서 산다
+      const to = lead + 2, spot = to === 4 ? [0.6, 2.2] : BAG[to];
+      const rcv = to === 4 ? 'C' : to === 3 ? (who === '3B' ? 'SS' : '3B') : (who === '1B' ? 'SS' : rng() < 0.5 ? 'SS' : '2B');
+      const rel = I.t + 0.45;
+      act(F[who], rel - 0.3, 'throw');
+      const arr = throwBall(who, rel, spot);
+      act(F[who], rel + 0.4, 'stand');
+      receive(rcv, spot, REACT, arr, 'tag');
+      const r = R[lead], tR = arr + 0.15;
+      arriveAt(r.keys, 0.1, tR, ...BASES[to % 4], 26, 'stand'); slideIn(r.keys);
+      runTo(r.keys, tR + 0.8, BASES[to % 4][0] * 0.8 - 12, BASES[to % 4][1] * 0.8 - 8, 8, 'stand');
+      sc.outs.push(arr);
+      R.forEach((q, i) => { if (q && i !== lead) runBases(q, 0.12, i + 1, i + 2, 25); });
+      decisive = Math.max(arr, tB);
+    } else {
+      // 1루로 던진다: 희생번트·번트 아웃이면 타자보다 먼저, 번트 안타면 한 발 늦게
+      const safe = event === 'BUNT_SINGLE';
+      const cover = who === '1B' ? '2B' : '1B', dur = hyp(I.x, I.y, ...BAG[1]) / armSpeed(who) + 0.1;
+      const rel = Math.max(I.t + 0.4, safe ? tB + 0.15 - dur : I.t + 0.4);
+      act(F[who], rel - 0.3, 'throw');
+      const arr = throwBall(who, rel, BAG[1]);
+      act(F[who], rel + 0.4, 'stand');
+      receive(cover, BAG[1], REACT, arr, 'stand');
+      if (!safe) sc.outs.push(arr);
+      R.forEach((q, i) => { if (q) runBases(q, 0.12, i + 1, i + 2, 25); });   // 주자는 모두 한 베이스씩
+      decisive = Math.max(arr, tB);
+    }
+    sc.watch.push({ kind: 'r', id: 0, t0: I.t, t1: tB + 0.5 });
+    sc.decisive = decisive + 0.35;
+  } else if (event === 'HR') {
     const fa = fenceAt(ang), dist = fa + 18 + rng() * 50, H = 105 + rng() * 35;
     const [x, y] = polar(ang, dist), zLand = FENCE_H + (dist - fa) * 0.55;
     const T = hang(H) * 0.95;
@@ -624,7 +665,7 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
     const keys = F[n];
     if (n === 'C') { act(keys, 0.45, 'stand'); continue; }
     if (n === 'P') { act(keys, 0.35, 'watch'); continue; }
-    if (n === '1B' && (hit || event === 'OUT' || event === 'LINE_DP')) { runTo(keys, 0.4, ...BAG[1], 20, 'cover'); continue; }
+    if (n === '1B' && !bunt && (hit || event === 'OUT' || event === 'LINE_DP')) { runTo(keys, 0.4, ...BAG[1], 20, 'cover'); continue; }
     if (n === '3B' && hit && !fly) { act(keys, 0.4, 'watch'); continue; }
     const [sx, sy] = SPOTS[n], k = OF.includes(n) ? 0.3 : 0.1;
     runTo(keys, 0.35, sx + (bl[0] - sx) * k, sy + (bl[1] - sy) * k, OF.includes(n) ? 16 : 10, 'watch');

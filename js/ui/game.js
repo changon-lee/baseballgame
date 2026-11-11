@@ -9,6 +9,8 @@ import { pitchPts, swingPts } from '../core/practice.js';
 import { createCutins, cutinFor, CUT_MS, HR_NAME } from './cutin.js';
 import { decoratePractice, practiceArtSettled } from './art/practice.js';
 import { batReach, graceMs } from '../core/batting.js';
+import { BUNT } from '../core/bunt.js';
+import { stealRunners } from '../core/rules.js';
 import { loadPrefs, savePrefs, LEVELS, LEVEL_NAME } from './prefs.js';
 import { volRow, bindVol } from './volume.js';
 import { startLoop } from './loop.js';
@@ -25,18 +27,19 @@ import { drawPlay3D } from './art/field3d.js';
 const LABEL = {
   BALL: '볼', HBP: '몸에 맞는 공!', WILD: '폭투! 공이 빠졌다', STRIKE: '스트라이크', FOUL: '파울', SINGLE: '안타!', DOUBLE: '2루타!', TRIPLE: '3루타!', HR: '홈런!!',
   SAC_FLY: '희생플라이', DOUBLE_PLAY: '병살타', INFIELD_SINGLE: '내야안타!', ERROR: '실책!', SINGLE_HOME_OUT: '안타 · 홈에서 아웃!', LINE_DP: '직선타 병살!',
+  SAC_BUNT: '희생번트 성공', BUNT_SINGLE: '번트 안타!', BUNT_FC: '번트 · 앞 주자 아웃', BUNT_FOUL: '번트 파울',
 };
 // 같은 결과의 다른 장면
-const STYLE_LABEL = { dive: '다이빙 캐치!', wall: '펜스 앞 점프 캐치!', liner: '직선타 아웃', home_safe: '안타! 홈 세이프', bloop: '텍사스 안타!', pop: '내야 뜬공 아웃', foul: '파울플라이 아웃' };
-const HITS = ['SINGLE', 'DOUBLE', 'TRIPLE', 'HR', 'INFIELD_SINGLE', 'SINGLE_HOME_OUT', 'ERROR'];   // 타자에게 좋은 결과
+const STYLE_LABEL = { bunt: '번트 아웃', dive: '다이빙 캐치!', wall: '펜스 앞 점프 캐치!', liner: '직선타 아웃', home_safe: '안타! 홈 세이프', bloop: '텍사스 안타!', pop: '내야 뜬공 아웃', foul: '파울플라이 아웃' };
+const HITS = ['SINGLE', 'DOUBLE', 'TRIPLE', 'HR', 'INFIELD_SINGLE', 'SINGLE_HOME_OUT', 'ERROR', 'BUNT_SINGLE'];   // 타자에게 좋은 결과
 const FREE = ['BALL', 'HBP', 'WILD'];   // 타자에게 좋은 '안 친' 결과
-const OUTS = ['OUT', 'SAC_FLY', 'DOUBLE_PLAY', 'LINE_DP'];
+const OUTS = ['OUT', 'SAC_FLY', 'DOUBLE_PLAY', 'LINE_DP', 'SAC_BUNT', 'BUNT_FC'];
 // 경기 기록에 쓰는 이름
-const PA_NAME = { WALK: '볼넷', HBP: '몸에 맞는 공', STRIKEOUT: '삼진', SINGLE: '안타', DOUBLE: '2루타', TRIPLE: '3루타', HR: '홈런', OUT: '범타 아웃', SAC_FLY: '희생플라이', DOUBLE_PLAY: '병살타', ERROR: '실책 출루' };
-const PLAY_NAME = { INFIELD_SINGLE: '내야안타', SINGLE_HOME_OUT: '안타 (2루 주자 홈에서 아웃)', LINE_DP: '직선타 병살' };
-const STYLE_NAME = { dive: '다이빙 캐치 아웃', wall: '펜스 앞 호수비 아웃', liner: '직선타 아웃', home_safe: '안타 (홈 승부 세이프)', fumble: '실책 출루 (포구 실책)', throw: '실책 출루 (송구 실책)', bloop: '텍사스 안타', pop: '내야 뜬공 아웃', foul: '파울플라이 아웃' };
+const PA_NAME = { WALK: '볼넷', HBP: '몸에 맞는 공', STRIKEOUT: '삼진', SINGLE: '안타', DOUBLE: '2루타', TRIPLE: '3루타', HR: '홈런', OUT: '범타 아웃', SAC_FLY: '희생플라이', SAC_BUNT: '희생번트', DOUBLE_PLAY: '병살타', ERROR: '실책 출루' };
+const PLAY_NAME = { BUNT_SINGLE: '번트 안타', BUNT_FC: '번트 (야수 선택)', INFIELD_SINGLE: '내야안타', SINGLE_HOME_OUT: '안타 (2루 주자 홈에서 아웃)', LINE_DP: '직선타 병살' };
+const STYLE_NAME = { bunt: '번트 아웃', dive: '다이빙 캐치 아웃', wall: '펜스 앞 호수비 아웃', liner: '직선타 아웃', home_safe: '안타 (홈 승부 세이프)', fumble: '실책 출루 (포구 실책)', throw: '실책 출루 (송구 실책)', bloop: '텍사스 안타', pop: '내야 뜬공 아웃', foul: '파울플라이 아웃' };
 const paName = l => PLAY_NAME[l.play] || STYLE_NAME[l.style] || (l.event === 'OUT' ? (l.fly ? '뜬공 아웃' : '땅볼 아웃') : PA_NAME[l.event] || l.event);
-const PITCH_E = { BALL: '볼', HBP: '사구', WILD: '폭투', STRIKE: '스트', FOUL: '파울' };
+const PITCH_E = { BALL: '볼', HBP: '사구', WILD: '폭투', STRIKE: '스트', FOUL: '파울', BUNT_FOUL: '번트파울' };
 // 구종 칩 색(빠른 공은 따뜻한 색, 떨어지는 공은 차가운 색)
 const PITCH_COLORS = { FB: '#ff6b5e', SI: '#ffa94d', CT: '#ffd43b', SL: '#69db7c', CU: '#4dabf7', CH: '#b197fc', FO: '#f783ac' };
 const basesText = b => { const on = [1, 2, 3].filter((n, i) => b[i]); return on.length === 3 ? '만루' : on.length ? on.join('·') + '루' : '주자 없음'; };
@@ -118,6 +121,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   const lvl = () => (net ? net.level : prefs.level);   // 대결은 방장이 정한 난이도
   // 내가 칠 때 배트를 댈 곳(존 좌표). 화면을 누른 채 움직이면 따라오고, 손을 떼면 그 자리로 스윙한다
   let batAim = { x: 0, y: -0.1 }, batDrag = null, batFlash = null;
+  // 작전(내가 칠 때, 공마다 새로 고른다): bunt = 번트 자세, steal = 이번 공에 주자가 뛴다
+  let tactic = { bunt: false, steal: false };
   let alive = true;            // exit() 뒤에는 어떤 타이머·입력도 이 경기를 움직이지 않는다
   const later = (fn, ms) => {
     const id = setTimeout(() => { timers = timers.filter(t => t !== id); if (alive) fn(); }, ms);
@@ -161,7 +166,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
 
   // ── 진행 ──
   function nextPlay() {
-    hold = null;
+    hold = null; tactic = { bunt: false, steal: false };
     updateBoard();
     if (match.game.over) return showEnd();
     ball = null; play = null; swingAt = null; pitchAt = 0;
@@ -188,9 +193,10 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
         return showMsg(`${cpuTeam.short} 투수 교체`, '#9fb3cc', 1300, matchup(match).pitcher.name, nextPlay);
       }
       mode = 'bwait';
-      pitchAt = performance.now() + CONFIG.WIND_CPU_MS + 700 + rng() * 900;
-      setControls(auto ? '<p><b>자동 진행 중</b> · 타자가 알아서 쳐요 <small>(위 ▶▶ 버튼에서 끄기)</small></p>'
-        : '<p>화면을 <b>누른 채 움직여</b> 배트(노란 원)를 공 길에 두고, <b>손을 떼면 스윙!</b></p>');
+      // 작전 칩을 누를 틈을 조금 더 준다(연습·자동 진행은 칩이 없다)
+      pitchAt = performance.now() + CONFIG.WIND_CPU_MS + 700 + rng() * 900 + (practice || auto ? 0 : 500);
+      setControls(auto ? '<p><b>자동 진행 중</b> · 타자가 알아서 쳐요 <small>(위 ▶▶ 버튼에서 끄기)</small></p>' : battingHint());
+      showTactics();
     }
   }
 
@@ -262,7 +268,33 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     sidePick.querySelector('button').onclick = () => { if (['aim', 'pick'].includes(mode)) showBullpen(); };
     placeSidePick();
   }
-  function hideBullpenChip() { sidePick.innerHTML = ''; }
+  function hideBullpenChip() { sidePick.innerHTML = ''; sidePick.dataset.kind = ''; }
+  // 작전 칩(번트·도루): 내가 칠 차례, 공이 오기 전에 왼쪽에 뜬다. 누를 때마다 켜고 끈다
+  const TACTIC_ICON = {
+    bunt: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15L20 9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="13" cy="16.5" r="2.6" fill="#fff" stroke="currentColor" stroke-width="1.3"/></svg>',
+    steal: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17h9M7 12h8M10 7h7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M16 4l5 3-5 3" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  };
+  function showTactics() {
+    if (practice || net || auto) return;
+    const canSteal = !!stealRunners(match.game.bases);
+    const chip = (k, name, i, c) => `<button data-t="${k}" class="${tactic[k] ? 'on' : ''}" style="--i:${i};--c:${c}"><i>${TACTIC_ICON[k]}</i><b>${name}</b></button>`;
+    sidePick.innerHTML = chip('bunt', '번트', 0, '#ffd43b') + (canSteal ? chip('steal', '도루', 1, '#69db7c') : '');
+    sidePick.dataset.kind = 'tactic';
+    sidePick.querySelectorAll('[data-t]').forEach(b => {
+      b.onclick = () => {
+        if (mode !== 'bwait') return;
+        const k = b.dataset.t; tactic = { ...tactic, [k]: !tactic[k] };
+        b.classList.toggle('on', tactic[k]);
+        controls.innerHTML = battingHint();
+      };
+    });
+    placeSidePick();
+  }
+  const battingHint = () => {
+    const sign = [tactic.bunt && '<b class="y">번트</b>', tactic.steal && '<b class="g">도루</b>'].filter(Boolean).join(' · ');
+    if (tactic.bunt) return `<p>${sign} · 배트(노란 원)를 공 길에 대고 <b>손을 떼면 번트</b></p>`;
+    return `<p>${sign ? sign + ' 사인! · ' : ''}화면을 <b>누른 채 움직여</b> 배트(노란 원)를 공 길에 두고, <b>손을 떼면 스윙!</b></p>`;
+  };
   // 교체할 투수 고르기: 가운데 창
   function showBullpen() {
     const side = mySide;
@@ -337,6 +369,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   }
   function placeSidePick() {
     if (!sidePick.childElementCount || !V) return;
+    if (sidePick.dataset.kind === 'tactic') { sidePick.style.transform = `translate(10px,${Math.round(H * 0.4)}px)`; return; }
     const pa = pitcherAnchor(V, matchup(match).pitcher.throws), g = gaugeSpot(), w = sidePick.offsetWidth, h = sidePick.offsetHeight;
     const x = Math.max(8, Math.min(pa.x - pa.scale * 42 - w, W - w - 8)), y = Math.max(8, Math.min(g.cy - h / 2, H - h - 8));
     sidePick.style.transform = `translate(${Math.round(x)}px,${Math.round(y)}px)`;
@@ -377,6 +410,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   }
 
   function throwCpuPitch() {
+    if (sidePick.dataset.kind === 'tactic') hideBullpenChip();   // 공이 오면 작전은 못 바꾼다
     const pitch = net ? netPitch : cpuPitchToUser(match, rng, { strikeOnly: !!practice });
     netIdle = false;
     ball = { pitch, start: pitchAt, wind: CONFIG.WIND_CPU_MS, arrival: pitchAt + pitch.travelMs, result: null, swung: false };
@@ -412,7 +446,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   // 내 스윙
   function userSwing(ts) {
     if (!ball || ball.swung) return;
-    ball.swung = true; swingAt = performance.now() - 30;   // 손을 떼자마자 방망이가 나가 보이게
+    ball.swung = true;
+    if (!tactic.bunt) swingAt = performance.now() - 30;   // 손을 떼자마자 방망이가 나가 보이게(번트는 자세 그대로 댄다)
     const diff = ts - ball.arrival;
     const bat = auto ? null : { x: batAim.x, y: batAim.y, level: lvl() };
     if (net) {                                           // 판정은 서버가: 타이밍과 배트 위치만 보낸다
@@ -420,19 +455,19 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       net.conn.send({ t: 'swing', n: netN, diff, bat: bat && { x: bat.x, y: bat.y } });
       return;
     }
-    swingOutcome(resolveUserSwing(match, ball.pitch, diff, rng, bat), diff, bat);
+    swingOutcome(resolveUserSwing(match, ball.pitch, diff, rng, bat, tactic), diff, bat);
   }
   function swingOutcome(r, diff, bat) {
     const k = r.contact.kind;
     if (bat) batFlash = { at: performance.now(), hit: k !== 'MISS', x: batAim.x, y: batAim.y };
     info = `${ball.pitch.speedKmh}km/h ${PITCH_TYPES[ball.pitch.type].name} · `
-      + (r.contact.aimMiss ? '배트가 공 길에서 벗어났어요' : `${diff < 0 ? '빠름' : '늦음'} ${Math.abs(Math.round(diff))}ms`);
+      + (r.contact.aimMiss ? '배트가 공 길에서 벗어났어요' : r.contact.bunt && k !== 'MISS' ? '번트' : `${diff < 0 ? '빠름' : '늦음'} ${Math.abs(Math.round(diff))}ms`);
     if (k === 'MISS') { playSound('whiff'); ball.result = r; return; }   // 공은 미트까지 날아간 뒤 판정
     const q = r.contact.quality;
     if (r.event === 'HR') playSound('homerun', { crowd: true });   // 맞는 순간 관중이 일어난다(받은 녹음 전체)
     else playSound(k === 'FOUL' ? 'foul' : 'hit', { q });
     vibrate(k === 'INPLAY' && q > 0.8 ? 70 : 35);
-    shake(cv, k === 'INPLAY' ? 4 + q * 8 : 3);
+    shake(cv, r.contact.bunt ? 2 : k === 'INPLAY' ? 4 + q * 8 : 3);
     ball.hitAt = performance.now(); ball.contact = r.contact;
     apply(r, false);
   }
@@ -443,7 +478,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       mode = 'netwait'; return;
     }
     playSound('mitt', { speed: ball.pitch.speedKmh });
-    const r = ball.result || resolveUserSwing(match, ball.pitch, null, rng);
+    const r = ball.result || resolveUserSwing(match, ball.pitch, null, rng, null, tactic);
     if (!ball.swung) info = `${ball.pitch.speedKmh}km/h ${PITCH_TYPES[ball.pitch.type].name}`;
     apply(r, false);
   }
@@ -453,7 +488,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     mode = 'msg';
     const prev = match.game;
     const finish = () => settle(prev, r, userPitched);
-    if (['BALL', 'STRIKE', 'FOUL', 'HBP', 'WILD'].includes(r.event)) return finish();
+    if (['BALL', 'STRIKE', 'FOUL', 'HBP', 'WILD', 'BUNT_FOUL'].includes(r.event)) return finish();
     const batter = matchup(match).batter;
     // 대결이면 서버가 준 씨앗으로: 두 폰에서 같은 장면이 나온다
     play = buildPlay({ event: r.event, fly: r.fly, style: r.style, contact: r.contact, bats: batter.bats, bases: prev.bases, rng: r.seed != null ? createRng(r.seed) : rng });
@@ -473,10 +508,16 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     if (r.chk && r.chk !== checkOf(match)) console.warn('경기 상태가 서버와 달라요', r.chk, checkOf(match));
     let label = (r.style && STYLE_LABEL[r.style]) || LABEL[r.event] || (r.fly ? '뜬공 아웃' : '땅볼 아웃');
     if (r.event === 'STRIKE' && prev.strikes === 2) { label = '삼진!'; playSound('strikeout'); }
-    else if (r.event === 'STRIKE' && r.contact && r.contact.kind === 'MISS') label = '헛스윙';
+    else if (r.event === 'STRIKE' && r.contact && r.contact.kind === 'MISS') label = r.contact.bunt ? '번트 헛스윙' : '헛스윙';
+    if (r.event === 'BUNT_FOUL' && prev.strikes === 2) { label = '스리번트 실패 · 삼진'; playSound('strikeout'); }
     if (r.event === 'BALL' && prev.balls === 3) label = '볼넷';
+    if (r.steal) {                                       // 도루: 결과를 앞에 붙인다
+      label = `${r.steal.lead + 2}루 도루 ${r.steal.ok ? '성공!' : '실패'} · ${label}`;
+      playSound(r.steal.ok ? 'cheer' : 'aww', { gain: 0.7 });
+    }
     crowd(prev, r, userPitched);
-    const good = userPitched ? (r.event === 'STRIKE' || OUTS.includes(r.event)) : (HITS.includes(r.event) || FREE.includes(r.event));
+    const good = r.steal && !userPitched ? r.steal.ok
+      : userPitched ? (r.event === 'STRIKE' || OUTS.includes(r.event)) : (HITS.includes(r.event) || FREE.includes(r.event) || r.event === 'SAC_BUNT');
     const color = r.event === 'FOUL' ? '#ffffff' : good ? '#2ecc71' : '#e74c3c';
     const sub = (r.runs && !practice ? `${r.runs}점 득점! · ` : '') + info;
     const g = match.game;
@@ -922,11 +963,12 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   // 배트 표시: 노란 타원 = 이 안으로 공이 오면 맞는다(공 반지름 포함). 가운데 막대 = 배트, 안쪽 작은 타원 = 정타
   // 타이밍 신호: 공이 도착하는 때와 정타 여유(grace) 안이면 초록으로 바뀐다 = 지금 손을 떼면 잘 맞는다. 궤적 안내와 같이 켜고 끄고, 어려움에서는 없다
   const timingOn = now => !!ball && !ball.swung && !ball.hitAt && mode === 'bflight' && prefs.guide && lvl() !== 'hard'
-    && Math.abs(now - ball.arrival) <= graceMs(lvl());
+    && Math.abs(now - ball.arrival) <= (tactic.bunt ? 150 : graceMs(lvl()));   // 번트는 대기만 하면 되니 넉넉하게
   function drawBat(now, batter) {
     const flash = batFlash && now - batFlash.at < 450 ? batFlash : null;
     if (auto || (!flash && mode !== 'bwait' && mode !== 'bflight')) return;
-    const { rx, ry } = batReach(batter.contact, lvl());
+    const reach = batReach(batter.contact, lvl()), bk = tactic.bunt ? BUNT.reach : 1;
+    const rx = reach.rx * bk, ry = reach.ry * bk;
     const at = flash || batAim;
     const [cx, cy] = toS(V, at.x, at.y), RX = rx * V.zw / 2, RY = ry * V.zh / 2;
     const sweet = !flash && timingOn(now);
@@ -940,6 +982,10 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     ctx.beginPath(); ctx.ellipse(cx, cy, RX * 0.4, RY * 0.4, 0, 0, Math.PI * 2); ctx.stroke();
     ctx.strokeStyle = `rgba(${col},.95)`; ctx.lineCap = 'round';                    // 배트(가로 막대)
     ctx.lineWidth = Math.max(4, RY * 0.16); ctx.beginPath(); ctx.moveTo(cx - RX * 0.62, cy); ctx.lineTo(cx + RX * 0.62, cy); ctx.stroke();
+    if (tactic.bunt && !flash) {                                                  // 번트 자세 표시
+      ctx.shadowBlur = 0; ctx.fillStyle = `rgba(${col},1)`; ctx.font = '800 13px system-ui,sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('번트', cx, cy - RY - 6);
+    }
     ctx.restore();
   }
   // 스트라이크존: 판정 존(ZONE_K) 크기로 그린다

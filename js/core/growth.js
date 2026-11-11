@@ -7,7 +7,7 @@ const CAP = { power: 99, contact: 99, eye: 99, control: 99, stamina: 99, velo: 1
 // 타석 결과별로 어느 능력치에 경험치가 쌓이는지
 const BAT_XP = {
   SINGLE: { contact: 3 }, DOUBLE: { power: 2, contact: 2 }, TRIPLE: { contact: 3, power: 2 }, HR: { power: 5 },
-  WALK: { eye: 3 }, SAC_FLY: { power: 1 }, OUT: { contact: 0.5 }, STRIKEOUT: { eye: 0.3 }, DOUBLE_PLAY: { contact: 0.3 }, ERROR: { contact: 0.5 },
+  WALK: { eye: 3 }, SAC_FLY: { power: 1 }, SAC_BUNT: { contact: 1 }, OUT: { contact: 0.5 }, STRIKEOUT: { eye: 0.3 }, DOUBLE_PLAY: { contact: 0.3 }, ERROR: { contact: 0.5 },
 };
 
 export const createGrowth = () => ({ xp: {}, delta: {} });
@@ -59,7 +59,7 @@ export function applyGrowth(team, growth) {
 }
 
 // 기록 누적: { bat: {id: {pa, ab, h, d2, d3, hr, bb, so, rbi}}, pit: {id: {bf, outs, h, hr, bb, so, r}} }
-const OUTS_OF = { STRIKEOUT: 1, OUT: 1, SAC_FLY: 1, DOUBLE_PLAY: 2 };
+const OUTS_OF = { STRIKEOUT: 1, OUT: 1, SAC_FLY: 1, SAC_BUNT: 1, DOUBLE_PLAY: 2 };
 const HIT = ['SINGLE', 'DOUBLE', 'TRIPLE', 'HR'];
 
 export function playerLine(prev, log) {
@@ -68,7 +68,7 @@ export function playerLine(prev, log) {
     const b = { pa: 0, ab: 0, h: 0, d2: 0, d3: 0, hr: 0, bb: 0, so: 0, rbi: 0, ...bat[e.batterId] };
     const p = { bf: 0, outs: 0, h: 0, hr: 0, bb: 0, so: 0, r: 0, ...pit[e.pitcherId] };
     b.pa++; p.bf++;
-    if (e.event !== 'WALK' && e.event !== 'HBP' && e.event !== 'SAC_FLY') b.ab++;
+    if (!['WALK', 'HBP', 'SAC_FLY', 'SAC_BUNT'].includes(e.event)) b.ab++;      // 볼넷·사구·희생타는 타수가 아니다
     if (HIT.includes(e.event)) { b.h++; p.h++; }
     if (e.event === 'DOUBLE') b.d2++;
     if (e.event === 'TRIPLE') b.d3++;
