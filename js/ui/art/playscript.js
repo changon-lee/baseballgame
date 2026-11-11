@@ -145,7 +145,8 @@ const cutAt = (segs, t) => { const s = segs[segs.length - 1]; s.t1 = Math.min(s.
 // ── 대본 만들기 ──
 // event: SINGLE/DOUBLE/TRIPLE/HR/OUT/SAC_FLY/DOUBLE_PLAY/INFIELD_SINGLE/ERROR/SINGLE_HOME_OUT/LINE_DP/SAC_BUNT/BUNT_SINGLE/BUNT_FC, fly: 뜬공 여부,
 // style: 같은 결과의 다른 장면(dive, wall, liner, home_safe, fumble, throw), contact.pull, bats: 'L'|'R'|'S', bases: 치기 전 주자
-export function buildPlay({ event, fly, contact, bats, bases = [false, false, false], rng, style = null }) {
+// 도루 장면: event = 'STEAL'(세이프) | 'CAUGHT_STEALING'(아웃), steal = { lead: 뛴 앞 주자(0=1루, 1=2루), trail: 같이 뛴 뒤 주자 | null }
+export function buildPlay({ event, fly, contact, bats, bases = [false, false, false], rng, style = null, steal = null }) {
   const hand = bats === 'L' ? 1 : bats === 'R' ? -1 : (rng() < 0.5 ? 1 : -1);
   const pull = contact ? contact.pull : 0;
   let ang = clamp(hand * pull * 35 + randNormal(rng) * 7, -42, 42);
@@ -243,7 +244,41 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
   };
 
   const bunt = event === 'SAC_BUNT' || event === 'BUNT_SINGLE' || event === 'BUNT_FC' || (event === 'OUT' && style === 'bunt');
-  if (bunt) {
+  if (event === 'STEAL' || event === 'CAUGHT_STEALING') {
+    // 도루: 공은 포수 미트에서 시작. 주자는 투구 때 이미 스타트를 끊어 베이스 사이를 달리고 있다.
+    // 포수가 일어나 던지고, 베이스 커버가 받아 태그. 세이프면 주자가 한 발 먼저 슬라이딩, 아웃이면 공이 먼저
+    const ok = event === 'STEAL', L = steal ? steal.lead : (bases[1] && !bases[2] ? 1 : 0), to = L + 2;
+    const spot = BAG[to], cover = to === 3 ? '3B' : (rng() < 0.5 ? 'SS' : '2B');
+    used.add('C');
+    sc.ball.push({ type: 'hold', who: 'C', t0: 0, t1: Infinity });
+    const rel = 0.62 + rng() * 0.18;
+    act(F.C, rel - 0.38, 'throw');
+    const arr = throwBall('C', rel, spot);
+    act(F.C, rel + 0.45, 'stand');
+    receive(cover, spot, REACT, arr, 'tag');
+    const go = (r, from, dest, tArr) => {                                   // 스타트를 끊은 자리에서 다음 베이스까지
+      const [sx, sy] = baseAlong(from, from === 2 ? 30 : 27);
+      Object.assign(r.keys[0], { x: sx, y: sy, act: 'run' });
+      const d = hyp(sx, sy, ...BASES[dest]);
+      arriveAt(r.keys, 0, tArr, ...BASES[dest], d / tArr, 'stand');
+    };
+    const r = R[L], tR = ok ? arr - 0.1 - rng() * 0.18 : arr + 0.18 + rng() * 0.15;
+    go(r, L + 1, to, tR); slideIn(r.keys);
+    if (steal && steal.trail != null && R[steal.trail]) go(R[steal.trail], steal.trail + 1, steal.trail + 2, tR + 0.25);
+    const tTag = Math.max(arr, tR);
+    act(F[cover], tTag + 0.05, 'tag');
+    if (ok) sc.sounds.push({ t: tR, name: 'ooh' });
+    else {
+      sc.outs.push(tTag + 0.05);
+      const off = to === 3 ? [-82, 30] : [-16, 112];                       // 아웃된 주자는 더그아웃 쪽으로 걸어 나간다
+      runTo(r.keys, tTag + 1.1, ...off, 7, 'stand');
+    }
+    // 카메라는 공(홈에 있는 포수 미트) 대신 뛰는 주자와 베이스 커버만 따라간다 → 슬라이딩이 크게 보인다
+    sc.watch.length = 0;
+    sc.watch.push({ kind: 'r', id: sc.runners.indexOf(r), t0: 0, t1: Infinity }, { kind: 'f', id: cover, t0: 0, t1: Infinity });
+    sc.ballUntil = -1; sc.minSpan = 42;
+    sc.decisive = tTag + 0.5;
+  } else if (bunt) {
     // 번트: 공이 홈 앞으로 느리게 구르고, 투수·1루수·3루수가 달려 나와 잡아 던진다
     const side = rng() < 0.55 ? -1 : 1;                                       // -1 = 3루 쪽
     ang = side * (8 + rng() * 26);

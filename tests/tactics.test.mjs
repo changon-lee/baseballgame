@@ -98,3 +98,18 @@ test('bunt scenes build: the out (if any) is thrown, runners move up', () => {
     assert.ok(sc.end > sc.decisive && sc.decisive > 1 && sc.end < 12, `${event} ${sc.decisive} ${sc.end}`);
   }
 });
+test('steal scene: catcher throws to the base, runner slides in; safe has no out, caught has one', () => {
+  const last = keys => keys[keys.length - 1];
+  for (let s = 1; s < 8; s++) {
+    const safe = buildPlay({ event: 'STEAL', steal: { lead: 0, trail: null }, bats: 'R', bases: [true, false, false], rng: createRng(s) });
+    assert.equal(safe.outs.length, 0);
+    const r = safe.runners.find(q => q.base === 1), k = last(r.keys);
+    assert.ok(Math.hypot(k.x - 0, k.y - 127.3) < 1, 'runner ends on second');
+    assert.ok(safe.ball.some(b => b.type === 'throw'));
+    const out = buildPlay({ event: 'CAUGHT_STEALING', steal: { lead: 1, trail: 0 }, bats: 'L', bases: [true, true, false], rng: createRng(s) });
+    assert.equal(out.outs.length, 1);
+    const tr = last(out.runners.find(q => q.base === 1).keys);
+    assert.ok(Math.hypot(tr.x - 0, tr.y - 127.3) < 1, 'trailing runner takes second');
+    assert.ok(out.end > out.decisive && out.decisive < 5);
+  }
+});

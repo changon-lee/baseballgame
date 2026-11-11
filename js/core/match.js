@@ -134,7 +134,7 @@ export function runSteal(before, r, pitch, rng) {
   if (!st || !['BALL', 'STRIKE'].includes(r.event) || r.paEnded && r.event === 'BALL') return null;
   if (g.inning !== before.inning || g.half !== before.half || g.over) return null;   // 삼진으로 이닝이 끝났다
   const ok = rng() < stealChance(before.bases, pitch);
-  return { ok, lead: st.lead, game: applyEvent(g, ok ? 'STEAL' : 'CAUGHT_STEALING').state };
+  return { ok, lead: st.lead, trail: st.trail, game: applyEvent(g, ok ? 'STEAL' : 'CAUGHT_STEALING').state };
 }
 
 export function changePitcher(m, side, pitcherId) {

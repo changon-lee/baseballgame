@@ -91,7 +91,7 @@ function frameAt(sc, t) {
   pts.forEach(p => { c[0] += p[0] / pts.length; c[1] += p[1] / pts.length; c[2] += p[2] / pts.length; });
   let r = 0;
   pts.forEach(p => { r = Math.max(r, Math.hypot(p[0] - c[0], p[1] - c[1]), Math.abs(p[2] - c[2]) * 1.4); });
-  return { c, span: clamp(r * 2.6 + 50, 80, 420) };
+  return { c, span: clamp(r * 2.6 + 50, sc.minSpan || 80, 420) };   // minSpan: 장면이 더 가까이 보고 싶을 때(도루)
 }
 export function cameraAt(sc, t, W, H) {
   // 지난 0.6초를 평균해서 부드럽게 따라간다

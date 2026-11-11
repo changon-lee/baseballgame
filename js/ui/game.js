@@ -488,8 +488,16 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     mode = 'msg';
     const prev = match.game;
     const finish = () => settle(prev, r, userPitched);
-    if (['BALL', 'STRIKE', 'FOUL', 'HBP', 'WILD', 'BUNT_FOUL'].includes(r.event)) return finish();
     const batter = matchup(match).batter;
+    if (r.steal && !practice) {                         // 도루: 판정 전에 주자가 뛰고 포수가 던지는 장면
+      play = buildPlay({ event: r.steal.ok ? 'STEAL' : 'CAUGHT_STEALING', steal: { lead: r.steal.lead, trail: r.steal.trail ?? null },
+        bats: batter.bats, bases: prev.bases, rng });
+      play.sounds.sort((a, b) => a.t - b.t);
+      play.start = performance.now() + 200; play.si = 0;
+      play.then = finish;
+      return;
+    }
+    if (['BALL', 'STRIKE', 'FOUL', 'HBP', 'WILD', 'BUNT_FOUL'].includes(r.event)) return finish();
     // 대결이면 서버가 준 씨앗으로: 두 폰에서 같은 장면이 나온다
     play = buildPlay({ event: r.event, fly: r.fly, style: r.style, contact: r.contact, bats: batter.bats, bases: prev.bases, rng: r.seed != null ? createRng(r.seed) : rng });
     if (practice) play = practicePlay(play);            // 연습장: 수비수·주자 없이 공만
