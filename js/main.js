@@ -8,6 +8,9 @@ import { PRACTICE, applyPractice } from './core/practice.js';
 import { showMenu } from './ui/menu.js';
 import { showLineup } from './ui/lineup.js';
 import { showHub, showResult, showPracticeResult } from './ui/hub.js';
+import { showTitle } from './ui/title.js';
+import { standings } from './core/season.js';
+import { loadRaise } from './core/raise.js';
 import './ui/art/sprites.js';   // 경기 그림을 홈 화면에서 미리 불러 둔다
 import './ui/art/stadium.js';
 
@@ -52,11 +55,25 @@ function hub() {
       lineup: () => showLineup(app, userTeamNow(career), storage, lineup, l => { lineup = l; hub(); }),
       exhibition: () => exhibitionMenu(),
       practice: (kind, playerId, stat) => playPractice(kind, playerId, stat),
-      versus: () => versusMenu(),
-      raise: () => raiseMenu(),
+      home: () => title(),
       reset: () => { career = newCareer(); hubCtx.tab = 'home'; persist(); hub(); },
     },
   }));
+}
+
+// 메인 화면: 시즌모드 · 육성모드 · 대결모드
+function title() {
+  const s = career.season;
+  let season = career.history.length ? `지금까지 ${career.history.length}시즌` : null;
+  if (s) {
+    const me = standings(s).find(x => x.id === USER_TEAM_ID);
+    season = `${s.year} 시즌 ${s.phase === 'regular' ? '정규시즌' : s.phase === 'post' ? '포스트시즌' : '종료'} · ${me.w}승 ${me.l}패 · ${me.rank}위`;
+  }
+  const n = loadRaise(storage).slots.filter(Boolean).length;
+  showTitle(app, {
+    info: { season, raise: n ? `키우는 선수 ${n}명` : null },
+    on: { season: () => { hubCtx.tab = 'home'; hub(); scrollTop(); }, raise: () => raiseMenu(), versus: () => versusMenu() },
+  });
 }
 
 function mergeUps(ups) {
@@ -124,19 +141,20 @@ function exhibitionMenu() {
 
 async function versusMenu() {
   const { showVersus } = await import('./ui/versus.js');
-  showVersus(app, { storage, loadGame, onBack: hub });
+  showVersus(app, { storage, loadGame, onBack: title });
 }
 
 // 육성모드: 시즌모드와 따로 저장(baseball.raise.v1)
 async function raiseMenu() {
   const { showRaise } = await import('./ui/raise.js');
-  showRaise(app, { storage, loadGame, onBack: () => { hubCtx.tab = 'home'; hub(); scrollTop(); } });
+  showRaise(app, { storage, loadGame, onBack: title });
 }
 
-// 개발용 주소: #game[-팀] 1이닝 친선 경기, #lineup 타순 화면, #vs 1:1 대결, #raise 육성모드
+// 개발용 주소: #game[-팀] 1이닝 친선 경기, #lineup 타순 화면, #vs 1:1 대결, #raise 육성모드, #season 시즌 허브. 그 밖에는 메인 화면
 if (location.hash.startsWith('#game')) {
   loadGame().then(mod => mod && mod.showGame(app, { userTeam: userTeamNow(career), cpuTeam: getTeam(location.hash.split('-')[1] || 'lg'), lineup, innings: 1, stats: career.stats }, hub));
 } else if (location.hash === '#vs') versusMenu();
 else if (location.hash === '#raise') raiseMenu();
+else if (location.hash === '#season') hub();
 else if (location.hash === '#lineup') showLineup(app, userTeamNow(career), storage, lineup, l => { lineup = l; hub(); });
-else hub();
+else title();

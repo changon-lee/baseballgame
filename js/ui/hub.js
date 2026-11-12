@@ -39,7 +39,7 @@ const teamName = id => getTeam(id).short;
 const pct = x => x.toFixed(3).replace(/^0/, '');
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-// ctx: { career, saveOk, tab, setup:{cycles,innings}, pr:{ pitchId, pitchStat, batId, batStat }, on:{ startSeason, play, auto, autoMany, finish, lineup, exhibition, versus, raise, practice, reset } }
+// ctx: { career, saveOk, tab, setup:{cycles,innings}, pr:{ pitchId, pitchStat, batId, batStat }, on:{ startSeason, play, auto, autoMany, finish, lineup, exhibition, home, practice, reset } }
 export function showHub(root, ctx) {
   let tab = ctx.tab || 'home';
   const render = () => {
@@ -48,13 +48,14 @@ export function showHub(root, ctx) {
     <div class="screen hub">
       <header class="top-hero">
         <img class="hero-man" alt="" src="${asset('sprites/batter_idle_front_0.webp')}">
+        <button class="hero-home" data-act="home" aria-label="메인 화면">‹ 메인</button>
         <div class="eyebrow">${s ? `${s.year} SEASON · ${s.phase === 'regular' ? '정규시즌' : s.phase === 'post' ? '포스트시즌' : '시즌 종료'}` : 'KBO LEAGUE · 커리어 모드'}</div>
         <div class="hero-row">
           ${badge(ME, 'xl')}
           <div class="hero-text"><h1>삼성 라이온즈</h1>${recordLine(c)}</div>
         </div>
       </header>
-      <main class="tab-body">${tab === 'home' ? homeTab(c) + raiseCard() : tab === 'table' ? tableTab(c) : tab === 'players' ? playersTab(c) : tab === 'practice' ? practiceTab(c) : recordsTab(c)}</main>
+      <main class="tab-body">${tab === 'home' ? homeTab(c) : tab === 'table' ? tableTab(c) : tab === 'players' ? playersTab(c) : tab === 'practice' ? practiceTab(c) : recordsTab(c)}</main>
       ${ctx.saveOk === false ? '<p class="note center">이 브라우저에서는 저장이 안 돼요. 창을 닫으면 진행이 사라져요.</p>' : ''}
     </div>
     <nav class="tabbar">${[['home', '홈', '🏠'], ['table', '순위', '📊'], ['players', '선수', '🧢'], ['practice', '연습', '🏋️'], ['records', '기록', '🏆']].map(([k, l, i]) =>
@@ -71,13 +72,6 @@ export function showHub(root, ctx) {
     const me = standings(s).find(x => x.id === ME);
     return `<div class="rec"><span><b>${me.w}</b><small>승</small></span><span><b>${me.l}</b><small>패</small></span>${me.d ? `<span><b>${me.d}</b><small>무</small></span>` : ''}<span class="rk"><b>${me.rank}</b><small>위</small></span></div>${me.gb ? `<p class="gb">1위와 ${me.gb} 게임차</p>` : ''}`;
   }
-
-  // 육성모드 들어가기(시즌 진행과 상관없이 늘 홈 탭 아래에)
-  const raiseCard = () => `<section class="card slim">
-      <div class="card-h">🌱 육성모드</div>
-      <p class="hint">삼성 선수 한 명을 골라 훈련·휴식·경기로 끝없이 키워요. 시즌모드 기록과는 따로 저장돼요</p>
-      <div class="actions"><button class="ghost" data-act="raise">🌱 육성모드</button></div>
-    </section>`;
 
   // ── 홈 탭 ──
   function homeTab(c) {
@@ -136,9 +130,9 @@ export function showHub(root, ctx) {
       <div class="actions"><button class="primary big" data-act="start">🚀 시즌 시작</button></div>
     </section>
     <section class="card slim">
-      <div class="card-h">🤝 친선 경기 · 1:1 대결</div>
-      <p class="hint">기록에 남지 않는 한 경기. 1:1 대결은 같은 와이파이의 폰 두 대로 겨뤄요</p>
-      <div class="actions"><button class="ghost" data-act="exhibition">🤝 친선 경기</button><button class="ghost" data-act="versus">📱 1:1 대결</button></div>
+      <div class="card-h">🤝 친선 경기</div>
+      <p class="hint">기록에 남지 않는 한 경기</p>
+      <div class="actions"><button class="ghost" data-act="exhibition">🤝 친선 경기</button></div>
       <div class="actions" style="margin-top:8px"><button class="ghost" data-act="lineup">📋 타순 편집</button></div>
     </section>`;
   }
@@ -301,8 +295,7 @@ export function showHub(root, ctx) {
     act('finish', () => on.finish());
     act('lineup', () => on.lineup());
     act('exhibition', () => on.exhibition());
-    act('versus', () => on.versus());
-    act('raise', () => on.raise());
+    act('home', () => on.home());
     act('pitchprac', () => on.practice('pitch', ctx.pr.pitchId, ctx.pr.pitchStat));
     act('batprac', () => on.practice('bat', ctx.pr.batId, ctx.pr.batStat));
     act('reset', () => { if (confirm('지금까지의 시즌·성장·기록이 모두 지워져요. 처음부터 할까요?')) on.reset(); });
