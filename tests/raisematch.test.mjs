@@ -126,6 +126,19 @@ test('decisions: win, loss, save', () => {
   assert.deepEqual(decisions(win, CL, 'CL', 'home'), { w: 0, l: 0, sv: 0 });
 });
 
+test('decisions: the loss goes to whoever gave up the lead for good, the win to the pitcher of record', () => {
+  // 1점 뒤진 채 나와 무실점, 팀은 짐 → 패 아님(브라우저에서 잡힌 버그)
+  const held = [e('samsung-p01', 'top', 1, 0, 1), e('samsung-p06', 'top', 8, 6, 7), e(CL, 'top', 9, 6, 7), e(CL, 'top', 9, 6, 7)];
+  assert.deepEqual(decisions(held, CL, 'CL', 'away'), { w: 0, l: 0, sv: 0 });
+  assert.deepEqual(decisions(held, 'samsung-p01', 'SP', 'away'), { w: 0, l: 1, sv: 0 });
+  // 동점에 나와 역전을 허용하고 그대로 짐 → 패
+  const blew = [e('samsung-p01', 'top', 8, 3, 3), e(CL, 'top', 9, 3, 4), e(CL, 'top', 9, 3, 4), e('x', 'bottom', 9, 3, 4)];
+  assert.deepEqual(decisions(blew, CL, 'CL', 'away'), { w: 0, l: 1, sv: 0 });
+  // 동점 9회초를 막고 9회말 끝내기 → 마무리 승
+  const walkoff = [e('samsung-p01', 'top', 8, 3, 3), e(CL, 'top', 9, 3, 3), { ...e('kt-p05', 'bottom', 9, 4, 3), pitcherId: 'kt-p05' }];
+  assert.deepEqual(decisions(walkoff, CL, 'CL', 'home'), { w: 1, l: 0, sv: 0 });
+});
+
 test('gameLine picks my own line only', () => {
   const log = [
     { batterId: B, pitcherId: 'kt-p01', event: 'HR', runs: 1 }, { batterId: B, pitcherId: 'kt-p01', event: 'STRIKEOUT', runs: 0 },

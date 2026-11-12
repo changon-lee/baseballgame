@@ -89,14 +89,22 @@ function closerStep(m0, { playerId: id }, rng) {
 const diff = e => e.score.home - e.score.away;
 
 // 승·패·세이브 (삼성 홈 기준). result: 'home' | 'away' | 'draw'
+// 결승점(이긴 팀이 마지막으로 앞서기 시작한 타석)을 기준으로: 패 = 그 점수를 내준 투수, 승 = 그때 삼성 마운드에 있던 투수(선발은 5이닝 이상)
+const lastGoAhead = (log, sign) => {
+  let k = -1;
+  log.forEach((e, i) => { if (Math.sign(diff(e)) === sign && (i ? Math.sign(diff(log[i - 1])) : 0) !== sign) k = i; });
+  return k;
+};
+const homePitcherAt = (log, k) => { for (let i = k; i >= 0; i--) if (log[i].half === 'top') return log[i].pitcherId; return null; };
+
 export function decisions(log, id, role, result) {
   const idx = log.map((e, i) => (e.pitcherId === id ? i : -1)).filter(i => i >= 0);
-  const none = { w: 0, l: 0, sv: 0 };
-  if (!idx.length) return none;
+  if (!idx.length) return { w: 0, l: 0, sv: 0 };
   const first = idx[0], last = idx[idx.length - 1], after = log.slice(last + 1);
-  const lead = diff(log[last]), outs = idx.reduce((a, i) => a + (log[i].outs || 0), 0);
-  const w = role === 'SP' && outs >= 15 && result === 'home' && lead > 0 && after.every(e => diff(e) > 0) ? 1 : 0;
-  const l = result === 'away' && lead < 0 && after.every(e => diff(e) < 0) ? 1 : 0;
+  const outs = idx.reduce((a, i) => a + (log[i].outs || 0), 0);
+  const gw = result === 'home' ? lastGoAhead(log, 1) : -1, gl = result === 'away' ? lastGoAhead(log, -1) : -1;
+  const w = gw >= 0 && homePitcherAt(log, gw) === id && (role !== 'SP' || outs >= 15) ? 1 : 0;
+  const l = gl >= 0 && log[gl].pitcherId === id ? 1 : 0;
   const before = first > 0 ? diff(log[first - 1]) : 0;
   const sv = role === 'CL' && !w && result === 'home' && before >= 1 && before <= CLOSE_GAP
     && idx.every(i => diff(log[i]) > 0) && !after.some(e => e.half === 'top') ? 1 : 0;
