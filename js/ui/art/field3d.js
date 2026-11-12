@@ -512,7 +512,8 @@ export function drawPlay3D(ctx, W, H, sc, ms, uni, opts = {}) {
   };
   const ballNow = ballAt(sc, t).p;
   // kind: 'f' 수비수, 'r' 주자, 'u' 심판
-  const add = (k, u, kind, name) => {
+  const views = sc._views || (sc._views = new Map());     // 선수마다 지난 그림 방향(앞·옆·뒤)
+  const add = (k, u, kind, name, id = kind + name) => {
     const p = project(K, [k.x, k.y, k.act === 'jump' ? jumpZ(k.since) : 0]);
     if (!p) return;
     const q = project(K, [k.x + k.vx * 0.1, k.y + k.vy * 0.1, 0]);
@@ -525,13 +526,19 @@ export function drawPlay3D(ctx, W, H, sc, ms, uni, opts = {}) {
     const ex = k.x - K.C[0], ey = k.y - K.C[1], el = Math.hypot(ex, ey) || 1;
     let view = 'side';
     if (speed >= 0.5) {
-      const c = (k.vx * ex + k.vy * ey) / (speed * el);
-      view = c > 0.62 ? 'back' : c < -0.62 ? 'front' : 'side';
+      // c: 1 = 카메라에서 멀어지는 쪽, -1 = 카메라 쪽으로. 대각선(1루→2루처럼 비스듬히 멀어짐)은 옆모습보다 뒷모습이 자연스럽다
+      // → 옆모습은 거의 가로로 달릴 때만. 경계에서 그림이 왔다 갔다 하지 않게, 지금 모습을 바꿀 때는 경계를 조금 더 넘어야 한다
+      const c = (k.vx * ex + k.vy * ey) / (speed * el), prev = views.get(id);
+      const IN = 0.34, OUT = 0.2;
+      view = prev === 'back' ? (c > OUT ? 'back' : c < -IN ? 'front' : 'side')
+        : prev === 'front' ? (c < -OUT ? 'front' : c > IN ? 'back' : 'side')
+        : c > IN ? 'back' : c < -IN ? 'front' : 'side';
     } else if (kind === 'f' && (act === 'watch' || act === 'stand' || act === 'catch' || act === 'camp' || act === 'ready' || act === 'cover')) {
       // 서서 공을 볼 때: 공이 자기보다 한참 뒤(카메라 반대쪽)에 떠 있으면 등을 보인다
       const bp = ballNow, c = ((bp[0] - k.x) * ex + (bp[1] - k.y) * ey) / el;
       if (c > 25 && bp[2] > 3) view = 'back';
     }
+    if (speed >= 0.5) views.set(id, view); else views.delete(id);
     if (name === 'C' && speed < 0.5) view = 'back';     // 포수는 카메라를 등지고 있다
     ents.push({ d: p.d, x: p.x, y: p.y, s: p.s, wx: k.x, wy: k.y, draw: () => {
       const ph = t * speed / 2.6;
@@ -540,7 +547,7 @@ export function drawPlay3D(ctx, W, H, sc, ms, uni, opts = {}) {
     } });
   };
   for (const n of Object.keys(sc.fielders)) add(trackAt(sc.fielders[n], t), uni.field, 'f', n);
-  for (const r of sc.runners) add(trackAt(r.keys, t), uni.bat, 'r');
+  sc.runners.forEach((r, i) => add(trackAt(r.keys, t), uni.bat, 'r', i));
   if (!P) add({ x: 0, y: -8, act: 'stand', vx: 0, vy: 0, since: 0 }, { pants: '#3b3f48', sock: '#2a2d34', sleeve: '#1d2a44', jersey: '#1d2a44', belt: '#111', cap: '#151a24' }, 'u');
   for (const e of ents) shadow(ctx, K, e.wx, e.wy, 1.3, 0.28);
 
