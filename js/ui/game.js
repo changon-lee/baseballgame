@@ -11,7 +11,8 @@ import { decoratePractice, practiceArtSettled } from './art/practice.js';
 import { batReach, graceMs } from '../core/batting.js';
 import { BUNT } from '../core/bunt.js';
 import { stealRunners } from '../core/rules.js';
-import { heatBoost, hitsToday, isHot, rally, RALLY_MAX } from '../core/heat.js';
+import { hitsToday, isHot, rally, RALLY_MAX } from '../core/heat.js';
+import { boostFor } from '../core/perks.js';
 import { lineScore, todayText, gameMvp } from '../core/boxscore.js';
 import { fieldChance, judgeTap, fieldWin, CPU_DIVE } from '../core/fielding.js';
 import { playerLine, avg } from '../core/growth.js';
@@ -326,7 +327,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     placeSidePick();
   }
   const battingHint = () => {
-    const bo = heatOn && !practice ? heatBoost(match, matchup(match).batter.id, mySide, mySide) : null;
+    const bo0 = heatOn && !practice ? boostFor(match, matchup(match).batter.id, mySide, mySide) : null;
+    const bo = bo0 && (bo0.hot || bo0.rally) ? bo0 : null;     // 육성 효과만 있으면 불방망이 글자는 안 띄운다
     const boost = bo ? `<b class="o">${bo.rally ? '📣 응원 폭발' : '🔥 불방망이'}</b> · ` : '';
     const sign = [tactic.bunt && '<b class="y">번트</b>', tactic.steal && '<b class="g">도루</b>'].filter(Boolean).join(' · ');
     if (tactic.bunt) return `<p>${boost}${sign} · 배트(노란 원)를 공 길에 대고 <b>손을 떼면 번트</b></p>`;
@@ -1186,13 +1188,14 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   function drawBat(now, batter) {
     const flash = batFlash && now - batFlash.at < 450 ? batFlash : null;
     if (auto || (!flash && mode !== 'bwait' && mode !== 'bflight')) return;
-    const bo = heatOn && !tactic.bunt ? heatBoost(match, batter.id, mySide, mySide) : null;   // 불방망이·응원 폭발
+    const bo = heatOn && !tactic.bunt ? boostFor(match, batter.id, mySide, mySide) : null;   // 불방망이·응원 폭발·육성 효과
     const reach = batReach(batter.contact, lvl()), bk = tactic.bunt ? BUNT.reach : bo ? bo.reach : 1;
+    const fire = bo && (bo.hot || bo.rally);     // 육성 효과만 있으면 배트 크기만 바뀌고 불방망이 표시는 없다
     const rx = reach.rx * bk, ry = reach.ry * bk;
     const at = flash || batAim;
     const [cx, cy] = toS(V, at.x, at.y), RX = rx * V.zw / 2, RY = ry * V.zh / 2;
     const sweet = !flash && timingOn(now);
-    const col = flash ? (flash.hit ? '46,204,113' : '255,107,94') : sweet ? '61,220,132' : bo ? '255,146,43' : '255,214,64';
+    const col = flash ? (flash.hit ? '46,204,113' : '255,107,94') : sweet ? '61,220,132' : fire ? '255,146,43' : '255,214,64';
     const a = flash ? 1 - (now - flash.at) / 450 : batDrag ? 1 : 0.8;
     ctx.save(); ctx.globalAlpha = sweet ? 1 : a;
     ctx.fillStyle = `rgba(${col},${sweet ? .28 : .12})`; ctx.strokeStyle = `rgba(${col},.95)`; ctx.lineWidth = sweet ? 3.2 : 2.2;
@@ -1202,7 +1205,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     ctx.beginPath(); ctx.ellipse(cx, cy, RX * 0.4, RY * 0.4, 0, 0, Math.PI * 2); ctx.stroke();
     ctx.strokeStyle = `rgba(${col},.95)`; ctx.lineCap = 'round';                    // 배트(가로 막대)
     ctx.lineWidth = Math.max(4, RY * 0.16); ctx.beginPath(); ctx.moveTo(cx - RX * 0.62, cy); ctx.lineTo(cx + RX * 0.62, cy); ctx.stroke();
-    if ((tactic.bunt || bo) && !flash) {                                          // 번트 자세·불방망이 표시
+    if ((tactic.bunt || fire) && !flash) {                                          // 번트 자세·불방망이 표시
       ctx.shadowBlur = 0; ctx.fillStyle = `rgba(${col},1)`; ctx.font = '800 13px system-ui,sans-serif'; ctx.textAlign = 'center';
       ctx.fillText(tactic.bunt ? '번트' : bo.rally ? '📣 응원 폭발' : '🔥 불방망이', cx, cy - RY - 6);
     }

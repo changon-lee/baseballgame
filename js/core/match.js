@@ -7,7 +7,7 @@ import { battedBallInfo } from './outcome.js';
 import { buntResult, stealChance } from './bunt.js';
 import { cpuChoosePitch, cpuSwing } from './ai.js';
 import { defaultLineup, availableRelievers } from './team.js';
-import { heatBoost } from './heat.js';
+import { boostFor, perkPitcher } from './perks.js';
 
 const other = s => (s === 'home' ? 'away' : 'home');
 const pitcherOf = (m, side) => m.teams[side].pitchers.find(p => p.id === m.pitcher[side]);
@@ -15,7 +15,8 @@ const batterOf = (m, side) => m.teams[side].batters.find(b => b.id === m.lineups
 
 // cpuLineup: 원정팀 타순(1:1 대결에서 상대가 정한 것). 없으면 기본 타순
 // heat: 불방망이·응원 열기를 켠다(내가 하는 일반 경기). 1:1 대결·연습·다른 팀 경기 계산에는 없다
-export function createMatch({ userTeam, cpuTeam, userLineup, innings, rng, cpuStarterId, cpuLineup = null, heat = false }) {
+// perks: 육성모드 내 선수의 컨디션·특성 { id, cond, traits } (perks.js). 다른 모드엔 없다
+export function createMatch({ userTeam, cpuTeam, userLineup, innings, rng, cpuStarterId, cpuLineup = null, heat = false, perks = null }) {
   const sps = cpuTeam.pitchers.filter(p => p.role === 'SP');
   const cpuStarter = sps.find(p => p.id === cpuStarterId) || sps[Math.floor(rng() * sps.length)];
   const lineups = { home: userLineup, away: { ...(cpuLineup || defaultLineup(cpuTeam)), starterId: cpuStarter.id } };
@@ -29,12 +30,13 @@ export function createMatch({ userTeam, cpuTeam, userLineup, innings, rng, cpuSt
     log: [],                      // 끝난 타석: { batterId, pitcherId, event, runs, outs, inning, half, score, bases, pitches }
     pa: [],                       // 지금 타석에 던진 공: { k: 구종, v: 구속, e: 결과 }
     ...(heat ? { heat: true } : {}),
+    ...(perks ? { perks } : {}),
   };
 }
 
 export function matchup(m) {
   const bs = battingSide(m.game), ps = other(bs);
-  const pitcher = pitcherOf(m, ps);
+  const pitcher = perkPitcher(m, pitcherOf(m, ps));
   return {
     batter: batterOf(m, bs), pitcher, battingSide: bs, pitchingSide: ps,
     userRole: bs === 'away' ? 'pitch' : 'bat',
@@ -79,7 +81,7 @@ function decide(m, batter, pitch, timingDiffMs, rng, bat = null, bunt = false) {
     return { event: 'BALL', contact: null, fly: false, swung: false };
   }
   if (bunt) return { ...buntResult({ timingDiffMs, batter, pitch, bat, bases: m.game.bases, rng }), swung: true };
-  const contact = swingResult({ timingDiffMs, batter, pitch, rng, bat, boost: heatBoost(m, batter.id, battingSide(m.game)) });
+  const contact = swingResult({ timingDiffMs, batter, pitch, rng, bat, boost: boostFor(m, batter.id, battingSide(m.game)) });
   if (contact.kind === 'MISS') return { event: 'STRIKE', contact, fly: false, swung: true };
   if (contact.kind === 'FOUL') return { event: 'FOUL', contact, fly: false, swung: true };
   const g = m.game;
