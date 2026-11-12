@@ -11,6 +11,7 @@ import { decoratePractice, practiceArtSettled } from './art/practice.js';
 import { batReach, graceMs } from '../core/batting.js';
 import { BUNT } from '../core/bunt.js';
 import { stealRunners } from '../core/rules.js';
+import { heatBoost, hitsToday, isHot, rally, RALLY_MAX } from '../core/heat.js';
 import { loadPrefs, savePrefs, LEVELS, LEVEL_NAME } from './prefs.js';
 import { volRow, bindVol } from './volume.js';
 import { startLoop } from './loop.js';
@@ -31,6 +32,7 @@ const LABEL = {
 };
 // 같은 결과의 다른 장면
 const STYLE_LABEL = { bunt: '번트 아웃', dive: '다이빙 캐치!', wall: '펜스 앞 점프 캐치!', liner: '직선타 아웃', home_safe: '안타! 홈 세이프', bloop: '텍사스 안타!', pop: '내야 뜬공 아웃', foul: '파울플라이 아웃' };
+const HIT_PA = ['SINGLE', 'DOUBLE', 'TRIPLE', 'HR'];   // 기록에 남는 안타(번트 안타·내야안타도 SINGLE)
 const HITS = ['SINGLE', 'DOUBLE', 'TRIPLE', 'HR', 'INFIELD_SINGLE', 'SINGLE_HOME_OUT', 'ERROR', 'BUNT_SINGLE'];   // 타자에게 좋은 결과
 const FREE = ['BALL', 'HBP', 'WILD'];   // 타자에게 좋은 '안 친' 결과
 const OUTS = ['OUT', 'SAC_FLY', 'DOUBLE_PLAY', 'LINE_DP', 'SAC_BUNT', 'BUNT_FC'];
@@ -77,7 +79,10 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     : timeOfDay(inning, innings);
   setTimeOfDay(todAt(1));
   if (!practice) preloadEvening();
-  let match = createMatch({ userTeam, cpuTeam, userLineup: lineup, innings, rng, cpuStarterId, cpuLineup });
+  // 불방망이·응원 열기: 내가 하는 일반 경기에서만(연습·1:1 대결은 없다)
+  const heatOn = !practice && !net;
+  let rallyShown = -1;           // 응원 폭발을 알린 때의 기록 길이(같은 폭발을 두 번 알리지 않는다)
+  let match = createMatch({ userTeam, cpuTeam, userLineup: lineup, innings, rng, cpuStarterId, cpuLineup, heat: heatOn });
   if (practice) {                                    // 타격 연습은 내가 말 공격으로 시작한다
     practice = { ...practice, n: 0, pts: 0 };
     if (practice.kind === 'bat') match = { ...match, game: { ...match.game, half: 'bottom' } };
@@ -156,7 +161,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     const dots = (cls, n, max) => Array.from({ length: max }, (_, i) => `<i class="${cls}${i < n ? ' on' : ''}"></i>`).join('');
     $('.bso').innerHTML = `<div><em>B</em>${dots('b', g.balls, 3)}</div><div><em>S</em>${dots('s', g.strikes, 2)}</div><div><em>O</em>${dots('o', g.outs, 2)}</div>`;
     $('.mu').innerHTML = practice ? `<b>${mu.pitcher.name}</b> <span class="vs">vs</span> <b>${mu.batter.name}</b> <small>· 연습 ${practice.n}/${practice.goal}구</small>`
-      : `<b>${mu.pitcher.name}</b> <small>${match.pitchCount[mu.pitchingSide]}구</small> <span class="vs">vs</span> <small>${g.battingIndex[mu.battingSide] + 1}번</small> <b>${mu.batter.name}</b>`;
+      : `<b>${mu.pitcher.name}</b> <small>${match.pitchCount[mu.pitchingSide]}구</small> <span class="vs">vs</span> <small>${g.battingIndex[mu.battingSide] + 1}번</small> <b>${mu.batter.name}</b>${heatOn && isHot(match.log, mu.batter.id) ? ` <span class="hot">🔥${hitsToday(match.log, mu.batter.id)}안타</span>` : ''}`;
   }
   const setControls = html => { controls.innerHTML = html; if (!['aim', 'pick'].includes(mode)) hideBullpenChip(); };
   function showMsg(text, color, ms, sub, then, hidden = false) {   // hidden: 컷인이 대신 보여 주므로 글자는 숨긴다
@@ -183,7 +188,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       later(autoThrow, 700 + rng() * 500);
     } else if (userPitching()) {
       mode = 'aim'; pitchType = null;
-      setControls('<p>스트라이크존 위를 <b>드래그</b>해서 포수 미트 위치를 정하세요</p>');
+      const b = matchup(match).batter, warn = heatOn && isHot(match.log, b.id) ? `<b class="r">🔥 오늘 ${hitsToday(match.log, b.id)}안타 · 조심!</b> ` : '';
+      setControls(`<p>${warn}스트라이크존 위를 <b>드래그</b>해서 포수 미트 위치를 정하세요</p>`);
       showBullpenChip();
     } else {
       const before = match.pitcher.away;
@@ -191,6 +197,12 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       if (match.pitcher.away !== before) {
         updateBoard(); mode = 'msg';
         return showMsg(`${cpuTeam.short} 투수 교체`, '#9fb3cc', 1300, matchup(match).pitcher.name, nextPlay);
+      }
+      // 응원 폭발: 응원 열기가 꽉 찼다 → 이번 타자 한 타석 동안 배트가 커진다. 타석 전에 한 번 알린다
+      if (heatOn && !auto && rallyShown !== match.log.length && rally(match.log, match.game.inning, match.game.half).full) {
+        rallyShown = match.log.length; mode = 'msg';
+        playSound('roar', { gain: 0.9 }); vibrate([50, 40, 50]);
+        return showMsg('📣 응원 폭발!', '#ff922b', 1500, `${matchup(match).batter.name} · 이번 타석 배트가 커져요`, nextPlay);
       }
       mode = 'bwait';
       // 작전 칩을 누를 틈을 조금 더 준다(연습·자동 진행은 칩이 없다)
@@ -291,9 +303,11 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     placeSidePick();
   }
   const battingHint = () => {
+    const bo = heatOn && !practice ? heatBoost(match, matchup(match).batter.id, mySide, mySide) : null;
+    const boost = bo ? `<b class="o">${bo.rally ? '📣 응원 폭발' : '🔥 불방망이'}</b> · ` : '';
     const sign = [tactic.bunt && '<b class="y">번트</b>', tactic.steal && '<b class="g">도루</b>'].filter(Boolean).join(' · ');
-    if (tactic.bunt) return `<p>${sign} · 배트(노란 원)를 공 길에 대고 <b>손을 떼면 번트</b></p>`;
-    return `<p>${sign ? sign + ' 사인! · ' : ''}화면을 <b>누른 채 움직여</b> 배트(노란 원)를 공 길에 두고, <b>손을 떼면 스윙!</b></p>`;
+    if (tactic.bunt) return `<p>${boost}${sign} · 배트(노란 원)를 공 길에 대고 <b>손을 떼면 번트</b></p>`;
+    return `<p>${boost}${sign ? sign + ' 사인! · ' : ''}화면을 <b>누른 채 움직여</b> 배트(노란 원)를 공 길에 두고, <b>손을 떼면 스윙!</b></p>`;
   };
   // 교체할 투수 고르기: 가운데 창
   function showBullpen() {
@@ -508,6 +522,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
 
   function settle(prev, r, userPitched) {
     hold = matchup(match);
+    const logN = match.log.length;
     match = r.match;
     if (practice) {                                     // 연습: 점수를 쌓고, 아웃·주자·이닝은 매번 되돌린다
       practice.n++; practice.pts += userPitched ? pitchPts(ball.pitch) : swingPts(r.contact);
@@ -527,7 +542,10 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     const good = r.steal && !userPitched ? r.steal.ok
       : userPitched ? (r.event === 'STRIKE' || OUTS.includes(r.event)) : (HITS.includes(r.event) || FREE.includes(r.event) || r.event === 'SAC_BUNT');
     const color = r.event === 'FOUL' ? '#ffffff' : good ? '#2ecc71' : '#e74c3c';
-    const sub = (r.runs && !practice ? `${r.runs}점 득점! · ` : '') + info;
+    // 불방망이: 이번 안타로 그 경기 2안타 이상이 됐다
+    const nh = heatOn && match.log.length > logN && HIT_PA.includes(match.log[match.log.length - 1].event) ? hitsToday(match.log, hold.batter.id) : 0;
+    const fire = nh >= 2 ? (nh === 2 ? ' · 🔥 불방망이!' : ` · 🔥 오늘 ${nh}안타!`) : '';
+    const sub = (r.runs && !practice ? `${r.runs}점 득점! · ` : '') + info + fire;
     const g = match.game;
     const halfOver = !g.over && (g.half !== prev.half || g.inning !== prev.inning);
     updateBoard();
@@ -828,12 +846,30 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     ctx.fillText(`${p.name} 체력${f > 0 ? ' · 지침' : ''}`, 16, 25);
     ctx.fillStyle = '#22344d'; ctx.fillRect(16, 33, 112, 7);
     ctx.fillStyle = f > 0.5 ? '#e74c3c' : f > 0 ? '#f1c40f' : '#2ecc71'; ctx.fillRect(16, 33, 112 * left, 7);
+    if (heatOn && !userPitching() && !match.game.over) drawRally();
     const cx = W - 36, cy = 30, d = 11, bases = match.game.bases;
     ctx.fillStyle = 'rgba(6,14,26,.62)'; ctx.fillRect(cx - 25, cy - 21, 50, 36);
     [[cx + d, cy], [cx, cy - d], [cx - d, cy]].forEach(([x, y], i) => {
       ctx.save(); ctx.translate(x, y); ctx.rotate(Math.PI / 4);
       ctx.fillStyle = bases[i] ? '#f1c40f' : 'rgba(255,255,255,.25)'; ctx.fillRect(-5, -5, 10, 10); ctx.restore();
     });
+  }
+  // 응원 열기 게이지(우리 공격 때 왼쪽 위, 투수 체력 아래). 꽉 차면 주황으로 깜빡인다
+  function drawRally() {
+    const g = match.game, rl = rally(match.log, g.inning, g.half), t = performance.now();
+    const x = 10, y = 52, w = 124, h = 30;
+    ctx.fillStyle = 'rgba(6,14,26,.62)'; ctx.fillRect(x, y, w, h);
+    ctx.font = '700 11.5px system-ui,sans-serif'; ctx.textAlign = 'left';
+    ctx.fillStyle = rl.full ? '#ffb15c' : '#e4ecf6';
+    ctx.fillText(rl.full ? '📣 응원 폭발!' : '📣 응원 열기', x + 6, y + 13);
+    const sw = (w - 12 - (RALLY_MAX - 1) * 3) / RALLY_MAX;
+    for (let i = 0; i < RALLY_MAX; i++) {
+      const on = i < rl.value;
+      ctx.globalAlpha = on && rl.full ? 0.65 + 0.35 * Math.sin(t / 140) : 1;
+      ctx.fillStyle = on ? (rl.full ? '#ff922b' : '#ffc078') : '#22344d';
+      ctx.fillRect(x + 6 + i * (sw + 3), y + 19, sw, 6);
+    }
+    ctx.globalAlpha = 1;
   }
   function drawMsg() {
     if (!msg || msg.hidden) return;
@@ -975,12 +1011,13 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   function drawBat(now, batter) {
     const flash = batFlash && now - batFlash.at < 450 ? batFlash : null;
     if (auto || (!flash && mode !== 'bwait' && mode !== 'bflight')) return;
-    const reach = batReach(batter.contact, lvl()), bk = tactic.bunt ? BUNT.reach : 1;
+    const bo = heatOn && !tactic.bunt ? heatBoost(match, batter.id, mySide, mySide) : null;   // 불방망이·응원 폭발
+    const reach = batReach(batter.contact, lvl()), bk = tactic.bunt ? BUNT.reach : bo ? bo.reach : 1;
     const rx = reach.rx * bk, ry = reach.ry * bk;
     const at = flash || batAim;
     const [cx, cy] = toS(V, at.x, at.y), RX = rx * V.zw / 2, RY = ry * V.zh / 2;
     const sweet = !flash && timingOn(now);
-    const col = flash ? (flash.hit ? '46,204,113' : '255,107,94') : sweet ? '61,220,132' : '255,214,64';
+    const col = flash ? (flash.hit ? '46,204,113' : '255,107,94') : sweet ? '61,220,132' : bo ? '255,146,43' : '255,214,64';
     const a = flash ? 1 - (now - flash.at) / 450 : batDrag ? 1 : 0.8;
     ctx.save(); ctx.globalAlpha = sweet ? 1 : a;
     ctx.fillStyle = `rgba(${col},${sweet ? .28 : .12})`; ctx.strokeStyle = `rgba(${col},.95)`; ctx.lineWidth = sweet ? 3.2 : 2.2;
@@ -990,9 +1027,9 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     ctx.beginPath(); ctx.ellipse(cx, cy, RX * 0.4, RY * 0.4, 0, 0, Math.PI * 2); ctx.stroke();
     ctx.strokeStyle = `rgba(${col},.95)`; ctx.lineCap = 'round';                    // 배트(가로 막대)
     ctx.lineWidth = Math.max(4, RY * 0.16); ctx.beginPath(); ctx.moveTo(cx - RX * 0.62, cy); ctx.lineTo(cx + RX * 0.62, cy); ctx.stroke();
-    if (tactic.bunt && !flash) {                                                  // 번트 자세 표시
+    if ((tactic.bunt || bo) && !flash) {                                          // 번트 자세·불방망이 표시
       ctx.shadowBlur = 0; ctx.fillStyle = `rgba(${col},1)`; ctx.font = '800 13px system-ui,sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText('번트', cx, cy - RY - 6);
+      ctx.fillText(tactic.bunt ? '번트' : bo.rally ? '📣 응원 폭발' : '🔥 불방망이', cx, cy - RY - 6);
     }
     ctx.restore();
   }
@@ -1007,6 +1044,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     }
   }
 
+  window.__match = f => { if (f) { match = f(match); updateBoard(); } return match; };   // 확인용
   window.__game = () => ({ mode, dragging, V: !!V, W, H, target, ball: !!ball, ballStart: ball ? ball.start : null, arrival: ball ? ball.arrival : null, swung: !!(ball && ball.swung), pitchAt, play: play && play.start ? { ms: Math.round(performance.now() - play.start), event: play.event } : null });
   const loop = startLoop(frame);
   resize();

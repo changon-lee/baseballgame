@@ -23,24 +23,26 @@ export function batReach(contact, level = 'easy') {
   return { rx: (0.42 + contact * 0.003) * k + BALL_R, ry: (0.28 + contact * 0.002) * k + BALL_R };
 }
 // 배트를 댄 곳과 공의 거리: 0 = 배트 가운데, 1 = 타원 끝(넘으면 헛스윙). lift = 공이 배트보다 위(+, 뜬공 쪽)/아래(-, 땅볼 쪽)
-export function batOffset(bat, plate, contact) {
-  const { rx, ry } = batReach(contact, bat.level);
+// k: 배트 크기 배수(불방망이·응원 폭발)
+export function batOffset(bat, plate, contact, k = 1) {
+  const r = batReach(contact, bat.level), rx = r.rx * k, ry = r.ry * k;
   const dx = (plate.x - bat.x) / rx, dy = (plate.y - bat.y) / ry;
   return { e: Math.hypot(dx, dy), lift: clamp(dy, -1, 1) };
 }
 
-export function swingResult({ timingDiffMs, batter, pitch, rng, bat = null }) {
+// boost(불방망이·응원 폭발): { reach: 배트 크기 배수, quality: 타구질 더하기 } 또는 null
+export function swingResult({ timingDiffMs, batter, pitch, rng, bat = null, boost = null }) {
   const B = CONFIG.BALANCE;
   const easy = !!bat && bat.level === 'easy';               // 게임·서버는 늘 난이도를 넣는다
   const w = timingWindowMs(batter.contact) * (easy ? EASY.window : 1);
   const m = Math.max(Math.abs(pitch.plate.x), Math.abs(pitch.plate.y));
   const d = Math.abs(timingDiffMs);
-  const off = bat ? batOffset(bat, pitch.plate, batter.contact) : { e: 0, lift: 0 };
+  const off = bat ? batOffset(bat, pitch.plate, batter.contact, boost ? boost.reach : 1) : { e: 0, lift: 0 };
   if (off.e > 1) return { kind: 'MISS', quality: 0, pull: 0, aimMiss: true, lift: off.lift };   // 배트가 공 길에 없었다
   if (d > w * 5 || m > 1.6) return { kind: 'MISS', quality: 0, pull: 0 };
   const dq = bat ? Math.max(0, d - graceMs(bat.level)) : d;
   const pen = easy ? EASY.penalty : 1;
-  const quality = Math.min(1, 1 - dq / (w * 5) + (easy ? EASY.bonus : 0)
+  const quality = Math.min(1, 1 - dq / (w * 5) + (easy ? EASY.bonus : 0) + (boost ? boost.quality : 0)
     - (Math.max(0, m - 0.6) * B.EDGE_PENALTY
     + (Math.abs(pitch.breakX) + Math.abs(pitch.breakY)) * B.BREAK_PENALTY
     + off.e * off.e * B.AIM_PENALTY) * pen);
