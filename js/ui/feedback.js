@@ -29,9 +29,13 @@ function decode(n) {
   try { const p = AC.decodeAudioData(ab, done, () => {}); if (p && p.catch) p.catch(() => {}); } catch (e) { /* 무시 */ }
 }
 
-// 아이폰은 사용자의 첫 터치 안에서 오디오를 깨워야 소리가 난다
+// 아이폰은 사용자의 첫 터치 안에서 오디오를 깨워야 소리가 난다.
+// 사파리는 '손을 뗄 때(touchend·pointerup)'와 클릭만 사용자 동작으로 쳐 준다. 손가락이 닿는 순간(pointerdown)에 깨우면
+// AudioContext 가 잠긴 채(suspended) 남아 아무 소리도 안 난다 → 문서 전체에서 손을 뗄 때마다 깨어 있는지 확인한다
 export function unlockAudio() {
   try {
+    // 아이폰 무음(벨소리) 스위치를 켜 둬도 게임 소리는 나게: 음악 앱처럼 '재생' 세션(사파리 16.4+)
+    try { if (navigator.audioSession && navigator.audioSession.type !== 'playback') navigator.audioSession.type = 'playback'; } catch (e) { /* 무시 */ }
     if (!AC) {
       AC = new (window.AudioContext || window.webkitAudioContext)();
       const lim = AC.createDynamicsCompressor();             // 여러 소리가 겹쳐도 찢어지지 않게
@@ -43,9 +47,18 @@ export function unlockAudio() {
       preloadAudio();
       for (const n of FILES) decode(n);
     }
-    if (AC.state === 'suspended' && !document.hidden) AC.resume();
+    // 'interrupted'(사파리: 전화·다른 앱 소리 뒤)도 다시 깨운다
+    if (AC.state !== 'running' && !document.hidden) {
+      const p = AC.resume(); if (p && p.catch) p.catch(() => {});
+      // 옛 iOS 는 사용자 동작 안에서 소리를 한 번 내야 풀린다: 아주 짧은 빈 소리
+      const s = AC.createBufferSource(); s.buffer = AC.createBuffer(1, 1, 22050); s.connect(AC.destination); s.start(0);
+    }
     syncAmb();
-  } catch (e) { AC = null; }
+  } catch (e) { if (!SFX) AC = null; }   // 만들다 실패하면 다음 터치에서 다시
+}
+const wake = () => { if (!AC || AC.state !== 'running') unlockAudio(); };
+if (typeof document !== 'undefined') {
+  for (const t of ['touchend', 'pointerup', 'click', 'keydown']) document.addEventListener(t, wake, { capture: true, passive: true });
 }
 
 // 다른 앱·탭으로 가면 관중 소리도 멈춘다
