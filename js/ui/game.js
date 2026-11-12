@@ -543,7 +543,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     info = (r.contact.aimMiss ? '배트가 공 길에서 벗어났어요' : r.contact.bunt && k !== 'MISS' ? '번트' : `${diff < 0 ? '빠름' : '늦음'} ${Math.abs(Math.round(diff))}ms`);
     if (k === 'MISS') { playSound('whiff'); ball.result = r; return; }   // 공은 미트까지 날아간 뒤 판정
     const q = r.contact.quality;
-    if (r.event === 'HR') playSound('homerun', { crowd: true });   // 맞는 순간 관중이 일어난다(받은 녹음 전체)
+    if (r.event === 'HR') playSound('homerun', { crowd: !practice });   // 맞는 순간 관중이 일어난다(받은 녹음 전체)
     else playSound(k === 'FOUL' ? 'foul' : 'hit', { q });
     vibrate(k === 'INPLAY' && q > 0.8 ? 70 : 35);
     shake(cv, r.contact.bunt ? 2 : k === 'INPLAY' ? 4 + q * 8 : 3);
@@ -693,7 +693,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     }
     const cg = r.aim ? controlGrade(ball.pitch, r.aim) : null;   // 투구 연습: 제구 평가만
     if (cg) label = cg.label;
-    else crowd(prev, r, userPitched);
+    else if (!practice) crowd(prev, r, userPitched);
     const good = r.steal && !userPitched ? r.steal.ok
       : userPitched ? (r.event === 'STRIKE' || OUTS.includes(r.event) || r.event === 'SINGLE_HOME_OUT') : (HITS.includes(r.event) || FREE.includes(r.event) || r.event === 'SAC_BUNT');
     const color = cg ? ['#e74c3c', '#ffd43b', '#2ecc71', '#2ecc71'][cg.q] : r.event === 'FOUL' ? '#ffffff' : good ? '#2ecc71' : '#e74c3c';
@@ -1100,7 +1100,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
 
   function frame(dt, now) {
     if (!W || !V) resize();
-    setAmbience(true);
+    setAmbience(!practice);                             // 연습장에는 관중이 없다: 웅성거림·환호·야유 없이
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     if (practice && !practiceArtSettled()) {            // 연습장 그림을 불러오는 중: 경기장이 잠깐 비치지 않게 어둡게만
       if (pitchAt) pitchAt = Math.max(pitchAt, now + CONFIG.WIND_CPU_MS + 500);
