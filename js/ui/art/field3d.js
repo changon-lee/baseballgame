@@ -1,6 +1,11 @@
 // 3D 타구 화면: playscript 대본을 중계 카메라처럼 그린다.
 // 경기장·공·선수를 3D 좌표(피트)로 두고, 홈 뒤 높은 곳의 카메라가 공과 수비수를 따라 돌고 당겨서(줌) 비춘다.
-import { toSec, trackAt, ballAt, fenceAt, BASES, polar, FENCE_H, jumpZ } from './playscript.js';
+import { toSec, trackAt, ballAt, fenceAt, BASES, polar, FENCE_H, jumpZ, DIVE_AIR } from './playscript.js';
+// 다이빙: 떠 있는 높이(피트)와 몸 기울기(도, 머리 쪽이 들림) — 뛰어오를 때 비스듬히, 떨어질 때 납작하게
+const diveU = since => Math.min(1, Math.max(0, since / DIVE_AIR));
+const diveZ = since => 2.4 * Math.sin(Math.PI * diveU(since));
+const diveRot = since => 24 * (1 - diveU(since)) ** 1.5;   // 그림 자체가 15도쯤 들려 있다
+const LAUNCH = 0.07;                                   // 처음 잠깐은 땅을 박차는 그림(앞으로 내딛는 자세)
 import { standsImage, groundTexture, isNight, duskLevel, duskGrade } from './stadium.js';
 import { drawBall } from './figures.js';
 import { fieldSprite, fieldCount, FIELD_PX, pitcherFieldSprite } from './sprites.js';
@@ -419,7 +424,7 @@ function poseOf(act, ph, since) {
       return { ...P, hip: [0, 2.6], neck: [0.25, 4.6], kn: [[-0.8, 1.45], [0.8, 1.45]], ft: [[-1, 0], [1, 0]], el: [[-0.7, 3.6], [0.7, 3.6]], hd: [[-0.4, 2.9], [0.45, 2.9]] };
     case 'crouch':
       return { ...P, hip: [0, 1.7], neck: [0.2, 3.8], kn: [[-0.95, 1.6], [0.95, 1.6]], ft: [[-0.85, 0], [0.85, 0]], el: [[-0.6, 3], [0.7, 3]], hd: [[-0.3, 2.6], [0.6, 3.1]] };
-    case 'field':
+    case 'field': case 'getup':
       return { ...P, side: true, hip: [-0.3, 2.2], neck: [0.9, 3.6], kn: [[-1.0, 1.3], [0.9, 1.2]], ft: [[-1.4, 0], [1.2, 0]], el: [[0.9, 2.2], [1.3, 2.4]], hd: [[1.4, 0.5], [1.6, 0.6]] };
     case 'catch': case 'jump':
       return { ...P, el: [[-0.45, 5.7], [0.55, 5.7]], hd: [[-0.2, 6.6], [0.35, 6.7]] };
@@ -432,7 +437,7 @@ function poseOf(act, ph, since) {
       return { ...P, side: true, hip: [0, 2.9], neck: [lerp(-0.5, 0.9, k), 5.0], kn: [[-0.9, 1.4], [1.0, 1.5]], ft: [[-1.5, 0], [1.4, 0]],
         el: [[lerp(-1.2, 0.6, k), lerp(5.2, 4.2, k)], [0.9, 4.5]], hd: [[lerp(-2.0, 1.6, k), lerp(5.6, 3.4, k)], [lerp(1.3, 0.2, k), lerp(4.6, 3.6, k)]] };
     }
-    case 'dive':
+    case 'dive': case 'lie':
       return { ...P, side: true, hip: [-0.4, 1.0], neck: [1.9, 1.5], kn: [[-1.6, 0.9], [-1.4, 1.2]], ft: [[-2.8, 0.7], [-2.6, 1.3]], el: [[2.6, 1.7], [2.7, 1.4]], hd: [[3.5, 1.6], [3.6, 1.3]] };
     case 'bat':
       return { ...P, side: true, hip: [0, 3.0], neck: [0.2, 5.1], kn: [[-0.9, 1.5], [0.8, 1.5]], ft: [[-1.1, 0], [1.1, 0]], el: [[-0.6, 4.6], [-0.2, 4.4]], hd: [[-0.6, 5.1], [-0.5, 5.0]], bat: true };
@@ -512,7 +517,9 @@ function spriteFor(kind, act, ph, since, view) {
   if (running) return [...(view !== 'side' ? [[`frun_${view}`, 'cyc', 'foot']] : []), ['frun', 'cyc', 'foot', true]];
   switch (act) {
     case 'throw': return [['fthrow', since < 0.12 ? 0 : since < 0.32 ? 1 : 2, 'mid', true]];
-    case 'dive': return [['fthrow', 3, 'mid', true]];
+    case 'dive': return since < LAUNCH ? [['fthrow', 0, 'foot', true]] : [['fthrow', 3, 'mid', true]];
+    case 'lie': return [['fthrow', 3, 'mid', true]];
+    case 'getup': return [['fielder', 1, 'foot']];     // 무릎을 짚고 일어나는 중(땅볼 잡는 낮은 자세)
     case 'field': return [['fielder', 1, 'foot']];
     case 'tag': return [['fielder', 1, 'foot']];       // 태그: 글러브를 낮게 대는 자세(땅볼 잡는 그림)
     // 타구 직후의 투수: 방금 던진 팔로스루(투구 영상 앞모습 마지막 그림들) → 수비 준비 자세
@@ -524,7 +531,7 @@ function spriteFor(kind, act, ph, since, view) {
     default: return [...(view === 'back' ? [['fback', 0, 'foot']] : []), ['fielder', 3, 'foot']];
   }
 }
-function drawSprite(ctx, x, y, s, u, kind, act, ph, since, dir, view) {
+function drawSprite(ctx, x, y, s, u, kind, act, ph, since, dir, view, rot = 0) {
   for (const [set, i0, anchor, side] of spriteFor(kind, act, ph, since, view)) {
     const n = set === 'pitch_front' ? 1 : fieldCount(set);
     const i = i0 === 'cyc' ? ((Math.floor(ph / (2 * Math.PI) * n) % n) + n) % n : i0;
@@ -534,6 +541,10 @@ function drawSprite(ctx, x, y, s, u, kind, act, ph, since, dir, view) {
     ctx.save();
     ctx.translate(x, y);
     if (side && dir < 0) ctx.scale(-1, 1);
+    if (rot && i === 3) {                                 // 다이빙 그림은 발끝을 축으로 머리 쪽을 든다(발이 땅에 박히지 않게)
+      const px = (sp.ax - ax) * k;
+      ctx.translate(px, 0); ctx.rotate(-rot * Math.PI / 180); ctx.translate(-px, 0);
+    }
     ctx.drawImage(sp.img, -ax * k, -(sp.ay ?? sp.h) * k, sp.w * k, sp.h * k);
     ctx.restore();
     return true;
@@ -573,12 +584,16 @@ export function drawPlay3D(ctx, W, H, sc, ms, uni, opts = {}) {
   // kind: 'f' 수비수, 'r' 주자, 'u' 심판
   const views = sc._views || (sc._views = new Map());     // 선수마다 지난 그림 방향(앞·옆·뒤)
   const add = (k, u, kind, name, id = kind + name) => {
-    const p = project(K, [k.x, k.y, k.act === 'jump' ? jumpZ(k.since) : 0]);
+    const p = project(K, [k.x, k.y, k.act === 'jump' ? jumpZ(k.since) : k.act === 'dive' ? diveZ(k.since) : 0]);
     if (!p) return;
     const q = project(K, [k.x + k.vx * 0.1, k.y + k.vy * 0.1, 0]);
     let dir = q && Math.abs(q.x - p.x) > 0.01 ? Math.sign(q.x - p.x) : 1;
     if (k.act === 'throw' || k.act === 'receive') dir = throwDir(k, t);
-    if (k.act === 'field' || k.act === 'dive') { const b = project(K, ballAt(sc, t).p); if (b) dir = Math.sign(b.x - p.x) || 1; }
+    if (k.act === 'field') { const b = project(K, ballAt(sc, t).p); if (b) dir = Math.sign(b.x - p.x) || 1; }
+    // 다이빙: 날아가는 쪽을 보고, 엎어져 있다가 일어날 때까지 그 방향 그대로(공이 뒤로 빠져도 뒤집히지 않게)
+    const dirs = sc._dirs || (sc._dirs = new Map());
+    if (k.act === 'dive') dirs.set(id, dir);
+    else if ((k.act === 'lie' || k.act === 'getup') && dirs.has(id)) dir = dirs.get(id);
     const speed = Math.hypot(k.vx, k.vy);
     const act = (k.act === 'run' || k.act === 'drop') && speed < 0.5 ? 'stand' : k.act;
     // 카메라에서 선수 쪽으로 향하는 방향과 움직이는 방향의 각도 → 앞/옆/뒷모습
@@ -599,7 +614,12 @@ export function drawPlay3D(ctx, W, H, sc, ms, uni, opts = {}) {
     if (name === 'C' && speed < 0.5) view = 'back';     // 포수는 카메라를 등지고 있다
     ents.push({ d: p.d, x: p.x, y: p.y, s: p.s, wx: k.x, wy: k.y, draw: () => {
       const ph = t * speed / 2.6;
-      if (drawSprite(ctx, p.x, p.y, p.s, kind === 'u' ? null : u, kind, act, ph, k.since, dir, view)) return;
+      if (act === 'lie' && k.since < 0.45) {                // 배로 떨어지며 미끄러질 때 흙·잔디가 튄다
+        const a = 1 - k.since / 0.45;
+        ctx.fillStyle = `rgba(196,164,120,${0.45 * a})`;
+        for (let j = 0; j < 4; j++) { ctx.beginPath(); ctx.arc(p.x + (j - 1.5) * p.s * 1.1 * dir, p.y - p.s * (0.3 + (1 - a) * 0.9 + (j % 2) * 0.4), p.s * (0.45 + (1 - a) * 0.6), 0, Math.PI * 2); ctx.fill(); }
+      }
+      if (drawSprite(ctx, p.x, p.y, p.s, kind === 'u' ? null : u, kind, act, ph, k.since, dir, view, act === 'dive' ? diveRot(k.since) : 0)) return;
       drawPerson(ctx, p.x, p.y, p.s, u, act, ph, k.since, dir, kind === 'r', kind === 'f');
     } });
   };

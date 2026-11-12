@@ -62,6 +62,18 @@ function slideIn(keys, dur = 0.35, lie = 0.55) {
   const end = b.act; b.act = 'slide';
   keys.push({ t: b.t + lie, x: b.x, y: b.y, act: end });
 }
+// 다이빙: tAir에 몸을 날려 DIVE_AIR초 동안 (x,y)까지 날아가 배로 떨어지고(lie), 조금 미끄러졌다가
+// 무릎을 짚고(getup) 일어난다. 떨어진 시각을 돌려준다. 떠 있는 높이·몸 기울기는 그릴 때 since로 정한다
+export const DIVE_AIR = 0.38;
+function diveTo(keys, tAir, x, y) {
+  const l = lastKey(keys), d = hyp(l.x, l.y, x, y) || 1, ux = (x - l.x) / d, uy = (y - l.y) / d;
+  key(keys, tAir, l.x, l.y, 'dive');
+  const tL = key(keys, tAir + DIVE_AIR, x, y, 'lie');
+  key(keys, tL + 0.22, x + ux * 2.5, y + uy * 2.5, 'lie');
+  act(keys, tL + 0.62, 'getup');
+  act(keys, tL + 0.95, 'stand');
+  return tL;
+}
 // 도착 시각을 정해 두고 뛴다(그보다 빨리 갈 수 있으면 늦게 출발)
 function arriveAt(keys, tMin, tArr, x, y, speed, after) {
   const l = lastKey(keys), d = hyp(l.x, l.y, x, y);
@@ -83,7 +95,7 @@ function pathPos(s, t) {
   const P = s.pts;
   return [P[a * 3] + (P[b * 3] - P[a * 3]) * u, P[a * 3 + 1] + (P[b * 3 + 1] - P[a * 3 + 1]) * u, P[a * 3 + 2] + (P[b * 3 + 2] - P[a * 3 + 2]) * u];
 }
-const HAND_Z = { field: 1.2, catch: 6.8, camp: 5, receive: 5, throw: 6.5, tag: 2, dive: 1.2 };
+const HAND_Z = { field: 1.2, catch: 6.8, camp: 5, receive: 5, throw: 6.5, tag: 2, dive: 1.2, lie: 0.9, getup: 2.2 };
 // 펜스 앞 점프: 뛰어오른 높이(피트). since = 점프 시작 뒤 초
 export const JUMP_MS = 0.6;
 export const jumpZ = since => (since >= 0 && since < JUMP_MS ? 4.2 * Math.sin(Math.PI * since / JUMP_MS) : 0);
@@ -367,9 +379,10 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
       const tIF = (() => { for (let t = 0; t < path.t1; t += 1 / 60) { const p = pathPos(path, t); if (Math.hypot(p[0], p[1]) > 128) return t; } return 1; })();
       const pIF = pathPos(path, tIF), diver = nearest([pIF[0], pIF[1]], IF.filter(n => n !== '1B' || ang > 20));
       used.add(diver);
-      const dv = SPOTS[diver], k = 0.72;
-      runTo(F[diver], REACT, dv[0] + (pIF[0] - dv[0]) * k, dv[1] + (pIF[1] - dv[1]) * k, hyp(...dv, pIF[0], pIF[1]) * k / Math.max(0.3, tIF - REACT), 'dive');
-      act(F[diver], tIF + 0.7, 'stand');
+      const dv = SPOTS[diver], dd = hyp(...dv, pIF[0], pIF[1]), k = 0.72, kL = Math.max(0, (dd * k - 8) / dd);
+      const tA = Math.max(REACT + 0.15, tIF - DIVE_AIR), lx = dv[0] + (pIF[0] - dv[0]) * kL, ly = dv[1] + (pIF[1] - dv[1]) * kL;
+      runTo(F[diver], REACT, lx, ly, hyp(...dv, lx, ly) / Math.max(0.3, tA - REACT), 'run');
+      diveTo(F[diver], tA, dv[0] + (pIF[0] - dv[0]) * k, dv[1] + (pIF[1] - dv[1]) * k);
       chaser = nearest(pathPos(path, Math.min(path.t1, tIF + 1)).slice(0, 2), OF);
       sc.ball.length = 0;
     } else {
@@ -388,10 +401,11 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
       const [x, y] = polar(ang, dist), T = hang(H);
       if (style === 'bloop') {
         // 가까운 내야수가 등을 돌려 쫓아가지만 한 발 모자란다
-        const back = nearest([x, y], IF), b0 = SPOTS[back], d = hyp(...b0, x, y), k = Math.max(0, (d - 7) / d);
+        const back = nearest([x, y], IF), b0 = SPOTS[back], d = hyp(...b0, x, y), k = Math.max(0, (d - 7) / d), kL = Math.max(0, (d - 15) / d);
         used.add(back);
-        runTo(F[back], REACT, b0[0] + (x - b0[0]) * k, b0[1] + (y - b0[1]) * k, Math.max(runSpeed(back), d * k / Math.max(0.5, T - REACT)), 'dive');
-        act(F[back], T + 0.7, 'stand');
+        const lx = b0[0] + (x - b0[0]) * kL, ly = b0[1] + (y - b0[1]) * kL;
+        runTo(F[back], REACT, lx, ly, Math.max(runSpeed(back), d * kL / Math.max(0.5, T - DIVE_AIR - REACT)), 'run');
+        diveTo(F[back], T - DIVE_AIR, b0[0] + (x - b0[0]) * k, b0[1] + (y - b0[1]) * k);
       }
       const fl = { type: 'fly', t0: 0, t1: T, p0: P0, p1: [x, y, 0], H, k: 0.3, skew: 1.16 };
       sc.ball.push(fl);
@@ -592,10 +606,9 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
       sc.ball.push({ type: 'fly', t0: 0, t1: T, p0: P0, p1: [x, y, 1.3], H, k: 0.3, skew: 1.16 });
       used.add(who);
       const d = hyp(...f0, x, y), ux = (x - f0[0]) / d, uy = (y - f0[1]) / d;
-      const tDive = T - 0.38, sx = x - ux * 10, sy = y - uy * 10;
-      runTo(F[who], REACT, sx, sy, hyp(...f0, sx, sy) / Math.max(0.4, tDive - REACT), 'dive');
-      key(F[who], T, x - ux * 2, y - uy * 2, 'dive');
-      act(F[who], T + 0.75, 'stand');
+      const tDive = T - DIVE_AIR, sx = x - ux * 10, sy = y - uy * 10;
+      runTo(F[who], REACT, sx, sy, hyp(...f0, sx, sy) / Math.max(0.4, tDive - REACT), 'run');
+      diveTo(F[who], tDive, x - ux * 2, y - uy * 2);
       sc.sounds.push({ t: T, name: 'ooh' });
       sc.chance = { t: tDive, until: T, who };          // 몸을 날리는 순간 터치
     }
@@ -755,7 +768,11 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
     const a = angOf(flyS.p1[0], flyS.p1[1]), r = Math.min(hyp(0, 0, flyS.p1[0], flyS.p1[1]), fenceAt(a) - 6);
     const [lx, ly] = polar(a, r), [sx, sy] = SPOTS[n], d = hyp(sx, sy, lx, ly);
     if (d > 110 || d < 16) return false;
-    const go = Math.min(reachBy(n, flyS.t1 - flyS.t0) + 4, d - 14), k = go / d;
+    const diving = style === 'dive' || style === 'dive_miss';
+    if (diving && IF.includes(n)) return false;          // 외야 다이빙: 내야수가 앞으로 와서 화면을 가리지 않게(외야수만 받쳐 준다)
+    const short = diving ? 30 : 14;                      // 다이빙하는 동료와 겹치지 않게 더 떨어져서
+    if (d < short + 2) return false;
+    const go = Math.min(reachBy(n, flyS.t1 - flyS.t0) + 4, d - short), k = go / d;
     runTo(keys, REACT + 0.05, sx + (lx - sx) * k, sy + (ly - sy) * k, runSpeed(n), 'watch');
     return true;
   };
