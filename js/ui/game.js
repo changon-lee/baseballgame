@@ -13,6 +13,7 @@ import { BUNT } from '../core/bunt.js';
 import { stealRunners } from '../core/rules.js';
 import { heatBoost, hitsToday, isHot, rally, RALLY_MAX } from '../core/heat.js';
 import { lineScore, todayText, gameMvp } from '../core/boxscore.js';
+import { fieldChance, judgeTap, FIELD_WIN } from '../core/fielding.js';
 import { playerLine, avg } from '../core/growth.js';
 import { loadPrefs, savePrefs, LEVELS, LEVEL_NAME } from './prefs.js';
 import { volRow, bindVol } from './volume.js';
@@ -33,7 +34,7 @@ const LABEL = {
   SAC_BUNT: '희생번트 성공', BUNT_SINGLE: '번트 안타!', BUNT_FC: '번트 · 앞 주자 아웃', BUNT_FOUL: '번트 파울',
 };
 // 같은 결과의 다른 장면
-const STYLE_LABEL = { bunt: '번트 아웃', dive: '다이빙 캐치!', wall: '펜스 앞 점프 캐치!', liner: '직선타 아웃', home_safe: '안타! 홈 세이프', bloop: '텍사스 안타!', pop: '내야 뜬공 아웃', foul: '파울플라이 아웃' };
+const STYLE_LABEL = { bunt: '번트 아웃', dive: '다이빙 캐치!', wall: '펜스 앞 점프 캐치!', liner: '직선타 아웃', home_safe: '안타! 홈 세이프', bloop: '텍사스 안타!', pop: '내야 뜬공 아웃', foul: '파울플라이 아웃', dive_miss: '다이빙 실패 · 안타!', bang: '간발의 차 아웃!' };
 // 투구 위치 점·구종 글자 색: 직구 계열 빨강, 휘는 공 파랑, 떨어지는 공 초록
 const DOT_COLOR = { FB: '#ff6b6b', SI: '#ff8787', CT: '#ffa94d', SL: '#4dabf7', CU: '#748ffc', CH: '#51cf66', FO: '#38d9a9' };
 const HIT_PA = ['SINGLE', 'DOUBLE', 'TRIPLE', 'HR'];   // 기록에 남는 안타(번트 안타·내야안타도 SINGLE)
@@ -43,7 +44,7 @@ const OUTS = ['OUT', 'SAC_FLY', 'DOUBLE_PLAY', 'LINE_DP', 'SAC_BUNT', 'BUNT_FC']
 // 경기 기록에 쓰는 이름
 const PA_NAME = { WALK: '볼넷', HBP: '몸에 맞는 공', STRIKEOUT: '삼진', SINGLE: '안타', DOUBLE: '2루타', TRIPLE: '3루타', HR: '홈런', OUT: '범타 아웃', SAC_FLY: '희생플라이', SAC_BUNT: '희생번트', DOUBLE_PLAY: '병살타', ERROR: '실책 출루' };
 const PLAY_NAME = { BUNT_SINGLE: '번트 안타', BUNT_FC: '번트 (야수 선택)', INFIELD_SINGLE: '내야안타', SINGLE_HOME_OUT: '안타 (2루 주자 홈에서 아웃)', LINE_DP: '직선타 병살' };
-const STYLE_NAME = { bunt: '번트 아웃', dive: '다이빙 캐치 아웃', wall: '펜스 앞 호수비 아웃', liner: '직선타 아웃', home_safe: '안타 (홈 승부 세이프)', fumble: '실책 출루 (포구 실책)', throw: '실책 출루 (송구 실책)', bloop: '텍사스 안타', pop: '내야 뜬공 아웃', foul: '파울플라이 아웃' };
+const STYLE_NAME = { bunt: '번트 아웃', dive: '다이빙 캐치 아웃', wall: '펜스 앞 호수비 아웃', liner: '직선타 아웃', home_safe: '안타 (홈 승부 세이프)', fumble: '실책 출루 (포구 실책)', throw: '실책 출루 (송구 실책)', bloop: '텍사스 안타', pop: '내야 뜬공 아웃', foul: '파울플라이 아웃', dive_miss: '안타 (다이빙 캐치 실패)', bang: '땅볼 아웃 (간발의 송구)' };
 const paName = l => PLAY_NAME[l.play] || STYLE_NAME[l.style] || (l.event === 'OUT' ? (l.fly ? '뜬공 아웃' : '땅볼 아웃') : PA_NAME[l.event] || l.event);
 const PITCH_E = { BALL: '볼', HBP: '사구', WILD: '폭투', STRIKE: '스트', FOUL: '파울', BUNT_FOUL: '번트파울' };
 // 구종 칩 색(빠른 공은 따뜻한 색, 떨어지는 공은 차가운 색)
@@ -524,7 +525,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     mode = 'msg';
     if (ball && ball.pitch) speedTag = { v: ball.pitch.speedKmh, k: ball.pitch.type, name: PITCH_TYPES[ball.pitch.type].name, at: performance.now() };
     const prev = match.game;
-    const finish = () => settle(prev, r, userPitched);
+    const res = { r };                                  // 수비 조작으로 결과가 바뀌면 res.r을 갈아 끼운다
+    const finish = () => settle(prev, res.r, userPitched);
     const batter = matchup(match).batter;
     if (r.steal && !practice) {                         // 도루: 판정 전에 주자가 뛰고 포수가 던지는 장면
       play = buildPlay({ event: r.steal.ok ? 'STEAL' : 'CAUGHT_STEALING', steal: { lead: r.steal.lead, trail: r.steal.trail ?? null },
@@ -536,11 +538,86 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     }
     if (['BALL', 'STRIKE', 'FOUL', 'HBP', 'WILD', 'BUNT_FOUL'].includes(r.event)) return finish();
     // 대결이면 서버가 준 씨앗으로: 두 폰에서 같은 장면이 나온다
-    play = buildPlay({ event: r.event, fly: r.fly, style: r.style, contact: r.contact, bats: batter.bats, bases: prev.bases, rng: r.seed != null ? createRng(r.seed) : rng });
+    play = (userPitched && fieldOn() && fieldScene(r, batter, prev, res))
+      || buildPlay({ event: r.event, fly: r.fly, style: r.style, contact: r.contact, bats: batter.bats, bases: prev.bases, rng: r.seed != null ? createRng(r.seed) : rng });
     if (practice) play = practicePlay(play);            // 연습장: 수비수·주자 없이 공만
     play.sounds.sort((a, b) => a.t - b.t);
     play.start = performance.now() + 320; play.si = 0;
     play.then = finish;
+  }
+
+  // ── 수비 조작 ──
+  // 아슬아슬한 수비면 성공/실패 두 장면을 같은 씨앗으로 만들어 둔다(터치할 순간까지 똑같다). 성공 장면부터 보여 주고,
+  // 링이 나타나면 장면이 느려진다. 터치(또는 시간 초과)하는 순간 둘 중 하나로 갈아 끼우고 경기 결과도 그에 맞게 다시 정한다
+  const fieldOn = () => !!prefs.fielding && !practice && !net && !auto;
+  const FC_LEAD = 420, FC_SLOW = 0.32;                  // 터치할 순간 0.42초(장면 시간) 전부터 링, 그동안 0.32배 느리게
+  const FC_NAME = { dive: '다이빙!', throw: '1루 송구!', home: '홈 송구!' };
+  function fieldScene(r, batter, prev, res) {
+    const ch = fieldChance(r, prev.bases);
+    if (!ch || !r.pitch) return null;
+    const seed = Math.floor(rng() * 2147483647);
+    const mk = o => { const sc = buildPlay({ ...o, contact: r.contact, bats: batter.bats, bases: prev.bases, rng: createRng(seed) }); sc.sounds.sort((a, b) => a.t - b.t); return sc; };
+    const good = mk(ch.good), bad = mk(ch.bad);
+    if (!good.chance || !bad.chance || Math.min(good.chance.until, bad.chance.until) - good.chance.t < 0.12) return null;
+    good.fc = { kind: ch.kind, ch, good, bad, res, pitch: r.pitch, contact: r.contact, tHit: toMs(good.chance.t), state: 'wait' };
+    return good;
+  }
+  function fieldTick(now) {
+    const f = play.fc, ms = now - play.start;
+    if (!f.r0) {
+      if (ms < f.tHit - FC_LEAD) return;
+      f.r0 = now; f.s0 = ms; f.hitAt = now + (f.tHit - ms) / FC_SLOW;
+      vibrate(15);
+    }
+    play.start = now - (f.s0 + (now - f.r0) * FC_SLOW);
+    if (now > f.hitAt + FIELD_WIN[lvl()]) decideField(null);
+  }
+  // err: 링이 겹친 순간과의 차이(ms, 빠르면 음수). null = 안 눌렀다
+  function decideField(err) {
+    const f = play && play.fc;
+    if (!f || f.state !== 'wait') return;
+    const grade = judgeTap(err, lvl()), ok = grade !== 'miss', now = performance.now(), ms = now - play.start;
+    const next = ok ? f.good : f.bad, o = ok ? f.ch.good : f.ch.bad;
+    Object.assign(f, { state: 'done', grade, err, at: now });
+    Object.assign(next, { fc: f, start: play.start, then: play.then, landed: false, si: 0 });
+    while (next.si < next.sounds.length && toMs(next.sounds[next.si].t) <= ms) next.si++;
+    play = next;
+    f.res.r = applyDecision(match, f.pitch, { event: o.event, contact: f.contact, fly: o.fly, style: o.style, swung: true });
+    const off = err == null ? '' : ` ${err < 0 ? '빠름' : '늦음'} ${Math.abs(Math.round(err))}ms`;
+    info = ok ? `${grade === 'perfect' ? '완벽한 수비!' : '좋은 수비!'}${off}` : err == null ? '수비 터치를 놓쳤어요' : `수비 타이밍${off}`;
+    vibrate(ok ? 40 : [20, 40, 20]);
+  }
+  function drawFieldPrompt(now) {
+    const f = play.fc, cx = W / 2, cy = H * 0.7, R0 = Math.max(24, Math.min(W, H) * 0.075), GROW = 2.2;
+    const say = (t, x, y, size, color, w = 5) => {
+      ctx.font = `900 ${size}px system-ui,sans-serif`; ctx.lineWidth = w; ctx.strokeStyle = 'rgba(0,0,0,.7)';
+      ctx.strokeText(t, x, y); ctx.fillStyle = color; ctx.fillText(t, x, y);
+    };
+    const ring = (r, color, w) => { ctx.strokeStyle = color; ctx.lineWidth = w; ctx.beginPath(); ctx.arc(cx, cy, Math.max(1, r), 0, Math.PI * 2); ctx.stroke(); };
+    ctx.save(); ctx.textAlign = 'center'; ctx.lineJoin = 'round';
+    if (f.state === 'wait' && !f.r0) {
+      say('🧤 수비 준비', cx, cy + 6, 16, `rgba(255,255,255,${0.6 + 0.4 * Math.sin(now / 110)})`, 4);
+    } else if (f.state === 'wait') {
+      const span = f.hitAt - f.r0, k = (f.hitAt - now) / span, band = FIELD_WIN[lvl()] * R0 * GROW / span;
+      ctx.fillStyle = 'rgba(6,13,26,.38)'; ctx.beginPath(); ctx.arc(cx, cy, R0 * (1 + GROW) + 8, 0, Math.PI * 2); ctx.fill();
+      ring(R0, 'rgba(46,204,113,.42)', band * 2);                 // 성공 구간
+      ring(R0, '#a8ffcb', 3);                                     // 겹쳐야 할 원
+      ring(R0 + k * R0 * GROW, `rgba(255,255,255,${Math.min(1, (1 - k) * 4)})`, 4);   // 줄어드는 링
+      say(FC_NAME[f.kind], cx, cy - R0 * (1 + GROW) - 14, 24, '#ffd43b');
+      ctx.font = '700 12px system-ui,sans-serif'; ctx.fillStyle = 'rgba(255,255,255,.85)';
+      ctx.fillText('링이 초록 원에 겹칠 때 터치', cx, cy + R0 * (1 + GROW) + 24);
+    } else {
+      const t = (now - f.at) / 800;
+      if (t < 1) {
+        const ok = f.grade !== 'miss', color = f.grade === 'perfect' ? '#ffd43b' : ok ? '#51cf66' : '#ff6b6b';
+        ctx.globalAlpha = 1 - t * t;
+        ring(R0 * (1 + t * 0.8), color, 5 * (1 - t) + 1);
+        const s = t < 0.15 ? 1.5 - t / 0.15 * 0.5 : 1;
+        ctx.translate(cx, cy + 9); ctx.scale(s, s);
+        say(f.grade === 'perfect' ? '완벽!' : ok ? '좋아요!' : f.err == null ? '놓쳤다!' : f.err < 0 ? '빨랐다!' : '늦었다!', 0, 0, 26, color);
+      }
+    }
+    ctx.restore();
   }
 
   function settle(prev, r, userPitched) {
@@ -565,7 +642,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     }
     crowd(prev, r, userPitched);
     const good = r.steal && !userPitched ? r.steal.ok
-      : userPitched ? (r.event === 'STRIKE' || OUTS.includes(r.event)) : (HITS.includes(r.event) || FREE.includes(r.event) || r.event === 'SAC_BUNT');
+      : userPitched ? (r.event === 'STRIKE' || OUTS.includes(r.event) || r.event === 'SINGLE_HOME_OUT') : (HITS.includes(r.event) || FREE.includes(r.event) || r.event === 'SAC_BUNT');
     const color = r.event === 'FOUL' ? '#ffffff' : good ? '#2ecc71' : '#e74c3c';
     // 불방망이: 이번 안타로 그 경기 2안타 이상이 됐다
     const nh = heatOn && match.log.length > logN && HIT_PA.includes(match.log[match.log.length - 1].event) ? hitsToday(match.log, hold.batter.id) : 0;
@@ -683,6 +760,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       <div class="row2"><button class="ghost" data-act="guide">${prefs.guide ? '궤적 안내 켜짐' : '궤적 안내 꺼짐'}</button>
         ${net ? `<button class="ghost" disabled>난이도: ${LEVEL_NAME[lvl()]}</button>` : `<button class="ghost" data-act="level">난이도: ${LEVEL_NAME[prefs.level]}</button>`}</div>
       <p class="hint">${net ? '1:1 대결은 방을 만든 사람이 정한 난이도로 둘 다 같게 해요. ' : ''}${{ easy: '쉬움: 배트가 크고 잘 맞아요. 제구 게이지의 초록 구간이 넓고 느려요', normal: '보통: 배트가 작고, 제구 게이지가 좁고 빨라요. 공이 올 길은 대략 보여 줘요(선구안이 좋을수록 정확)', hard: '어려움: 배트가 더 작고 궤적 안내가 없어요. 제구 게이지가 가장 좁고 빨라요' }[lvl()]}</p>
+      ${net ? '' : `<button class="ghost" data-act="fielding">🧤 수비 조작 ${prefs.fielding ? '켜짐' : '꺼짐'}</button>
+      <p class="hint">상대 타구 중 아슬아슬한 수비(다이빙 캐치·1루 송구·홈 송구)에서 링이 초록 원에 겹칠 때 터치하면 아웃. 끄면 컴퓨터가 정해요</p>`}
       <div class="row2 snd"><button class="ghost" data-act="sfx">효과음 ${prefs.sfx ? '켜짐' : '꺼짐'}</button>
         <button class="ghost" data-act="amb">관중·응원 ${prefs.amb ? '켜짐' : '꺼짐'}</button></div>
       <div class="vols">${volRow('🔊', '효과음', 'sfxVol', prefs.sfxVol)}${volRow('👏', '배경음', 'ambVol', prefs.ambVol)}</div>
@@ -699,6 +778,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       if (['aim', 'pick', 'gauge', 'bwait'].includes(mode) || (mode === 'msg' && !msg && !play && !ball)) nextPlay();
     });
     on('guide', () => { prefs = { ...prefs, guide: !prefs.guide }; savePrefs(prefs); closeOverlay(); showMenu(); });
+    on('fielding', () => { prefs = { ...prefs, fielding: !prefs.fielding }; savePrefs(prefs); closeOverlay(); showMenu(); });
     on('level', () => { prefs = { ...prefs, level: LEVELS[(LEVELS.indexOf(prefs.level) + 1) % LEVELS.length] }; savePrefs(prefs); closeOverlay(); showMenu(); });
     const sound = (k) => { prefs = { ...prefs, [k]: !prefs[k] }; savePrefs(prefs); setAudioOptions(prefs); closeOverlay(); showMenu(); };
     overlay.querySelectorAll('input[data-vol]').forEach(el => bindVol(el, v => {   // 0보다 크게 올리면 꺼져 있던 소리도 켠다
@@ -796,6 +876,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     if (mode === 'bflight' && auto) return;
     if (mode === 'gauge') throwUserPitch(e.timeStamp);
     else if ((mode === 'bwait' || mode === 'bflight') && !auto) startBatDrag(e);
+    else if (play && play.fc && play.fc.state === 'wait') { if (play.fc.r0) decideField(e.timeStamp - play.fc.hitAt); }   // 수비 조작(링 전에는 무시)
     else if (play && !play.landed && performance.now() >= play.start) {   // 타구 장면 건너뛰기: 결과가 정해지는 순간으로
       play.start = performance.now() - play.decisiveMs;
       while (play.si < play.sounds.length && play.sounds[play.si].t <= play.decisive) play.si++;
@@ -971,6 +1052,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     if (mode === 'bwait' && pitchAt && overlayOpen()) pitchAt = Math.max(pitchAt, now + CONFIG.WIND_CPU_MS + 500);
     else if (mode === 'bwait' && pitchAt && now >= pitchAt) throwCpuPitch();
 
+    if (play && play.fc && play.fc.state === 'wait' && now >= play.start) fieldTick(now);
     if (play && now >= play.start) {
       const mu = shownMu(), ms = now - play.start;
       drawPlay3D(ctx, W, H, play, ms, { field: uni[mu.pitchingSide], bat: uni[mu.battingSide] }, { practice: !!practice });
@@ -980,7 +1062,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
         if (play.event === 'HR') vibrate([60, 40, 60]);
         later(play.then, 350);
       }
-      if (!play.landed) {
+      if (play.fc) drawFieldPrompt(now);
+      if (!play.landed && !(play.fc && play.fc.state === 'wait')) {
         ctx.font = '600 12px system-ui,sans-serif'; ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(255,255,255,.75)';
         ctx.fillText('터치하면 건너뛰기', W - 12, H - 16); ctx.textAlign = 'left';
       }
@@ -1174,9 +1257,11 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     later(() => el.classList.remove('show'), ms - 200);
   }
 
-  window.__ui = { showLineScore };                    // 확인용
+  // 확인용: 지금 타석에 정해진 타구 장면을 바로 띄운다(수비 조작 확인)
+  const testPlay = (event, fly = false, style = null, pull = 0) => { const pitch = cpuPitchToUser(match, rng); ball = null; apply({ ...applyDecision(match, pitch, { event, contact: { kind: 'INPLAY', pull, quality: 0.6 }, fly, style, swung: true }), pitch }, true); };
+  window.__ui = { showLineScore, testPlay };
   window.__match = f => { if (f) { match = f(match); updateBoard(); } return match; };   // 확인용
-  window.__game = () => ({ mode, dragging, V: !!V, W, H, target, ball: !!ball, ballStart: ball ? ball.start : null, arrival: ball ? ball.arrival : null, swung: !!(ball && ball.swung), pitchAt, play: play && play.start ? { ms: Math.round(performance.now() - play.start), event: play.event } : null });
+  window.__game = () => ({ mode, dragging, V: !!V, W, H, target, ball: !!ball, ballStart: ball ? ball.start : null, arrival: ball ? ball.arrival : null, swung: !!(ball && ball.swung), pitchAt, play: play && play.start ? { ms: Math.round(performance.now() - play.start), event: play.event, fc: play.fc ? { state: play.fc.state, ring: !!play.fc.r0, hitAt: play.fc.hitAt, grade: play.fc.grade || null } : null } : null });
   const loop = startLoop(frame);
   resize();
   updateBoard();

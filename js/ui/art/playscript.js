@@ -160,6 +160,8 @@ const cutAt = (segs, t) => { const s = segs[segs.length - 1]; s.t1 = Math.min(s.
 // event: SINGLE/DOUBLE/TRIPLE/HR/OUT/SAC_FLY/DOUBLE_PLAY/INFIELD_SINGLE/ERROR/SINGLE_HOME_OUT/LINE_DP/SAC_BUNT/BUNT_SINGLE/BUNT_FC, fly: 뜬공 여부,
 // style: 같은 결과의 다른 장면(dive, wall, liner, home_safe, fumble, throw), contact.pull, bats: 'L'|'R'|'S', bases: 치기 전 주자
 // 도루 장면: event = 'STEAL'(세이프) | 'CAUGHT_STEALING'(아웃), steal = { lead: 뛴 앞 주자(0=1루, 1=2루), trail: 같이 뛴 뒤 주자 | null }
+// 수비 조작용 짝 장면(같은 씨앗이면 sc.chance.until 전까지 똑같다): OUT/dive ↔ SINGLE/dive_miss, OUT/bang ↔ INFIELD_SINGLE,
+// SINGLE_HOME_OUT ↔ SINGLE/home_safe. sc.chance = { t: 터치할 순간, until: 두 장면이 갈라지는 순간, who: 수비수 }
 export function buildPlay({ event, fly, contact, bats, bases = [false, false, false], rng, style = null, steal = null }) {
   const hand = bats === 'L' ? 1 : bats === 'R' ? -1 : (rng() < 0.5 ? 1 : -1);
   const pull = contact ? contact.pull : 0;
@@ -354,7 +356,7 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
     sc.decisive = T + 0.5;
     sc.ballUntil = T + 0.4;                                 // 그 뒤로 카메라는 베이스를 도는 타자를 따라간다
     sc.watch.push({ kind: 'r', id: 0, t0: T + 0.4, t1: Infinity });
-  } else if (hit) {
+  } else if (hit && style !== 'dive_miss') {
     // 안타: 땅볼이면 내야 사이를 빠져나가고, 뜬공이면 수비수 앞/사이에 떨어진다
     let path, chaser, landT = 0;
     if (ev === 'SINGLE' && !fly) {
@@ -414,19 +416,23 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
       const r = R[1], t3 = runBases(r, 0.12, 2, 3, 26.5, 'run'), tNat = t3 + 90 / 26.5;
       const plate = [0.6, 2.2], dur = hyp(I.x, I.y, ...plate) / armSpeed(chaser) + 0.1;
       const out = homeMode === 'out';
-      const rel = Math.max(I.t + 0.6, (out ? tNat - 0.35 : homeMode === 'close' ? tNat + 0.18 : tNat + 0.7) - dur);
+      // 보살(out)과 간발의 세이프(close)는 주자가 똑같이 뛴다: 빠른 송구가 닿을 시각보다 조금 늦게 들어온다.
+      // 보살이면 공이 먼저, 세이프면 송구가 한 박자 늦어 주자가 먼저 → 수비 조작에서 두 장면을 바꿔 끼울 수 있다
+      const relOut = Math.max(I.t + 0.6, tNat - 0.35 - dur);
+      const tHome = homeMode === 'late' ? null : Math.max(tNat, relOut + dur + 0.3);
+      const rel = out ? relOut : homeMode === 'close' ? tHome + 0.15 - dur : Math.max(I.t + 0.6, tNat + 0.7 - dur);
+      if (tHome != null) sc.chance = { t: I.t, until: relOut - 0.3, who: chaser };   // 외야수가 공을 잡는 순간 홈으로 던진다
       act(F[chaser], rel - 0.3, 'throw');
       const A = throwBall(chaser, rel, plate);
       act(F[chaser], rel + 0.45, 'stand');
-      const tHome = out ? Math.max(tNat, A + 0.3) : Math.min(tNat, A - 0.15);
-      arriveAt(r.keys, t3, tHome, 0, 0, 27, 'stand');
+      const tIn = arriveAt(r.keys, t3, tHome ?? Math.min(tNat, A - 0.15), 0, 0, 27, 'stand');
       if (homeMode !== 'late') slideIn(r.keys);
       receive('C', plate, 0.6, A, 'tag');
-      act(F.C, tHome + 0.5, 'stand');
-      if (out) { sc.outs.push(tHome); runTo(r.keys, tHome + 0.9, -22, -14, 8, 'stand'); }
-      else if (homeMode === 'close') sc.sounds.push({ t: tHome, name: 'ooh' });
-      sc.watch.push({ kind: 'r', id: sc.runners.indexOf(r), t0: I.t + 0.4, t1: tHome + 0.5 });
-      sc.decisive = Math.max(lastSafe + 0.3, tHome + 0.45);
+      act(F.C, tIn + 0.5, 'stand');
+      if (out) { sc.outs.push(tIn); runTo(r.keys, tIn + 0.9, -22, -14, 8, 'stand'); }
+      else if (homeMode === 'close') sc.sounds.push({ t: tIn, name: 'ooh' });
+      sc.watch.push({ kind: 'r', id: sc.runners.indexOf(r), t0: I.t + 0.4, t1: tIn + 0.5 });
+      sc.decisive = Math.max(lastSafe + 0.3, tIn + 0.45);
     } else {
     // 공은 중계 수비수에게 → 주자가 다 들어간 뒤 내야로
     const cut = ang < 0 ? 'SS' : '2B', other = cut === 'SS' ? '2B' : 'SS';
@@ -456,18 +462,22 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
     sc.watch.push({ kind: 'r', id: 0, t0: I.t, t1: lastSafe + 0.5 });
     sc.decisive = Math.max(lastSafe + 0.3, ballIn + 0.2);
     }
-  } else if (event === 'INFIELD_SINGLE') {
+  } else if (event === 'INFIELD_SINGLE' || (event === 'OUT' && style === 'bang')) {
     // 내야안타: 느린 땅볼을 3루수·유격수·투수가 달려 나와 잡아 던지지만 타자가 한 발 먼저
+    // bang(수비 조작 성공): 같은 타구를 재빨리 던져 간발의 차로 아웃
+    const bang = event === 'OUT';
     const who = rng() < 0.5 ? '3B' : rng() < 0.6 ? 'SS' : 'P';
     ang = (who === '3B' ? -24 : who === 'SS' ? -9 : 4) + randNormal(rng) * 3;
     const path = groundPath(ang, 52 + rng() * 14, -12);
     const I = fieldBall(who, path, 0.3);
     const tB = batterTo1B(null), dur = hyp(I.x, I.y, ...BAG[1]) / armSpeed(who) + 0.1;
-    const rel = Math.max(I.t + 0.35, tB + 0.12 - dur);
+    const rel = Math.max(I.t + 0.5, bang ? tB - 0.16 - dur : tB + 0.12 - dur);
     act(F[who], rel - 0.3, 'throw');
     const arr = throwBall(who, rel, BAG[1]);
     act(F[who], rel + 0.4, 'stand');
     receive('1B', BAG[1], REACT, arr, 'stand');
+    if (bang) sc.outs.push(arr);
+    if (!bang || arr < tB - 0.05) sc.chance = { t: I.t, until: Math.min(rel, arr) - 0.3, who };   // 아웃이 안 되는 거리면 찬스가 아니다
     forcedRunners(0.15);
     sc.watch.push({ kind: 'r', id: 0, t0: I.t, t1: tB + 0.5 });
     sc.decisive = Math.max(arr, tB) + 0.35;
@@ -554,7 +564,7 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
       sc.watch.push({ kind: 'r', id: sc.runners.indexOf(r), t0: T, t1: outT + 0.5 });
     });
     sc.decisive = Math.max(T + 0.6, outT + 0.35);
-  } else if (event === 'OUT' && fly && (style === 'dive' || style === 'wall')) {
+  } else if ((event === 'OUT' && fly && (style === 'dive' || style === 'wall')) || style === 'dive_miss') {
     // 호수비: dive = 뛰어서는 못 닿는 곳에 떨어지는 공을 몸을 날려 잡는다 / wall = 펜스를 넘어가려던 공을 뛰어올라 잡는다
     let who, x, y, T;
     if (style === 'wall') {
@@ -587,23 +597,45 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
       key(F[who], T, x - ux * 2, y - uy * 2, 'dive');
       act(F[who], T + 0.75, 'stand');
       sc.sounds.push({ t: T, name: 'ooh' });
+      sc.chance = { t: tDive, until: T, who };          // 몸을 날리는 순간 터치
     }
-    hold(who, T);
-    sc.sounds.push({ t: T, name: 'mitt' });
-    sc.outs.push(T);
+    const miss = style === 'dive_miss';                  // 다이빙 실패: 공이 글러브 끝을 스치고 뒤로 빠진다
+    const watchF = { kind: 'f', id: who, t0: 0.3, t1: T + 1 };
     sc.distM = Math.round(hyp(0, 0, x, y) * 0.3048);
-    sc.watch.push({ kind: 'f', id: who, t0: 0.3, t1: T + 1 });
+    sc.watch.push(watchF);
     act(B.keys, 0.25, 'drop');
     key(B.keys, 0.45, B.keys[0].x, B.keys[0].y, 'run');
     const toFirst = 0.45 + 90 / 25;
-    if (T < toFirst) { const k = (T - 0.45) / (toFirst - 0.45); key(B.keys, T, BASES[1][0] * k, BASES[1][1] * k, 'stand'); }
-    else { key(B.keys, toFirst, ...BASES[1], 'run'); key(B.keys, T, BASES[1][0] + 8, BASES[1][1] + 30, 'stand'); }
-    R.forEach((r, i) => {
-      if (!r) return;
-      runTo(r.keys, 0.4, ...baseAlong(i + 1, 24), 13, 'lead');
-      runTo(r.keys, T + 0.1, ...BASES[i + 1], 18, 'stand');
-    });
-    sc.decisive = T + 0.9;
+    if (miss) {
+      // 타자는 1루까지, 주자는 몇 걸음 나가 있다가 공이 빠지면 안타처럼 진루(1루 → 2루, 2·3루 → 홈)
+      key(B.keys, toFirst, ...BASES[1], 'run');
+      key(B.keys, toFirst + 0.7, BASES[1][0] + 13, BASES[1][1] + 6, 'stand');
+      let lastSafe = toFirst;
+      R.forEach((r, i) => {
+        if (!r) return;
+        runTo(r.keys, 0.4, ...baseAlong(i + 1, 24), 13, 'lead');
+        lastSafe = Math.max(lastSafe, runBases(r, T + 0.05, i + 1, [2, 4, 4][i], 26));
+      });
+      const d = hyp(0, 0, x, y), vh = 0.45 * d / T;
+      const roll = simGround([x, y, 1.3], [x / d * vh, y / d * vh, -6], T, 6);
+      const I = fieldBall(who, roll, T + 0.8);              // 일어나서 쫓아가 잡는다
+      sc.watch.pop(); watchF.t1 = I.t + 0.8;                // 카메라: 같은 수비수를 계속(짝 장면과 앞부분이 같게)
+      sc.watch.push({ kind: 'r', id: 0, t0: T + 0.3, t1: lastSafe + 0.5 });
+      sc.decisive = Math.max(I.t, lastSafe) + 0.3;
+    } else {
+      hold(who, T);
+      sc.sounds.push({ t: T, name: 'mitt' });
+      sc.outs.push(T);
+      const [bx, by] = [B.keys[0].x, B.keys[0].y];
+      if (T < toFirst) { const k = (T - 0.45) / (toFirst - 0.45); key(B.keys, T, bx + (BASES[1][0] - bx) * k, by + (BASES[1][1] - by) * k, 'stand'); }
+      else { key(B.keys, toFirst, ...BASES[1], 'run'); key(B.keys, T, BASES[1][0] + 8, BASES[1][1] + 30, 'stand'); }
+      R.forEach((r, i) => {
+        if (!r) return;
+        runTo(r.keys, 0.4, ...baseAlong(i + 1, 24), 13, 'lead');
+        runTo(r.keys, T + 0.1, ...BASES[i + 1], 18, 'stand');
+      });
+      sc.decisive = T + 0.9;
+    }
   } else if (event === 'OUT' && fly || event === 'SAC_FLY') {
     let who, dist, H;
     if (event === 'SAC_FLY') { who = OF[Math.floor(rng() * 3)]; ang = angOf(...SPOTS[who]) + randNormal(rng) * 4; dist = hyp(0, 0, ...SPOTS[who]) + 5 + rng() * 25; H = 75 + rng() * 15; }
