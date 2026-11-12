@@ -150,7 +150,7 @@ export function changePitcher(m, side, pitcherId) {
 }
 
 export function cpuMaybeChangePitcher(m, rng, side = 'away') {
-  const p = pitcherOf(m, side);
+  const p = perkPitcher(m, pitcherOf(m, side));      // 육성 '강철 어깨'는 컴퓨터 교체에서도 덜 지친다(perks 없으면 그대로)
   if (fatigue(m.pitchCount[side], p.stamina) < 0.6) return m;
   const avail = availableRelievers(m.teams[side], m.used[side], p.id);
   const rps = avail.filter(q => q.role === 'RP');

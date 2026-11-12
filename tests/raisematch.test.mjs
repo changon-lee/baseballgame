@@ -1,7 +1,7 @@
 // 육성모드 경기 진행: 내 장면까지 넘기기, 대타·강판·마무리 등판, 승·패·세이브 (core/raisematch.js)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createMatch, matchup, simulateUntil } from '../js/core/match.js';
+import { createMatch, matchup, simulateUntil, changePitcher } from '../js/core/match.js';
 import { fatigue } from '../js/core/pitch.js';
 import { battingSide } from '../js/core/rules.js';
 import { defaultLineup } from '../js/core/team.js';
@@ -86,6 +86,17 @@ test('starter who gave up 5+ runs in an inning is pulled after it', () => {
   const r = raiseStep(m, { kind: 'pitch', role: 'SP', playerId: SP, cond: 0 }, rng);
   assert.equal(r.phase, 'done'); assert.equal(r.note, 'pulled');
   assert.equal(r.match.log.filter(e => e.pitcherId === SP).length, 5);
+});
+
+test('a closer taken out by the user does not come back (review fix)', () => {
+  const { m: m0, rng } = mk(8);
+  const raise = { kind: 'pitch', role: 'CL', playerId: CL, cond: 0 };
+  const m = { ...m0, game: { ...m0.game, inning: 9, half: 'top', score: { home: 3, away: 2 } } };
+  const r1 = raiseStep(m, raise, rng);
+  assert.equal(r1.phase, 'me'); assert.equal(r1.match.pitcher.home, CL);
+  const r2 = raiseStep(changePitcher(r1.match, 'home', 'samsung-p06'), raise, rng);
+  assert.equal(r2.phase, 'done');
+  assert.ok(!r2.match.log.some(e => e.pitcherId === CL));
 });
 
 test('closer is not used before the 9th and enters only within 3 runs', () => {

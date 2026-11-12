@@ -66,6 +66,7 @@ function starterStep(m0, { playerId: id }, rng) {
 // ── 마무리 ──
 function closerStep(m0, { playerId: id }, rng) {
   let m = m0;
+  if (m.raiseIn && m.pitcher.home !== id) return finish(m, rng, 'end', m0);   // 등판했다가 내려갔다(스스로 교체 포함)
   const pitched = m.log.some(e => e.pitcherId === id);
   if (m.pitcher.home === id) {
     m = simulateUntil(m, rng, x => x.game.half === 'top' || x.pitcher.home !== id);
@@ -81,7 +82,7 @@ function closerStep(m0, { playerId: id }, rng) {
   if (m.game.over) return out(m, 'noshow', m0);
   if (m.game.inning > 9 || m.game.outs > 0 || Math.abs(m.game.score.home - m.game.score.away) > CLOSE_GAP) return finish(m, rng, 'noshow', m0);
   const used = new Set([...m.used.home, m.pitcher.home]);
-  m = { ...m, used: { ...m.used, home: used }, pitcher: { ...m.pitcher, home: id }, pitchCount: { ...m.pitchCount, home: 0 } };
+  m = { ...m, used: { ...m.used, home: used }, pitcher: { ...m.pitcher, home: id }, pitchCount: { ...m.pitchCount, home: 0 }, raiseIn: true };
   return me(m, m0);
 }
 

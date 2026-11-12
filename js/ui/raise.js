@@ -5,7 +5,7 @@ import { standings } from '../core/season.js';
 import { avg, era, ip } from '../core/growth.js';
 import { createRng } from '../core/rng.js';
 import { TRAITS } from '../core/perks.js';
-import { RAISE, DRILLS, newSlot, loadRaise, saveRaise, slotPlayer, canChoose, choose, dayInfo, matchSetup, applyDay, seasonOver, nextSeason } from '../core/raise.js';
+import { RAISE, DRILLS, newSlot, loadRaise, saveRaise, slotPlayer, canChoose, choose, dayInfo, matchSetup, applyDay, seasonOver, nextSeason, seasonGains } from '../core/raise.js';
 import { face, badge } from './hub.js';
 
 const ME = USER_TEAM_ID;
@@ -105,7 +105,6 @@ export function showRaise(root, { storage, loadGame, onBack }) {
         return `<button class="chip ${x.drill ? 'drill' : ''}" data-act="choose" data-id="${x.id}" ${c.ok ? '' : 'disabled'}><b>${x.name}</b><small>${sub}</small><small class="${c.ok ? '' : 'tired'}">${c.ok ? `피로 +${x.cost}` : '너무 지쳤어요'}</small></button>`;
       }).join('')}
         <button class="chip rest" data-act="choose" data-id="rest"><b>😴 휴식</b><small>피로 ${RAISE.rest} · 컨디션이 보통 쪽으로</small></button></div>`;
-    const nextStart = s.role === 'SP' && !d.myStart ? RAISE.startEvery - (d.round % RAISE.startEvery) : 0;
     screen(`<header class="bar"><button class="ghost small" data-act="back">←</button><h2>🌱 육성모드</h2><button class="ghost small rz-rec" data-act="records">📜 기록</button></header>
       <section class="card rz-card">
         <div class="rz-who">${face(p, s.kind === 'bat' ? 'b' : 'p', 'lg')}<div><b class="rz-name">${esc(p.name)}</b><small>삼성 · ${roleOf(s)} · ${s.year} 시즌</small></div>${condHtml(s.condition)}</div>
@@ -118,7 +117,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
       <section class="card next">
         <div class="card-h">⚾ ${d.label}<span class="pill">${st.w}승 ${st.l}패${st.d ? ' ' + st.d + '무' : ''} · ${st.rank}위</span></div>
         <div class="vs-row"><div class="side" style="--c:${opp.colors.main}">${badge(opp.id, 'lg')}<b>${opp.short}</b><small>✈️ 원정</small></div><span class="vs">VS</span><div class="side" style="--c:${getTeam(ME).colors.main}">${badge(ME, 'lg')}<b>삼성</b><small>🏠 홈</small></div></div>
-        ${s.role === 'SP' ? `<p class="hint center">${d.myStart ? '🔥 오늘 선발 등판이에요' : `오늘은 등판이 없어요 · 다음 선발까지 ${nextStart}경기`}</p>` : ''}
+        ${s.role === 'SP' ? `<p class="hint center">${d.myStart ? '🔥 오늘 선발 등판이에요' : `오늘은 등판이 없어요 · ${d.nextStartIn == null ? '이번 시즌 남은 선발이 없어요' : `다음 선발까지 ${d.nextStartIn}경기`}`}</p>` : ''}
         ${!s.chosen ? '<p class="hint center">선택 없이 경기에 나가면 피로가 조금만 풀려요</p>' : ''}
         <div class="actions">${d.needsScreen ? '<button class="primary big" data-act="play">▶ 경기 시작</button>' : '<button class="primary big" data-act="play">⏩ 경기 진행 (등판 없음)</button>'}</div>
       </section>`);
@@ -176,10 +175,11 @@ export function showRaise(root, { storage, loadGame, onBack }) {
   function seasonEndView(i) {
     const s = data.slots[i], p = slotPlayer(s), st = standings(s.season);
     const before = new Set(s.history.flatMap(h => h.traitsNew || []));
-    const gained = s.traits.filter(t => !before.has(t));
+    const gained = s.traits.filter(t => !before.has(t)), ups = seasonGains(s);
     screen(`<div class="eyebrow center">${s.year} 시즌 종료</div>
       <div class="re">🏁</div><h1 class="res">${esc(p.name)}</h1>
       <section class="card"><div class="card-h">📊 시즌 성적</div><p class="rz-line">${seasonLine(s, s.stats)}</p>
+        ${ups.length ? `<div class="ups">${ups.map(u => `<div><b>${STAT_ICON[u.stat]} ${STAT_KO[u.stat]}</b><span><em>+${u.n}${u.stat === 'velo' ? 'km' : ''}</em></span></div>`).join('')}</div>` : '<p class="hint">이번 시즌에 오른 능력치는 없어요</p>'}
         ${gained.length ? `<div class="rz-traits">${gained.map(t => `<span class="rz-trait">✨ ${esc(traitOf(t).name)}</span>`).join('')}</div>` : ''}</section>
       <section class="card flush"><div class="card-h pad">🏆 최종 순위</div>
         <table class="rz-table">${st.map(x => `<tr class="${x.id === ME ? 'me' : ''}"><td>${x.rank}</td><td>${badge(x.id)} ${getTeam(x.id).short}</td><td>${x.w}승 ${x.l}패${x.d ? ' ' + x.d + '무' : ''}</td></tr>`).join('')}</table></section>

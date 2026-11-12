@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { getTeam } from '../js/data/rosters.js';
 import { createRng } from '../js/core/rng.js';
 import { newSlot, loadRaise, saveRaise, slotPlayer, raiseTeam, raiseLineup, xpPerTraining, canChoose, choose, DRILLS, RAISE,
-  dayInfo, starterFor, matchSetup, applyDay, seasonOver, nextSeason } from '../js/core/raise.js';
+  dayInfo, starterFor, matchSetup, applyDay, seasonOver, nextSeason, seasonGains } from '../js/core/raise.js';
 
 const memStore = (init = {}) => {
   const m = new Map(Object.entries(init));
@@ -224,6 +224,19 @@ test('leaving mid-game keeps the choice and the day', () => {
   assert.equal(s.chosen, true); assert.equal(s.season.round, 0);
   assert.equal(canChoose(s, 'rest').reason, 'done');
   assert.equal(matchSetup(s).raise.playerId, 'samsung-b03');
+});
+
+test('season stat gains and the next start are reported (review fix)', () => {
+  let s = newSlot('samsung-b03');
+  assert.deepEqual(seasonGains(s), []);
+  for (let i = 0; i < 3; i++) s = choose({ ...s, chosen: false, fatigue: 0 }, 'power').slot;
+  assert.deepEqual(seasonGains(s), [{ stat: 'power', n: slotPlayer(s).power - 72 }]);
+  s = { ...s, season: { ...s.season, phase: 'post' } };
+  assert.deepEqual(seasonGains(nextSeason(s)), []);
+  const sp = newSlot('samsung-p01');
+  const at = r => dayInfo({ ...sp, season: { ...sp.season, round: r } }).nextStartIn;
+  assert.equal(at(0), 0); assert.equal(at(1), 3); assert.equal(at(21), 3); assert.equal(at(25), null); assert.equal(at(26), null);
+  assert.equal(dayInfo(newSlot('samsung-b03')).nextStartIn, null);
 });
 
 test('nextSeason keeps growth/traits/total and resets the rest', () => {

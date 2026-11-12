@@ -880,7 +880,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
 
   $('.exit').onclick = () => {
     if (mode === 'end') { const b = overlay.querySelector('[data-act=menu]'); return b ? b.click() : showEnd(); }
-    if (confirm(net ? '대결을 그만둘까요? 상대 화면에서도 경기가 끝나요' : practice ? '연습을 그만둘까요? (중간에 나가면 경험치가 쌓이지 않아요)' : '경기를 그만둘까요? (시즌 경기는 기록되지 않고 다시 할 수 있어요)')) exit();
+    if (confirm(net ? '대결을 그만둘까요? 상대 화면에서도 경기가 끝나요' : practice ? '연습을 그만둘까요? (중간에 나가면 경험치가 쌓이지 않아요)' : raise ? '경기를 그만둘까요? (이 경기는 없던 일이 되고, 오늘 경기를 다시 할 수 있어요)' : '경기를 그만둘까요? (시즌 경기는 기록되지 않고 다시 할 수 있어요)')) exit();
   };
 
   // 화면이 가려지면 던지던 공을 취소하고 다시 던진다(순간이동 방지)

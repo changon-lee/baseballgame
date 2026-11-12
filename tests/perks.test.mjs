@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { simulateGame } from '../js/core/sim.js';
-import { createMatch, matchup, simulateRest } from '../js/core/match.js';
+import { createMatch, matchup, simulateRest, cpuMaybeChangePitcher } from '../js/core/match.js';
 import { defaultLineup } from '../js/core/team.js';
 import { getTeam } from '../js/data/rosters.js';
 import { createRng } from '../js/core/rng.js';
@@ -97,6 +97,19 @@ test('perkPitcher: iron arm tires slower, closer is sharper from the 9th', () =>
   near(perkPitcher(m, base).stamina, Math.min(120, base.stamina / PERK.ironArm), 'iron arm');
   assert.equal(perkPitcher(m, base).control, base.control);
   assert.equal(perkPitcher({ ...m, game: { ...m.game, inning: 9 } }, base).control, base.control + 6);
+});
+
+test('computer pitching changes honor my iron arm (review fix)', () => {
+  const lineup = { ...defaultLineup(S), starterId: P };
+  const at = perks => ({ ...mk(perks, {}, { userLineup: lineup }), pitchCount: { home: 100, away: 0 } });
+  assert.notEqual(cpuMaybeChangePitcher(at(null), createRng(1), 'home').pitcher.home, P);
+  assert.equal(cpuMaybeChangePitcher(at({ id: P, cond: 0, traits: ['ironArm'] }), createRng(1), 'home').pitcher.home, P);
+});
+
+test('perkPitcher never pushes control past 100 (review fix)', () => {
+  const m = mk({ id: P, cond: 2, traits: ['escape', 'closer', 'finisher'] }, { bases: [false, true, false], inning: 9, strikes: 2 });
+  const q = perkPitcher(m, { id: P, control: 95, velo: 150, stamina: 88 });
+  assert.equal(q.control, 100);
 });
 
 test('boostFor caps reach at 1.25 and equals heatBoost when perks absent', () => {

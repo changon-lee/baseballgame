@@ -67,7 +67,20 @@ export function newSlot(playerId, year = RAISE.firstYear) {
     progress: { train: {}, feat: {} }, chosen: false,
     year, season: createSeason({ cycles: RAISE.seasonCycles, innings: 9, year }),
     stats: {}, total: {}, history: [],
+    seasonBase: baseOf(playerId, f.kind, createGrowth()),
   };
+}
+
+// 시즌 시작 때 능력치(시즌 결산에서 '이번 시즌에 오른 능력치'를 보여 준다)
+const STAT_KEYS = { bat: ['power', 'contact', 'eye'], pitch: ['velo', 'control', 'stamina'] };
+function baseOf(playerId, kind, growth) {
+  const t = applyGrowth(getTeam(ME), growth), p = t.batters.find(b => b.id === playerId) || t.pitchers.find(q => q.id === playerId);
+  return Object.fromEntries(STAT_KEYS[kind].map(k => [k, p[k]]));
+}
+export function seasonGains(slot) {
+  if (!slot.seasonBase) return [];
+  const p = slotPlayer(slot);
+  return STAT_KEYS[slot.kind].map(k => ({ stat: k, n: p[k] - (slot.seasonBase[k] ?? p[k]) })).filter(x => x.n > 0);
 }
 
 // ── 저장 ──
@@ -167,7 +180,9 @@ export function dayInfo(slot) {
   const s = slot.season, round = s.round, total = s.schedule.length;
   const g = round < total ? s.schedule[round].find(x => x.includes(ME)) : null;
   const myStart = slot.role === 'SP' && round % RAISE.startEvery === 0;
+  const k = (RAISE.startEvery - (round % RAISE.startEvery)) % RAISE.startEvery;
   return {
+    nextStartIn: slot.role === 'SP' && round + k < total ? k : null,      // 다음 선발까지 남은 경기(이번 시즌에 없으면 null)
     round, total, opponentId: g ? g.find(x => x !== ME) : null,
     label: `${slot.year} 시즌 ${Math.min(round + 1, total)}/${total}경기`,
     myStart, needsScreen: slot.kind === 'bat' || slot.role === 'CL' || myStart,
@@ -298,6 +313,6 @@ export function nextSeason(slot) {
   const year = slot.year + 1;
   return {
     ...slot, year, season: createSeason({ cycles: RAISE.seasonCycles, innings: 9, year }),
-    stats: {}, fatigue: 0, condition: 0, chosen: false, history: [...slot.history, entry],
+    stats: {}, fatigue: 0, condition: 0, chosen: false, history: [...slot.history, entry], seasonBase: baseOf(slot.playerId, slot.kind, slot.growth),
   };
 }
