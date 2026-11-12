@@ -570,13 +570,17 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     // 불방망이: 이번 안타로 그 경기 2안타 이상이 됐다
     const nh = heatOn && match.log.length > logN && HIT_PA.includes(match.log[match.log.length - 1].event) ? hitsToday(match.log, hold.batter.id) : 0;
     const fire = nh >= 2 ? (nh === 2 ? '🔥 불방망이!' : `🔥 오늘 ${nh}안타!`) : '';
-    const sub = [r.runs && !practice ? `${r.runs}점 득점!` : '', info, fire].filter(Boolean).join(' · ');
+    // 홈런 비거리(타구 장면에서 잰 값). 경기 기록에도 남긴다
+    const hrM = r.event === 'HR' && play && play.distM ? play.distM : 0;
+    if (hrM && match.log.length > logN) match = { ...match, log: [...match.log.slice(0, -1), { ...match.log[match.log.length - 1], dist: hrM }] };
+    const sub = [r.runs && !practice ? `${r.runs}점 득점!` : '', hrM ? `비거리 ${hrM}m` : '', info, fire].filter(Boolean).join(' · ');
     const g = match.game;
     const halfOver = !g.over && (g.half !== prev.half || g.inning !== prev.inning);
     updateBoard();
     // 컷인: 내가 친 홈런·맞은 홈런·내가 잡은 삼진. 연습·자동 진행에서는 건너뛴다
     const cut = !practice && !auto ? cutinFor(r, prev, userPitched) : null;
-    if (cut) cutins.play(cut, { sub: cut === 'homerun' ? (HR_NAME[r.runs] || '홈런!!') : cut === 'homerun_bad' ? (HR_NAME[r.runs] || '') : '' });
+    const far = hrM ? ` · ${hrM}m` : '';
+    if (cut) cutins.play(cut, { sub: cut === 'homerun' ? (HR_NAME[r.runs] || '홈런!!') + far : cut === 'homerun_bad' ? (HR_NAME[r.runs] || '피홈런') + far : '' });
     showMsg(label, color, cut ? CUT_MS[cut] : r.event === 'HR' ? 2000 : 1300, sub, () => {
       if (practice && practice.n >= practice.goal) return finishPractice();
       if (match.game.over) return showEnd();
@@ -740,7 +744,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       rows.push(`<div class="pa">
         <div class="who"><b>${nameOf(bat, 'batters', l.batterId)}</b> <small>vs ${nameOf(pit, 'pitchers', l.pitcherId)} · ${l.outsBefore ?? 0}사 ${basesText(l.bases || [])}</small></div>
         <div class="seq">${seq}</div>
-        <div class="out${good ? ' g' : ''}">${paName(l)}${l.runs ? ` · <b>${l.runs}점</b> <small>(${cpuTeam.short} ${l.score.away} : ${l.score.home} ${userTeam.short})</small>` : ''}</div>
+        <div class="out${good ? ' g' : ''}">${paName(l)}${l.dist ? ` <small>${l.dist}m</small>` : ''}${l.runs ? ` · <b>${l.runs}점</b> <small>(${cpuTeam.short} ${l.score.away} : ${l.score.home} ${userTeam.short})</small>` : ''}</div>
       </div>`);
     }
     const g = match.game;

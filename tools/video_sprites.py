@@ -1,6 +1,6 @@
 """달리기 영상(mp4)에서 한 주기를 찾아 8장을 뽑고, 배경을 지워 게임용 스프라이트(WebP)로 만든다.
 
-사용법: python -I tools/video_sprites.py <영상 폴더(assets/raw)> <작업 폴더>
+사용법: python -I tools/video_sprites.py <영상 폴더(assets/raw)> <작업 폴더> [영상 이름,...(이것만 다시 만든다)]
 필요: pip install imageio-ffmpeg "rembg[cpu]"  (rembg는 처음 쓸 때 모델을 내려받는다)
 결과: assets/sprites/<이름>_0..7.webp, 마지막 줄에 크기·기준점 JSON(sprites.js의 FIELD에 옮긴다)
   1) 모든 프레임을 작은 모델(u2netp)로 실루엣만 만들어, 모양이 다시 같아지는 간격(주기)을 찾는다
@@ -26,11 +26,16 @@ VIDEOS = {
     'baserunner_side_running': ('runner', 'side'),
     'baserunner_front_running': ('runner_front', 'front'),
     'baserunner_back_running': ('runner_back', 'back'),
+    # 대각선(오른쪽으로 비스듬히): 멀어지는 쪽 3/4 뒷모습, 다가오는 쪽 3/4 앞모습. 왼쪽은 게임에서 뒤집어 쓴다
+    'baserunner_diag_back_running': ('runner_diagb', 'back'),
+    'baserunner_diag_front_running': ('runner_diagf', 'front'),
 }
+ONLY = set(sys.argv[3].split(',')) if len(sys.argv) > 3 else None
 small = new_session('u2netp')
 big = new_session('isnet-general-use')
 meta = {}
 for video, (name, view) in VIDEOS.items():
+    if ONLY and video not in ONLY: continue
     d = os.path.join(WORK, video); os.makedirs(d, exist_ok=True)
     if not glob.glob(os.path.join(d, 'f*.png')):
         subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), '-loglevel', 'error', '-i', os.path.join(SRC, video + '.mp4'), os.path.join(d, 'f%03d.png')], check=True)

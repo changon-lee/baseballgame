@@ -440,8 +440,20 @@ function drawPerson(ctx, x, y, s, u, act, ph, since, dir, helmet, glove) {
 // 후보를 차례로 해 보고 그림이 있는 첫 번째를 쓴다(앞·뒷모습 달리기 그림이 아직 없으면 옆모습으로)
 // 기준점: foot = 발 가운데, head = 머리(달릴 땐 머리가 엉덩이보다 앞이라 조금 뒤로), mid = 그림 가운데
 // 달리기는 i = 'cyc': 그 묶음의 그림 수로 한 바퀴(ph 2π)를 나눠 고른다
+// 카메라 기준 진행 방향 c(1 = 멀어짐, -1 = 다가옴) → 그림 방향. 지금 방향 칸을 0.08 넘게 벗어나야 바꾼다(경계에서 깜빡이지 않게)
+const VIEW_BANDS = [['back', 0.8, 2], ['diagb', 0.3, 0.8], ['side', -0.3, 0.3], ['diagf', -0.8, -0.3], ['front', -2, -0.8]];
+function viewOf(c, prev) {
+  const p = VIEW_BANDS.find(b => b[0] === prev);
+  if (p && c > p[1] - 0.08 && c < p[2] + 0.08) return prev;
+  return VIEW_BANDS.find(b => c >= b[1] && c < b[2])[0];
+}
 function spriteFor(kind, act, ph, since, view) {
   const running = act === 'run' || act === 'drop';
+  // 대각선 그림(오른쪽을 향함, 왼쪽은 뒤집는다): 주자만 있다. 없으면 뒤·앞 그림으로
+  const flat = view === 'diagb' ? 'back' : view === 'diagf' ? 'front' : view;
+  if (kind === 'r' && running && (view === 'diagb' || view === 'diagf'))
+    return [[`runner_${view}`, 'cyc', 'foot', true], [`runner_${flat}`, 'cyc', 'foot'], ['runner', 'cyc', 'foot', true]];
+  view = flat;
   if (kind === 'u') return [['ump', 0, 'foot']];
   if (kind === 'r') {
     if (running) return [...(view !== 'side' ? [[`runner_${view}`, 'cyc', 'foot']] : []), ['runner', 'cyc', 'foot', true]];
@@ -528,11 +540,9 @@ export function drawPlay3D(ctx, W, H, sc, ms, uni, opts = {}) {
     if (speed >= 0.5) {
       // c: 1 = 카메라에서 멀어지는 쪽, -1 = 카메라 쪽으로. 대각선(1루→2루처럼 비스듬히 멀어짐)은 옆모습보다 뒷모습이 자연스럽다
       // → 옆모습은 거의 가로로 달릴 때만. 경계에서 그림이 왔다 갔다 하지 않게, 지금 모습을 바꿀 때는 경계를 조금 더 넘어야 한다
+      // 다섯 방향: 뒤(멀어짐) · 대각선 뒤 · 옆 · 대각선 앞 · 앞(다가옴). 대각선 그림이 없는 사람(수비수)은 뒤·앞 그림을 쓴다
       const c = (k.vx * ex + k.vy * ey) / (speed * el), prev = views.get(id);
-      const IN = 0.34, OUT = 0.2;
-      view = prev === 'back' ? (c > OUT ? 'back' : c < -IN ? 'front' : 'side')
-        : prev === 'front' ? (c < -OUT ? 'front' : c > IN ? 'back' : 'side')
-        : c > IN ? 'back' : c < -IN ? 'front' : 'side';
+      view = viewOf(c, prev);
     } else if (kind === 'f' && (act === 'watch' || act === 'stand' || act === 'catch' || act === 'camp' || act === 'ready' || act === 'cover')) {
       // 서서 공을 볼 때: 공이 자기보다 한참 뒤(카메라 반대쪽)에 떠 있으면 등을 보인다
       const bp = ballNow, c = ((bp[0] - k.x) * ex + (bp[1] - k.y) * ey) / el;
@@ -578,7 +588,17 @@ export function drawPlay3D(ctx, W, H, sc, ms, uni, opts = {}) {
 
   // 비거리
   const shownAt = sc.landT ?? (sc.fly && sc.outs.length ? sc.outs[0] : null);
-  if (shownAt != null && t >= shownAt && sc.distM) {
+  if (shownAt != null && t >= shownAt && sc.distM && sc.event === 'HR') {
+    // 홈런: 넘어간 순간 화면 아래 가운데에 크게(튀어나오며)
+    const u = Math.min(1, (t - shownAt) / 0.25), sc2 = 1 + 0.5 * (1 - u) * (1 - u);
+    ctx.save(); ctx.translate(W / 2, H - 46); ctx.scale(sc2, sc2); ctx.globalAlpha = Math.min(1, u * 2);
+    ctx.textAlign = 'center'; ctx.lineJoin = 'round';
+    ctx.font = '800 13px system-ui,sans-serif'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.6)';
+    ctx.strokeText('비거리', 0, -24); ctx.fillStyle = '#e4ecf6'; ctx.fillText('비거리', 0, -24);
+    ctx.font = '900 34px system-ui,sans-serif'; ctx.lineWidth = 6;
+    ctx.strokeText(`${sc.distM}m`, 0, 8); ctx.fillStyle = '#ffd43b'; ctx.fillText(`${sc.distM}m`, 0, 8);
+    ctx.restore();
+  } else if (shownAt != null && t >= shownAt && sc.distM) {
     ctx.font = 'bold 15px system-ui,sans-serif'; ctx.textAlign = 'left'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.55)';
     const txt = `비거리 ${sc.distM}m`;
     ctx.strokeText(txt, 12, H - 16); ctx.fillStyle = '#eef3fa'; ctx.fillText(txt, 12, H - 16);
