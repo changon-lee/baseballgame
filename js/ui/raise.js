@@ -5,7 +5,9 @@ import { standings } from '../core/season.js';
 import { avg, era, ip } from '../core/growth.js';
 import { createRng } from '../core/rng.js';
 import { TRAITS } from '../core/perks.js';
-import { RAISE, DRILLS, newSlot, loadRaise, saveRaise, slotPlayer, canChoose, choose, dayInfo, matchSetup, applyDay, seasonOver, nextSeason, seasonGains } from '../core/raise.js';
+import { PRACTICE } from '../core/practice.js';
+import { defaultLineup } from '../core/team.js';
+import { RAISE, DRILLS, newSlot, loadRaise, saveRaise, slotPlayer, raiseTeam, canChoose, choose, dayInfo, matchSetup, applyDay, seasonOver, nextSeason, seasonGains } from '../core/raise.js';
 import { face, badge } from './hub.js';
 
 const ME = USER_TEAM_ID;
@@ -102,9 +104,10 @@ export function showRaise(root, { storage, loadGame, onBack }) {
       : `<div class="rz-drills">${drills.map(x => {
         const c = canChoose(s, x.id), n = s.progress.train[x.id] || 0, tr = x.trait && traitOf(x.trait);
         const sub = x.drill ? (s.traits.includes(x.trait) ? `${tr.name} 보유` : `→ ${tr.name} ${Math.min(n, RAISE.drillNeed)}/${RAISE.drillNeed}`) : `${STAT_ICON[x.stat]} ${STAT_KO[x.stat]} ${p[x.stat]}`;
-        return `<button class="chip ${x.drill ? 'drill' : ''}" data-act="choose" data-id="${x.id}" ${c.ok ? '' : 'disabled'}><b>${x.name}</b><small>${sub}</small><small class="${c.ok ? '' : 'tired'}">${c.ok ? `피로 +${x.cost}` : '너무 지쳤어요'}</small></button>`;
+        return `<button class="chip ${x.drill ? 'drill' : ''}" data-act="choose" data-id="${x.id}" ${c.ok ? '' : 'disabled'}><b>${x.name}</b><small>${sub}</small><small class="${c.ok ? '' : 'tired'}">${c.ok ? `피로 +${x.cost} · ${s.kind === 'bat' ? `타격 ${PRACTICE.goal.bat}번` : `투구 ${PRACTICE.goal.pitch}구`}` : '너무 지쳤어요'}</small></button>`;
       }).join('')}
-        <button class="chip rest" data-act="choose" data-id="rest"><b>😴 휴식</b><small>피로 ${RAISE.rest} · 컨디션이 보통 쪽으로</small></button></div>`;
+        <button class="chip rest" data-act="choose" data-id="rest"><b>😴 휴식</b><small>피로 ${RAISE.rest} · 컨디션이 보통 쪽으로</small></button></div>
+      <p class="hint">훈련을 고르면 연습장에서 직접 ${s.kind === 'bat' ? '쳐요' : '던져요'}. 잘할수록 많이 오르고, 중간에 나가면 훈련은 없던 일이 돼요.</p>`;
     screen(`<header class="bar"><button class="ghost small" data-act="back">←</button><h2>🌱 육성모드</h2><button class="ghost small rz-rec" data-act="records">📜 기록</button></header>
       <section class="card rz-card">
         <div class="rz-who">${face(p, s.kind === 'bat' ? 'b' : 'p', 'lg')}<div><b class="rz-name">${esc(p.name)}</b><small>삼성 · ${roleOf(s)} · ${s.year} 시즌</small></div>${condHtml(s.condition)}</div>
@@ -124,13 +127,37 @@ export function showRaise(root, { storage, loadGame, onBack }) {
     act('back', () => { flash = null; slotsView(); });
     act('records', () => recordsView(i));
     act('choose', b => {
-      const r = choose(data.slots[i], b.dataset.id), x = DRILLS.find(q => q.id === b.dataset.id);
+      const id = b.dataset.id;
+      if (id !== 'rest') return training(i, id);
+      const r = choose(data.slots[i], 'rest');
       data = { ...data, slots: data.slots.map((q, j) => (j === i ? r.slot : q)) }; persist();
-      const ups = r.ups.map(u => `${STAT_KO[u.stat]} +${u.n}`).join(', ');
-      flash = b.dataset.id === 'rest' ? `휴식 · 피로 ${Math.round(r.slot.fatigue)}` : `${x.name} 완료${ups ? ` · ${ups}` : ' · 경험치가 쌓였어요'}${r.trait ? ` · ✨ 특성 '${traitOf(r.trait).name}'을 얻었어요!` : ''}`;
+      flash = `휴식 · 피로 ${Math.round(r.slot.fatigue)}`;
       hubView(i);
     });
     act('play', () => play(i));
+  }
+
+  // 훈련 = 연습장 한 번(타자는 타격 연습, 투수는 투구 연습). 끝까지 하면 그 점수로 능력치 경험치가 쌓인다
+  async function training(i, id) {
+    const s = data.slots[i], x = DRILLS.find(q => q.id === id);
+    if (!canChoose(s, id).ok) return;
+    const mod = await loadGame();
+    if (!mod) return hubView(i);
+    const team = raiseTeam(s), base = defaultLineup(team), kind = s.kind;
+    const lineup = kind === 'pitch' ? { ...base, starterId: s.playerId } : { ...base, order: Array(9).fill(s.playerId) };
+    mod.showGame(root, {
+      userTeam: team, cpuTeam: getTeam('lg'), lineup, innings: 99, title: `${x.name} · ${slotPlayer(s).name}`,
+      practice: { kind, playerId: s.playerId, stat: x.stat, goal: PRACTICE.goal[kind] },
+    }, result => {
+      const pr = result && result.practice;
+      if (!pr) { flash = null; return hubView(i); }               // 중간에 나감: 훈련 안 한 것으로
+      const r = choose(data.slots[i], id, pr.pts);
+      data = { ...data, slots: data.slots.map((q, j) => (j === i ? r.slot : q)) }; persist();
+      const k = pr.pts / RAISE.practiceRef[kind], grade = k >= 1.3 ? '훌륭해요!' : k >= 0.9 ? '좋아요' : '아쉬워요';
+      const ups = r.ups.map(u => `${STAT_KO[u.stat]} +${u.n}`).join(', ');
+      flash = `${x.name} 완료 · 연습 점수 ${pr.pts.toFixed(1)} ${grade}${ups ? ` · ${ups}` : ' · 경험치가 쌓였어요'}${r.trait ? ` · ✨ 특성 '${traitOf(r.trait).name}'을 얻었어요!` : ''}`;
+      hubView(i);
+    });
   }
 
   async function play(i) {

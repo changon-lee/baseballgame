@@ -11,6 +11,7 @@ const memStore = (init = {}) => {
   return { getItem: k => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), map: m };
 };
 const fresh = s => ({ ...s, chosen: false });
+const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} vs ${b}`);
 
 test('newSlot: real Samsung player, role from roster', () => {
   const b = newSlot('samsung-b03');
@@ -41,6 +42,23 @@ test('training raises the stat with diminishing returns and caps', () => {
   let t = { ...newSlot('samsung-b04'), growth: { xp: {}, delta: { 'samsung-b04': { power: 6 } } } };   // 디아즈 93+6 = 99
   for (let i = 0; i < 10; i++) t = choose({ ...fresh(t), fatigue: 0 }, 'power').slot;
   assert.equal(slotPlayer(t).power, 99);
+});
+
+test('training XP follows the practice score: a better session grows more', () => {
+  const s = { ...newSlot('samsung-b03'), fatigue: 0 };
+  const xp = r => r.slot.growth.xp['samsung-b03'].power + 12 * ((r.slot.growth.delta['samsung-b03'] || {}).power || 0);
+  const low = xp(choose(s, 'power', 2)), mid = xp(choose(s, 'power', RAISE.practiceRef.bat)), high = xp(choose(s, 'power', 25));
+  assert.ok(low < mid && mid < high, `${low} ${mid} ${high}`);
+  near(mid, xpPerTraining('power', 72));
+  near(high, xpPerTraining('power', 72) * RAISE.practiceMax);
+  near(low, xpPerTraining('power', 72) * RAISE.practiceMin);
+  // 투수 연습은 기준 점수가 다르다
+  const p = { ...newSlot('samsung-p01'), fatigue: 0 };
+  const px = choose(p, 'control', RAISE.practiceRef.pitch).slot.growth.xp['samsung-p01'].control;
+  near(px, xpPerTraining('control', 82));
+  // 특훈도 연습 점수를 따르고, 진행도는 한 번으로 센다
+  const d = choose(s, 'drillRisp', 1);
+  assert.equal(d.slot.progress.train.drillRisp, 1);
 });
 
 test('fatigue blocks training but never rest; stays within 0..100', () => {

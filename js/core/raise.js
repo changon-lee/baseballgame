@@ -20,6 +20,8 @@ export const RAISE = {
   tiredAt: 70,                            // 이 이상으로 경기에 나가면 컨디션이 한 칸 더 떨어진다
   drillNeed: 4,                           // 같은 특훈을 이만큼 하면 특성
   drillXp: 0.4,                           // 특훈이 능력치에 주는 경험치(일반 훈련 대비)
+  // 훈련 = 연습장 한 번(타격 10번 / 투구 5구). 연습 점수가 기준이면 경험치 그대로, 잘하면 최대 1.5배, 못하면 0.3배까지
+  practiceRef: { bat: 10, pitch: 6 }, practiceMin: 0.3, practiceMax: 1.5,
   xpBase: 6, xpMin: 1.8, xpSlope: 0.12,   // 훈련 경험치: max(xpMin, xpBase - (능력치-60)×xpSlope), 12점마다 +1
   seasonCycles: 3, startEvery: 4,         // 9개 팀 × 3 = 27경기, 선발은 4경기마다
   firstYear: 2027,
@@ -148,8 +150,9 @@ export function canChoose(slot, id) {
   return { ok: true };
 }
 
-// 오늘의 선택. { slot, ups: [{ stat, n }], trait: 새 특성 id | null }
-export function choose(slot, id) {
+// 오늘의 선택. pts: 훈련으로 한 연습장 점수(없으면 기준 점수로 친다 — 시뮬레이션·테스트용)
+// { slot, ups: [{ stat, n }], trait: 새 특성 id | null }
+export function choose(slot, id, pts = null) {
   const c = canChoose(slot, id);
   if (!c.ok) throw new Error(`고를 수 없어요: ${id} (${c.reason})`);
   if (id === 'rest') {
@@ -159,7 +162,8 @@ export function choose(slot, id) {
   const d = drillOf(id), now = slotPlayer(slot)[d.stat];
   let growth = slot.growth, ups = [];
   if (now < CAP[d.stat]) {
-    const r = gainXp(growth, slot.playerId, d.stat, xpPerTraining(d.stat, now) * (d.drill ? RAISE.drillXp : 1));
+    const k = pts == null ? 1 : clamp(pts / RAISE.practiceRef[slot.kind], RAISE.practiceMin, RAISE.practiceMax);
+    const r = gainXp(growth, slot.playerId, d.stat, xpPerTraining(d.stat, now) * k * (d.drill ? RAISE.drillXp : 1));
     growth = r.growth; ups = r.ups.map(u => ({ stat: u.stat, n: u.n }));
   }
   let progress = slot.progress, traits = slot.traits, trait = null;
