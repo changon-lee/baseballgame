@@ -42,3 +42,14 @@ test('an infielder near a fly ball runs toward it instead of standing still', ()
   }
   assert.ok(checked > 20, `checked ${checked}`);
 });
+
+test('no fielder teleports: nobody moves faster than a sprint between keyframes (throwing error chase included)', () => {
+  const cases = [['ERROR', 'throw'], ['ERROR', 'fumble'], ['SINGLE', null], ['DOUBLE', null], ['TRIPLE', null], ['OUT', null], ['DOUBLE_PLAY', null], ['INFIELD_SINGLE', null], ['SAC_BUNT', null], ['BUNT_FC', null]];
+  for (const [event, style] of cases) for (let s = 1; s <= 120; s++) {
+    const sc = buildPlay({ event, style, fly: false, contact: { pull: (s % 5 - 2) / 2, quality: 0.5 }, bats: s % 2 ? 'R' : 'L', bases: [s % 2 === 0, s % 3 === 0, false], rng: createRng(s) });
+    for (const [n, k] of Object.entries(sc.fielders)) for (let i = 1; i < k.length; i++) {
+      const d = hyp(k[i - 1].x, k[i - 1].y, k[i].x, k[i].y), dt = k[i].t - k[i - 1].t;
+      assert.ok(d < 0.5 || d / dt <= 32, `${event}/${style} seed ${s}: ${n} ${d.toFixed(0)}ft in ${dt.toFixed(2)}s`);
+    }
+  }
+});

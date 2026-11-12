@@ -131,13 +131,14 @@ function simGround(p0, v0, t0, maxT = 9) {
   return { type: 'path', t0, t1: t0 + (pts.length / 3 - 1) * dt, dt, pts, wallT };
 }
 // 수비수가 굴러오는 공을 잡을 수 있는 가장 이른 순간
-function intercept(path, f0, speed, tMin, zMax = 4.5) {
+// free: 수비수가 뛰기 시작할 수 있는 때(처음 반응이면 REACT, 앞서 다른 동작을 하고 있었으면 그게 끝난 때)
+function intercept(path, f0, speed, tMin, zMax = 4.5, free = REACT) {
   for (let t = Math.max(path.t0, tMin); t <= path.t1; t += 1 / 60) {
     const p = pathPos(path, t);
-    if (p[2] <= zMax && hyp(...f0, p[0], p[1]) / speed + REACT <= t) return { t, x: p[0], y: p[1] };
+    if (p[2] <= zMax && hyp(...f0, p[0], p[1]) / speed + free <= t) return { t, x: p[0], y: p[1] };
   }
   const e = pathPos(path, path.t1);
-  return { t: Math.max(path.t1, REACT + hyp(...f0, e[0], e[1]) / speed), x: e[0], y: e[1] };
+  return { t: Math.max(path.t1, free + hyp(...f0, e[0], e[1]) / speed), x: e[0], y: e[1] };
 }
 const hang = H => 2 * Math.sqrt(2 * H / G) * 0.95;
 // 수비수가 공이 떨어질 때까지 뛰어서 닿을 수 있는 거리(반응 시간 빼고). 안타가 떨어지는 곳은 모두에게 이보다 멀어야 자연스럽다
@@ -232,7 +233,8 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
   const fieldBall = (who, path, tMin) => {
     used.add(who);
     const sp = runSpeed(who) * (OF.includes(who) ? 1 : 1.05);
-    const I = intercept(path, F[who][0] ? [lastKey(F[who]).x, lastKey(F[who]).y] : SPOTS[who], sp, tMin);
+    // 다른 동작(점프·송구 등)을 하던 수비수는 그게 끝나야 뛰기 시작한다 — 안 그러면 공 있는 데로 순간이동한다
+    const l = lastKey(F[who]), I = intercept(path, [l.x, l.y], sp, tMin, 4.5, Math.max(REACT, l.t));
     const arr = arriveAt(F[who], REACT, I.t - 0.05, I.x, I.y + (OF.includes(who) ? 0.5 : 1), sp, 'set');
     act(F[who], Math.max(arr, I.t - 0.15), 'field');
     sc.ball.push(path);
