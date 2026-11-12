@@ -77,3 +77,55 @@ test('applyDay keeps the whole league, nextSeason starts it over', () => {
   assert.ok(Object.keys(s.league.pit).length >= 10);
   assert.deepEqual(nextSeason(s).league, { bat: {}, pit: {} });
 });
+
+// ── 순위표 ──
+test('leaderboard: top rows in order, my rank, ties share a rank', async () => {
+  const { leaderboard } = await import('../js/core/raisestats.js');
+  const lg = batLeague(5);                      // b0..b9: 0~9안타, me: 5안타
+  lg.bat['samsung-b03'] = lg.bat.me; delete lg.bat.me;
+  const s = slotWith('samsung-b03', lg, 4);
+  const b = leaderboard(s, 'avg');
+  assert.equal(b.name, '타율');
+  assert.equal(b.pool, 11);
+  assert.deepEqual(b.rows.slice(0, 3).map(r => r.text), ['.900', '.800', '.700']);
+  assert.equal(b.rows[0].rank, 1);
+  const me = b.rows.find(r => r.me);
+  assert.equal(me.rank, 5); assert.equal(me.tie, true);          // b5와 똑같이 .500 → 공동 5위
+  assert.equal(b.rows.find(r => r.id === 'b5').rank, 5);
+  assert.equal(b.rows.find(r => r.id === 'b4').rank, 7);         // 공동 둘 다음은 7위
+  assert.equal(b.myRank, 5);
+  assert.ok(me.name.length > 0 && me.team);
+});
+
+test('leaderboard: only the top 10 plus me when I am further down', async () => {
+  const { leaderboard } = await import('../js/core/raisestats.js');
+  const bat = {};
+  for (let i = 0; i < 20; i++) bat['b' + i] = { pa: 10, ab: 10, h: 2 + (i % 8), d2: 0, d3: 0, hr: 0, bb: 0, so: 0, rbi: i + 1 };
+  bat['samsung-b03'] = { pa: 10, ab: 10, h: 1, d2: 0, d3: 0, hr: 0, bb: 0, so: 0, rbi: 0 };
+  const b = leaderboard(slotWith('samsung-b03', { bat, pit: {} }, 4), 'rbi');
+  assert.equal(b.rows.length, 11);
+  assert.equal(b.rows[10].me, true); assert.equal(b.rows[10].rank, 21); assert.equal(b.rows[10].gap, true);
+  assert.equal(b.rows[0].text, '20');
+});
+
+test('leaderboard: below the bar I am listed without a rank; ERA ranks low first among starters', async () => {
+  const { leaderboard } = await import('../js/core/raisestats.js');
+  const lg = batLeague(5); lg.bat['samsung-b03'] = { ...lg.bat.me, pa: 2, ab: 2 }; delete lg.bat.me;
+  const b = leaderboard(slotWith('samsung-b03', lg, 4), 'avg');
+  const me = b.rows.find(r => r.me);
+  assert.equal(me.rank, null); assert.equal(b.myRank, null); assert.equal(b.pool, 10);
+  const pit = {};
+  ['lg-p01', 'lg-p02', 'kt-p01', 'kt-p02', 'kia-p01'].forEach((id, i) => { pit[id] = { bf: 60, outs: 45, h: 12, hr: 1, bb: 4, so: 10, r: 2 + i }; });
+  pit['lg-p06'] = { bf: 10, outs: 45, h: 0, hr: 0, bb: 0, so: 0, r: 0 };            // 불펜은 선발 순위표에 없다
+  pit['samsung-p01'] = { bf: 60, outs: 45, h: 10, hr: 0, bb: 3, so: 15, r: 3 };
+  const e = leaderboard(slotWith('samsung-p01', { bat: {}, pit }, 10), 'era');
+  assert.deepEqual(e.rows.map(r => r.id), ['lg-p01', 'lg-p02', 'samsung-p01', 'kt-p01', 'kt-p02', 'kia-p01']);
+  assert.equal(e.rows[2].rank, 2); assert.equal(e.rows[2].tie, true);
+  assert.ok(!e.rows.some(r => r.id === 'lg-p06'));
+});
+
+test('season card rows carry my rank too', () => {
+  const lg = batLeague(10); lg.bat['samsung-b03'] = lg.bat.me; delete lg.bat.me;
+  const c = seasonCard(slotWith('samsung-b03', lg, 4));
+  assert.equal(c.rows.find(r => r.key === 'avg').rank, 1);
+});

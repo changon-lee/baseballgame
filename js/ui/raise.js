@@ -8,7 +8,7 @@ import { TRAITS } from '../core/perks.js';
 import { PRACTICE } from '../core/practice.js';
 import { defaultLineup } from '../core/team.js';
 import { RAISE, DRILLS, newSlot, loadRaise, saveRaise, slotPlayer, raiseTeam, canChoose, choose, dayInfo, applyDay, seasonOver, nextSeason, seasonGains, prelude } from '../core/raise.js';
-import { seasonCard } from '../core/raisestats.js';
+import { seasonCard, leaderboard, STAT_DEFS, BOARD_TOP } from '../core/raisestats.js';
 import { face, badge } from './hub.js';
 
 const ME = USER_TEAM_ID;
@@ -55,10 +55,29 @@ function seasonStatsCard(slot) {
   const head = `상위 N%: 이번 시즌 규정(${c.need})을 채운 리그 ${group} ${c.pool}명 중 내 순위예요. 1%에 가까울수록 리그 최고예요.`;
   return `<section class="card rz-season"><div class="card-h">📊 ${slot.year} 시즌 기록 ${tip(head, '상위 퍼센트')}</div>
       <div class="rz-sgrid">${c.rows.map(r => `<div class="rz-st ${tier(r.pct)}">
-        <span class="k">${esc(r.name)}${tip(r.info, r.name)}</span><b>${esc(r.text)}</b><em>${r.pct ? `상위 ${r.pct}%` : '&nbsp;'}</em></div>`).join('')}</div>
+        <span class="k">${esc(r.name)}${tip(r.info, r.name)}</span><b>${esc(r.text)}</b><em>${r.pct ? `${r.rank}위 · 상위 ${r.pct}%` : '&nbsp;'}</em></div>`).join('')}</div>
       <p class="hint">${esc(c.extra)}</p>
       ${c.qualified ? '' : `<p class="hint">규정(${c.need})을 채우면 리그에서 상위 몇 %인지 나와요</p>`}
     </section>`;
+}
+
+// 리그 순위표: 기록 탭(타율·홈런…)마다 1~10위와 내 자리
+const groupName = slot => (slot.kind === 'bat' ? '타자' : slot.role === 'SP' ? '선발 투수' : '불펜 투수');
+function boardTable(slot, key) {
+  const b = leaderboard(slot, key);
+  const tr = r => `<tr class="${r.me ? 'me' : ''}"><td>${r.rank == null ? '-' : `${r.tie ? '<small>공동</small>' : ''}${r.rank}`}</td>
+      <td>${esc(r.name)} <small>${esc(r.team)}</small></td><td>${esc(r.text)}</td></tr>`;
+  const top = b.rows.slice(0, BOARD_TOP), rest = b.rows.slice(BOARD_TOP);   // 10위 밖이면 나만 따로 아래에
+  const gap = rest.some(r => r.gap) ? '<tr class="gap"><td colspan="3">⋯</td></tr>' : '';
+  const mine = b.myRank != null ? `내 순위 <b>${b.rows.find(r => r.me).tie ? '공동 ' : ''}${b.myRank}위</b> / ${b.pool}명` : '규정을 채우면 순위에 들어가요';
+  return `<p class="hint rz-bcap">${esc(b.name)}${b.low ? ' (낮을수록 좋아요)' : ''} · ${mine}</p>
+    ${b.rows.length ? `<table class="rz-table rz-board">${top.map(tr).join('')}${gap}${rest.map(tr).join('')}</table>` : '<p class="hint">아직 순위에 든 선수가 없어요</p>'}`;
+}
+function boardCard(slot, key) {
+  const defs = STAT_DEFS[slot.kind === 'pitch' ? 'pit' : 'bat'];
+  return `<section class="card rz-boardc"><div class="card-h">🏅 리그 ${groupName(slot)} 순위표 ${tip(`이번 시즌 규정을 채운 리그 ${groupName(slot)}끼리 매긴 순위예요. 기록이 같으면 공동 순위예요.`, '순위표')}</div>
+      <div class="rz-tabs">${defs.map(d => `<button type="button" class="rz-tab ${d.key === key ? 'on' : ''}" data-act="board" data-k="${d.key}">${esc(d.name)}</button>`).join('')}</div>
+      <div class="rz-bbody">${boardTable(slot, key)}</div></section>`;
 }
 
 // 설명 말풍선 하나를 화면에 띄워 두고 돌려 쓴다(폰은 누르기, 컴퓨터는 마우스 올리기)
@@ -99,6 +118,13 @@ export function showRaise(root, { storage, loadGame, onBack }) {
     const sc = root.querySelector('.screen'); if (sc) sc.scrollTop = 0;
   };
   const act = (name, fn) => root.querySelectorAll(`[data-act=${name}]`).forEach(b => { b.onclick = () => fn(b); });
+  // 순위표 탭: 고른 기록은 기억해 두고 표만 바꾼다
+  const boardKey = { bat: 'avg', pitch: 'era' };
+  const bindBoard = s => act('board', b => {
+    boardKey[s.kind] = b.dataset.k;
+    root.querySelectorAll('[data-act=board]').forEach(c => c.classList.toggle('on', c === b));
+    const body = root.querySelector('.rz-bbody'); if (body) body.innerHTML = boardTable(s, b.dataset.k);
+  });
 
   // ── 슬롯 목록 ──
   function slotsView() {
@@ -245,8 +271,10 @@ export function showRaise(root, { storage, loadGame, onBack }) {
         ${rep.ups.length ? `<div class="ups">${rep.ups.map(u => `<div><b>${STAT_ICON[u.stat]} ${STAT_KO[u.stat]}</b><span><em>+${u.n}${u.stat === 'velo' ? 'km' : ''}</em></span></div>`).join('')}</div>` : ''}
       </section>
       ${seasonStatsCard(s)}
+      ${boardCard(s, boardKey[s.kind])}
       <div class="actions"><button class="primary big" data-act="ok">${rep.seasonOver ? '시즌 결산 보기' : '확인'}</button></div>`, 'result');
     act('ok', () => hubView(i));
+    bindBoard(s);
   }
 
   // ── 시즌 종료 ──
@@ -276,7 +304,8 @@ export function showRaise(root, { storage, loadGame, onBack }) {
       return [d && `특훈 ${Math.min(train[d.id] || 0, RAISE.drillNeed)}/${RAISE.drillNeed}`, f && `활약 ${Math.min(feat[f[0]] || 0, f[1])}/${f[1]}`].filter(Boolean).join(' · ');
     };
     screen(`<header class="bar"><button class="ghost small" data-act="back">←</button><h2>📜 ${esc(p.name)} 기록</h2></header>
-      <section class="card"><div class="card-h">${s.year} 시즌 (진행 중)</div><p class="rz-line">${seasonLine(s, s.stats)}</p></section>
+      ${seasonStatsCard(s)}
+      ${boardCard(s, boardKey[s.kind])}
       ${s.history.slice().reverse().map(h => `<section class="card slim"><div class="card-h">${h.year} 시즌 · 팀 ${h.rank}위 (${h.w}승 ${h.l}패)</div><p class="rz-line">${seasonLine(s, h.line)}</p>
         ${(h.traitsNew || []).length ? `<p class="hint">✨ ${h.traitsNew.map(t => esc(traitOf(t).name)).join(', ')}</p>` : ''}</section>`).join('')}
       <section class="card"><div class="card-h">🧮 통산</div><p class="rz-line">${seasonLine(s, s.total)}</p></section>
@@ -284,6 +313,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
         ${TRAITS.filter(t => t.kind === s.kind).map(t => `<div class="ach ${s.traits.includes(t.id) ? 'on' : ''}"><i>${s.traits.includes(t.id) ? '✨' : '🔒'}</i><div><b>${esc(t.name)}</b><small>${esc(t.desc)}${s.traits.includes(t.id) ? '' : ` · ${howFar(t.id)}`}</small></div></div>`).join('')}
       </section>`);
     act('back', () => hubView(i));
+    bindBoard(s);
   }
 
   slotsView();

@@ -39,10 +39,10 @@ export const STAT_DEFS = {
 
 const ROLE = new Map(TEAMS.flatMap(t => t.pitchers.map(p => [p.id, p.role])));
 const isSP = id => ROLE.get(id) === 'SP';
+const WHO = new Map(TEAMS.flatMap(t => [...t.batters, ...t.pitchers].map(p => [p.id, { name: p.name, team: t.short }])));
 
-// 내 시즌 기록 카드: { kind, qualified, pool, need, extra, rows: [{ key, name, info, text, pct }] }
-// pct: 상위 몇 %(1~100, 작을수록 잘함). 규정 미달이거나 비교할 선수가 적으면 null
-export function seasonCard(slot) {
+// 비교 무리: 내 기록(mine)과 규정을 채운 같은 무리 선수들(others: [{ id, line }])
+function group(slot) {
   const kind = slot.kind === 'pitch' ? 'pit' : 'bat', id = slot.playerId, st = slot.stats || {};
   const lg = slot.league || emptyLeague(), games = (slot.season && slot.season.round) || 0;
   const zero = kind === 'bat' ? { pa: 0, ab: 0, h: 0, d2: 0, d3: 0, hr: 0, bb: 0, so: 0, rbi: 0 } : { bf: 0, outs: 0, h: 0, hr: 0, bb: 0, so: 0, r: 0 };
@@ -51,23 +51,52 @@ export function seasonCard(slot) {
   const need = kind === 'bat' ? QUALIFY.bat * games : (sp ? QUALIFY.SP : QUALIFY.RP) * games;
   const amount = l => (kind === 'bat' ? l.pa : l.outs);
   const sameGroup = pid => kind === 'bat' || isSP(pid) === sp;
-  const others = Object.entries(lg[kind]).filter(([pid, l]) => pid !== id && sameGroup(pid) && amount(l) >= need && amount(l) > 0).map(([, l]) => l);
+  const others = Object.entries(lg[kind]).filter(([pid, l]) => pid !== id && sameGroup(pid) && amount(l) >= need && amount(l) > 0).map(([pid, line]) => ({ id: pid, line }));
   const qualified = amount(mine) > 0 && amount(mine) >= need;
-  const pool = qualified ? others.length + 1 : others.length;
+  return { kind, id, st, mine, sp, qualified, others, pool: qualified ? others.length + 1 : others.length };
+}
+const beats = (d, a, b) => (d.low ? a < b : a > b);
+
+// 내 시즌 기록 카드: { kind, qualified, pool, need, extra, rows: [{ key, name, info, text, pct, rank }] }
+// pct: 상위 몇 %(1~100, 작을수록 잘함), rank: 리그 몇 위. 규정 미달이거나 비교할 선수가 적으면 null
+export function seasonCard(slot) {
+  const { kind, st, mine, sp, qualified, others, pool } = group(slot);
   const rows = STAT_DEFS[kind].map(d => {
     const v = d.val(mine);
-    let pct = null;
+    let pct = null, rank = null;
     if (qualified && v != null && pool >= MIN_POOL) {
-      const vals = others.map(d.val).filter(x => x != null);
-      const better = vals.filter(x => (d.low ? x < v : x > v)).length, same = vals.filter(x => x === v).length;
+      const vals = others.map(o => d.val(o.line)).filter(x => x != null);
+      const better = vals.filter(x => beats(d, x, v)).length, same = vals.filter(x => x === v).length;
       // 같은 기록끼리는 그 무리의 가운데 순위(0홈런이 대부분이면 0홈런은 상위권이 아니다)
       pct = Math.max(1, Math.ceil(((better + 1 + same / 2) / (vals.length + 1)) * 100));
+      rank = better + 1;
     }
-    return { key: d.key, name: d.name, info: d.info, text: v == null ? '-' : d.fmt(v), pct };
+    return { key: d.key, name: d.name, info: d.info, text: v == null ? '-' : d.fmt(v), pct, rank };
   });
   const extra = kind === 'bat'
     ? `${st.g || 0}경기 · ${mine.pa}타석 ${mine.h}안타 · 볼넷 ${mine.bb} · 삼진 ${mine.so}`
     : `${st.g || 0}경기 · ${st.w || 0}승 ${st.l || 0}패${slot.role === 'CL' ? ` ${st.sv || 0}세이브` : ''}`;
   const needText = kind === 'bat' ? `팀 경기 수 × ${QUALIFY.bat}타석` : `팀 경기 수 × ${sp ? QUALIFY.SP : QUALIFY.RP}아웃`;
   return { kind, qualified, pool, need: needText, extra, rows };
+}
+
+// 리그 순위표(기록 하나): 규정을 채운 같은 무리 선수들을 잘한 순서로. 위에서 top명 + (그 밖이면) 나
+// { key, name, low, pool, myRank, rows: [{ rank, tie, id, name, team, text, me }] }. 같은 기록은 같은 순위(공동)
+export const BOARD_TOP = 10;
+export function leaderboard(slot, key, top = BOARD_TOP) {
+  const g = group(slot), d = STAT_DEFS[g.kind].find(x => x.key === key);
+  const list = g.others.map(o => ({ id: o.id, v: d.val(o.line), me: false }));
+  if (g.qualified) list.push({ id: g.id, v: d.val(g.mine), me: true });
+  const ranked = list.filter(x => x.v != null).sort((a, b) => (a.v === b.v ? a.me - b.me : beats(d, a.v, b.v) ? -1 : 1));
+  const who = id => WHO.get(id) || { name: id, team: '' };
+  const row = (x, rank, tie) => ({ rank, tie, id: x.id, name: who(x.id).name, team: who(x.id).team, text: x.v == null ? '-' : d.fmt(x.v), me: x.me });
+  const all = ranked.map(x => {
+    const better = ranked.filter(y => beats(d, y.v, x.v)).length, same = ranked.filter(y => y.v === x.v).length;
+    return row(x, better + 1, same > 1);
+  });
+  const rows = all.slice(0, top);
+  const mine = all.find(r => r.me);
+  if (mine && !rows.includes(mine)) rows.push({ ...mine, gap: all.indexOf(mine) > top });   // gap: 10위와 나 사이에 다른 선수가 있다
+  if (!g.qualified) rows.push(row({ id: g.id, v: d.val(g.mine), me: true }, null, false));
+  return { key, name: d.name, low: !!d.low, pool: g.pool, myRank: mine ? mine.rank : null, rows };
 }
