@@ -79,7 +79,8 @@ function goFullscreen() {
 // raise(육성모드): { kind, role, playerId, cond } — 내 선수 장면(내 타석 / 내가 던지는 초 공격 / 마무리 9·10회초)만 직접 하고 나머지는 자동.
 //   perks = { id, cond, traits }(컨디션·특성 효과). 끝까지 하면 onExit({ home, away, log, starterId, raise: { note } })
 // stats: 우리 선수 시즌 기록 { bat: { id: { ab, h, hr } } } (타자 소개 띠에 시즌 타율을 보여 준다). 없으면 능력치를 보여 준다
-export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterId, title, net = null, cpuLineup = null, practice = null, stats = null, perks = null, raise = null }, onExit) {
+// startMatch(육성모드): 미리 내 첫 장면까지 돌려 둔 경기. 있으면 새로 만들지 않고 거기서 이어 간다
+export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterId, title, net = null, cpuLineup = null, practice = null, stats = null, perks = null, raise = null, startMatch = null }, onExit) {
   goFullscreen();
   loadSprites();                                     // 메인 화면에서 아직 다 못 받았으면 지금 바로
   const rng = createRng((Date.now() ^ (Math.random() * 1e9)) >>> 0);
@@ -104,8 +105,9 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   try { hints = { ...hints, ...JSON.parse(localStorage.getItem(HINT_KEY) || '{}') }; } catch (e) { /* 저장소 막힘 */ }
   const hintSeen = k => { hints[k]++; try { localStorage.setItem(HINT_KEY, JSON.stringify(hints)); } catch (e) { /* 무시 */ } };
   const hintFull = k => hints[k] < HINT_FULL;
-  let match = createMatch({ userTeam, cpuTeam, userLineup: lineup, innings, rng, cpuStarterId, cpuLineup, heat: heatOn, perks });
-  let raiseNote = null;          // 육성모드: 내 선수가 어떻게 경기를 마쳤나(end / pinch / pulled / noshow)
+  let match = startMatch || createMatch({ userTeam, cpuTeam, userLineup: lineup, innings, rng, cpuStarterId, cpuLineup, heat: heatOn, perks });
+  let raiseNote = null;
+  let raiseFirst = !!startMatch && match.log.length > 0;   // 이어 받은 경기면 첫 장면 전에 '몇 회 · 내 타석/투구'를 한 번 보여 준다          // 육성모드: 내 선수가 어떻게 경기를 마쳤나(end / pinch / pulled / noshow)
   const condTag = id => (raise && id === raise.playerId ? ` <span class="cond">${COND_ICON[raise.cond + 2]}</span>` : '');
   if (practice) {                                    // 타격 연습은 내가 말 공격으로 시작한다
     practice = { ...practice, n: 0, pts: 0 };
@@ -210,7 +212,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       raiseNote = r.note; mode = 'msg'; setControls('');
       return showMsg(RAISE_NOTE[r.note] || RAISE_NOTE.end, '#9fb3cc', 1600, sc, showEnd), true;
     }
-    if (!r.skipped) return false;
+    if (!r.skipped && !raiseFirst) return false;
+    raiseFirst = false;
     mode = 'msg'; setControls('');
     const where = `${g.inning}회${g.half === 'top' ? '초' : '말'}`, mine = raise.kind === 'bat' ? '내 타석' : '내 투구';
     showMsg(`${where} · ${mine}`, '#9fb3cc', 1300, `${sc} · ${g.outs}아웃 ${basesText(g.bases)}`, nextPlay);
@@ -1321,6 +1324,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   const loop = startLoop(frame);
   resize();
   updateBoard();
-  showMsg('플레이볼!', '#f1c40f', 1100, '1회초', nextPlay);
+  if (raiseFirst) nextPlay();                          // 이어 받은 경기: '플레이볼' 대신 바로 '몇 회 · 내 장면'
+  else showMsg('플레이볼!', '#f1c40f', 1100, '1회초', nextPlay);
   return { exit };
 }

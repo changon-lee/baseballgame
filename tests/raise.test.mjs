@@ -295,3 +295,37 @@ test('balance: power training for 3 seasons hits clearly more HR than no trainin
   }
   assert.ok(trained > plain * 1.3, `HR trained ${trained} vs plain ${plain}`);
 });
+
+test('prelude: a closer who does not pitch today gets the day without a game screen', async () => {
+  const { prelude, applyDay: day } = await import('../js/core/raise.js');
+  let noshow = 0, shows = 0;
+  for (let seed = 1; seed <= 25; seed++) {
+    const slot = newSlot('samsung-p05'), rng = createRng(seed);
+    const pre = prelude(slot, rng);
+    if (pre.result) {
+      noshow++;
+      assert.equal(pre.result.raise.note, 'noshow');
+      assert.ok(!pre.result.log.some(e => e.pitcherId === 'samsung-p05'));
+      assert.equal(pre.result.home + pre.result.away >= 0, true);
+      const out = day(slot, pre.result, rng);
+      assert.equal(out.report.appeared, false);
+      assert.equal(out.slot.season.round, 1);
+    } else {
+      shows++;
+      // 화면은 내가 9회초 마운드에 오른 바로 그 순간부터
+      assert.equal(pre.match.pitcher.home, 'samsung-p05');
+      assert.equal(pre.match.game.inning, 9); assert.equal(pre.match.game.half, 'top');
+      assert.equal(pre.match.game.balls + pre.match.game.strikes, 0);
+      assert.ok(pre.set && pre.set.raise.role === 'CL');
+    }
+  }
+  assert.ok(noshow > 0 && shows > 0, `noshow ${noshow} shows ${shows}`);
+});
+
+test('prelude: a batter always opens the screen at his first at-bat', async () => {
+  const { prelude } = await import('../js/core/raise.js');
+  const pre = prelude(newSlot('samsung-b03'), createRng(3));
+  assert.ok(pre.match && !pre.result);
+  assert.equal(pre.match.lineups.home.order[pre.match.game.battingIndex.home], 'samsung-b03');
+  assert.equal(pre.match.game.half, 'bottom');
+});

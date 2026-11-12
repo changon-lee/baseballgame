@@ -5,7 +5,8 @@ import { getTeam, USER_TEAM_ID } from '../data/rosters.js';
 import { createGrowth, gainXp, applyGrowth, gainFromLog, playerLine } from './growth.js';
 import { defaultLineup } from './team.js';
 import { createSeason, recordRound, standings, nextStarter } from './season.js';
-import { decisions, gameLine } from './raisematch.js';
+import { decisions, gameLine, raiseStep } from './raisematch.js';
+import { createMatch } from './match.js';
 import { TRAITS } from './perks.js';
 
 const ME = USER_TEAM_ID;
@@ -265,6 +266,18 @@ function addStats(prev, id, myLog, dec, appeared) {
   };
 }
 
+
+// 오늘 경기를 내 첫 장면까지 미리 돌려 본다(화면 없이).
+// 내 장면이 없으면(마무리 등판 없음 등) { set, result } — 화면 없이 그대로 하루를 끝낼 경기 결과
+// 있으면 { set, match } — 그 순간의 경기부터 화면을 연다
+export function prelude(slot, rng) {
+  const set = matchSetup(slot);
+  const m0 = createMatch({ userTeam: set.userTeam, cpuTeam: set.cpuTeam, userLineup: set.lineup, innings: 9, rng, cpuStarterId: set.cpuStarterId, heat: true, perks: set.perks });
+  const r = raiseStep(m0, set.raise, rng);
+  if (r.phase === 'me') return { set, match: r.match };
+  const g = r.match.game;
+  return { set, result: { home: g.score.home, away: g.score.away, log: r.match.log, starterId: set.lineup.starterId, raise: { note: r.note } } };
+}
 const traitKind = t => (TRAITS.find(x => x.id === t) || {}).kind;
 
 // 하루 마무리: 경기 결과(내가 한 경기 { home, away, log, starterId } 또는 null = 자동)를 시즌·내 선수에 반영

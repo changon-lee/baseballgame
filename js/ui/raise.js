@@ -7,7 +7,7 @@ import { createRng } from '../core/rng.js';
 import { TRAITS } from '../core/perks.js';
 import { PRACTICE } from '../core/practice.js';
 import { defaultLineup } from '../core/team.js';
-import { RAISE, DRILLS, newSlot, loadRaise, saveRaise, slotPlayer, raiseTeam, canChoose, choose, dayInfo, matchSetup, applyDay, seasonOver, nextSeason, seasonGains } from '../core/raise.js';
+import { RAISE, DRILLS, newSlot, loadRaise, saveRaise, slotPlayer, raiseTeam, canChoose, choose, dayInfo, applyDay, seasonOver, nextSeason, seasonGains, prelude } from '../core/raise.js';
 import { face, badge } from './hub.js';
 
 const ME = USER_TEAM_ID;
@@ -164,10 +164,13 @@ export function showRaise(root, { storage, loadGame, onBack }) {
     const s = data.slots[i], d = dayInfo(s);
     flash = null;
     if (!d.needsScreen) return finishDay(i, null);
+    // 내 첫 장면까지 미리 돌려 보고, 오늘 내 장면이 없으면(마무리 등판 없음) 경기 화면 없이 바로 결과로
+    const pre = prelude(s, rng);
+    if (pre.result) return finishDay(i, pre.result);
     const mod = await loadGame();
     if (!mod) return hubView(i);
-    const set = matchSetup(s);
-    mod.showGame(root, { ...set, innings: 9, stats: s.kind === 'bat' && s.stats.bat ? { bat: { [s.playerId]: s.stats.bat } } : null },
+    const set = pre.set;
+    mod.showGame(root, { ...set, innings: 9, startMatch: pre.match, stats: s.kind === 'bat' && s.stats.bat ? { bat: { [s.playerId]: s.stats.bat } } : null },
       result => (result ? finishDay(i, result) : hubView(i)));      // 중간에 나가면 그 경기는 없던 것
   }
 
