@@ -101,7 +101,7 @@ async function playSeasonGame(starterId) {
   const sid = starterId || nextStarter(s, USER_TEAM_ID);
   mod.showGame(app, {
     userTeam: userTeamTired(career), cpuTeam: opp, lineup: { ...lineup, starterId: sid },
-    innings: s.innings, cpuStarterId: nextStarter(s, opp.id), title: g.label,
+    innings: s.innings, cpuStarterId: nextStarter(s, opp.id), title: g.label, stats: career.stats,
   }, result => {
     if (!result) return hub();
     afterGame(applyUserGame(career, result, rng, { userLineup: lineup }), g.label);
@@ -114,7 +114,7 @@ function exhibitionMenu() {
       exhibition = set;
       const mod = await loadGame();
       if (!mod) return hub();
-      mod.showGame(app, { userTeam: userTeamNow(career), cpuTeam: getTeam(set.cpuTeamId), lineup, innings: set.innings, title: '친선 경기' }, () => exhibitionMenu());
+      mod.showGame(app, { userTeam: userTeamNow(career), cpuTeam: getTeam(set.cpuTeamId), lineup, innings: set.innings, title: '친선 경기', stats: career.stats }, () => exhibitionMenu());
     },
     onLineup: set => { exhibition = set; showLineup(app, userTeamNow(career), storage, lineup, l => { lineup = l; exhibitionMenu(); }); },
     onBack: hub,
@@ -128,7 +128,7 @@ async function versusMenu() {
 
 // 개발용 주소: #game[-팀] 1이닝 친선 경기, #lineup 타순 화면, #vs 1:1 대결
 if (location.hash.startsWith('#game')) {
-  loadGame().then(mod => mod && mod.showGame(app, { userTeam: userTeamNow(career), cpuTeam: getTeam(location.hash.split('-')[1] || 'lg'), lineup, innings: 1 }, hub));
+  loadGame().then(mod => mod && mod.showGame(app, { userTeam: userTeamNow(career), cpuTeam: getTeam(location.hash.split('-')[1] || 'lg'), lineup, innings: 1, stats: career.stats }, hub));
 } else if (location.hash === '#vs') versusMenu();
 else if (location.hash === '#lineup') showLineup(app, userTeamNow(career), storage, lineup, l => { lineup = l; hub(); });
 else hub();

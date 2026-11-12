@@ -12,6 +12,8 @@ import { batReach, graceMs } from '../core/batting.js';
 import { BUNT } from '../core/bunt.js';
 import { stealRunners } from '../core/rules.js';
 import { heatBoost, hitsToday, isHot, rally, RALLY_MAX } from '../core/heat.js';
+import { lineScore, todayText, gameMvp } from '../core/boxscore.js';
+import { playerLine, avg } from '../core/growth.js';
 import { loadPrefs, savePrefs, LEVELS, LEVEL_NAME } from './prefs.js';
 import { volRow, bindVol } from './volume.js';
 import { startLoop } from './loop.js';
@@ -32,6 +34,8 @@ const LABEL = {
 };
 // 같은 결과의 다른 장면
 const STYLE_LABEL = { bunt: '번트 아웃', dive: '다이빙 캐치!', wall: '펜스 앞 점프 캐치!', liner: '직선타 아웃', home_safe: '안타! 홈 세이프', bloop: '텍사스 안타!', pop: '내야 뜬공 아웃', foul: '파울플라이 아웃' };
+// 투구 위치 점·구종 글자 색: 직구 계열 빨강, 휘는 공 파랑, 떨어지는 공 초록
+const DOT_COLOR = { FB: '#ff6b6b', SI: '#ff8787', CT: '#ffa94d', SL: '#4dabf7', CU: '#748ffc', CH: '#51cf66', FO: '#38d9a9' };
 const HIT_PA = ['SINGLE', 'DOUBLE', 'TRIPLE', 'HR'];   // 기록에 남는 안타(번트 안타·내야안타도 SINGLE)
 const HITS = ['SINGLE', 'DOUBLE', 'TRIPLE', 'HR', 'INFIELD_SINGLE', 'SINGLE_HOME_OUT', 'ERROR', 'BUNT_SINGLE'];   // 타자에게 좋은 결과
 const FREE = ['BALL', 'HBP', 'WILD'];   // 타자에게 좋은 '안 친' 결과
@@ -67,7 +71,8 @@ function goFullscreen() {
 }
 
 // practice(연습장): { kind: 'pitch'|'bat', playerId, stat, goal } — 아웃·이닝 없이 goal구를 채우면 onExit({ practice: { kind, playerId, stat, n, pts } })
-export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterId, title, net = null, cpuLineup = null, practice = null }, onExit) {
+// stats: 우리 선수 시즌 기록 { bat: { id: { ab, h, hr } } } (타자 소개 띠에 시즌 타율을 보여 준다). 없으면 능력치를 보여 준다
+export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterId, title, net = null, cpuLineup = null, practice = null, stats = null }, onExit) {
   goFullscreen();
   loadSprites();                                     // 메인 화면에서 아직 다 못 받았으면 지금 바로
   const rng = createRng((Date.now() ^ (Math.random() * 1e9)) >>> 0);
@@ -82,6 +87,14 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   // 불방망이·응원 열기: 내가 하는 일반 경기에서만(연습·1:1 대결은 없다)
   const heatOn = !practice && !net;
   let rallyShown = -1;           // 응원 폭발을 알린 때의 기록 길이(같은 폭발을 두 번 알리지 않는다)
+  // 화면 연출 상태: 이번 타석 투구 위치(번호 점), 방금 공의 구속 표시, 타자 소개를 마지막으로 띄운 타석, 지난 점수(바뀌면 반짝)
+  let paDots = [], dotsClear = false, speedTag = null, introKey = '', lastScore = null;
+  // 조작 안내: 처음 몇 번만 길게, 익숙해지면 짧게(폰에 횟수를 남긴다)
+  const HINT_KEY = 'baseball.hints.v1', HINT_FULL = 4;
+  let hints = { bat: 0, pitch: 0 };
+  try { hints = { ...hints, ...JSON.parse(localStorage.getItem(HINT_KEY) || '{}') }; } catch (e) { /* 저장소 막힘 */ }
+  const hintSeen = k => { hints[k]++; try { localStorage.setItem(HINT_KEY, JSON.stringify(hints)); } catch (e) { /* 무시 */ } };
+  const hintFull = k => hints[k] < HINT_FULL;
   let match = createMatch({ userTeam, cpuTeam, userLineup: lineup, innings, rng, cpuStarterId, cpuLineup, heat: heatOn });
   if (practice) {                                    // 타격 연습은 내가 말 공격으로 시작한다
     practice = { ...practice, n: 0, pts: 0 };
@@ -106,7 +119,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       </div>
       <div class="sub"><span class="mu"></span>${title ? `<span class="ttl">${title}</span>` : ''}</div>
     </div>
-    <div class="stage"><canvas></canvas><div class="pitch-pick"></div><div class="side-pick"></div><div class="controls"></div><div class="overlay hidden"></div><div class="cutin-layer"></div></div>
+    <div class="stage"><canvas></canvas><div class="lower3"></div><div class="linescore"></div><div class="pitch-pick"></div><div class="side-pick"></div><div class="controls"></div><div class="overlay hidden"></div><div class="cutin-layer"></div></div>
   </div>`;
   const $ = s => root.querySelector(s);
   const cv = $('canvas'), stage = $('.stage'), controls = $('.controls'), overlay = $('.overlay'), picker = $('.pitch-pick'), sidePick = $('.side-pick');
@@ -155,6 +168,10 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   function updateBoard() {
     const g = match.game, mu = shownMu();
     $('.ra').textContent = g.score.away; $('.rh').textContent = g.score.home;
+    if (lastScore) for (const [s, cls] of [['away', '.ra'], ['home', '.rh']]) if (g.score[s] > lastScore[s]) {   // 점수가 나면 그 줄이 반짝
+      const row = $(cls).parentElement; row.classList.remove('flash'); void row.offsetWidth; row.classList.add('flash');
+    }
+    lastScore = { ...g.score };
     $('.tms').dataset.bat = g.half === 'top' ? 'away' : 'home';
     $('.inn').innerHTML = `<small>${g.half === 'top' ? '▲' : '▼'}</small>${g.inning}`;
     root.querySelectorAll('.bases i').forEach((el, i) => el.classList.toggle('on', !!g.bases[i]));
@@ -165,15 +182,18 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   }
   const setControls = html => { controls.innerHTML = html; if (!['aim', 'pick'].includes(mode)) hideBullpenChip(); };
   function showMsg(text, color, ms, sub, then, hidden = false) {   // hidden: 컷인이 대신 보여 주므로 글자는 숨긴다
-    msg = { text, color, sub, hidden };
+    msg = { text, color, sub, hidden, at: performance.now() };
     later(() => { msg = null; if (then) then(); }, ms);
   }
 
   // ── 진행 ──
   function nextPlay() {
     hold = null; tactic = { bunt: false, steal: false };
+    if (dotsClear) { paDots = []; dotsClear = false; }
+    speedTag = null;
     updateBoard();
     if (match.game.over) return showEnd();
+    showIntro();
     ball = null; play = null; swingAt = null; pitchAt = 0;
     setView();
     if (net) return nextNetPlay();
@@ -189,7 +209,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     } else if (userPitching()) {
       mode = 'aim'; pitchType = null;
       const b = matchup(match).batter, warn = heatOn && isHot(match.log, b.id) ? `<b class="r">🔥 오늘 ${hitsToday(match.log, b.id)}안타 · 조심!</b> ` : '';
-      setControls(`<p>${warn}스트라이크존 위를 <b>드래그</b>해서 포수 미트 위치를 정하세요</p>`);
+      setControls(hintFull('pitch') ? `<p>${warn}스트라이크존 위를 <b>드래그</b>해서 포수 미트 위치를 정하세요</p>` : `<p>${warn}<small>드래그로 미트 위치</small></p>`);
+      hintSeen('pitch');
       showBullpenChip();
     } else {
       const before = match.pitcher.away;
@@ -208,6 +229,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       // 작전 칩을 누를 틈을 조금 더 준다(연습·자동 진행은 칩이 없다)
       pitchAt = performance.now() + CONFIG.WIND_CPU_MS + 700 + rng() * 900 + (practice || auto ? 0 : 500);
       setControls(auto ? '<p><b>자동 진행 중</b> · 타자가 알아서 쳐요 <small>(위 ▶▶ 버튼에서 끄기)</small></p>' : battingHint());
+      if (!auto) hintSeen('bat');
       showTactics();
     }
   }
@@ -307,6 +329,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     const boost = bo ? `<b class="o">${bo.rally ? '📣 응원 폭발' : '🔥 불방망이'}</b> · ` : '';
     const sign = [tactic.bunt && '<b class="y">번트</b>', tactic.steal && '<b class="g">도루</b>'].filter(Boolean).join(' · ');
     if (tactic.bunt) return `<p>${boost}${sign} · 배트(노란 원)를 공 길에 대고 <b>손을 떼면 번트</b></p>`;
+    if (!hintFull('bat') && !practice) return `<p>${boost}${sign ? sign + ' 사인! · ' : ''}<small>누른 채 조준 · 떼면 스윙</small></p>`;
     return `<p>${boost}${sign ? sign + ' 사인! · ' : ''}화면을 <b>누른 채 움직여</b> 배트(노란 원)를 공 길에 두고, <b>손을 떼면 스윙!</b></p>`;
   };
   // 교체할 투수 고르기: 가운데 창
@@ -453,7 +476,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     if (k === 'INPLAY' || k === 'FOUL') { playSound(k === 'FOUL' ? 'foul' : r.event === 'HR' ? 'homerun' : 'hit', { q: r.contact.quality }); ball.hitAt = performance.now(); ball.contact = r.contact; }
     else if (k === 'MISS') { playSound('whiff'); playSound('mitt', { speed: r.pitch.speedKmh }); }
     else playSound('mitt', { speed: r.pitch.speedKmh });
-    info = `${r.pitch.speedKmh}km/h ${PITCH_TYPES[r.pitch.type].name}`;
+    info = '';                                           // 구속·구종은 오른쪽 위 표시가 보여 준다
     apply(r, true);
   }
 
@@ -474,8 +497,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   function swingOutcome(r, diff, bat) {
     const k = r.contact.kind;
     if (bat) batFlash = { at: performance.now(), hit: k !== 'MISS', x: batAim.x, y: batAim.y };
-    info = `${ball.pitch.speedKmh}km/h ${PITCH_TYPES[ball.pitch.type].name} · `
-      + (r.contact.aimMiss ? '배트가 공 길에서 벗어났어요' : r.contact.bunt && k !== 'MISS' ? '번트' : `${diff < 0 ? '빠름' : '늦음'} ${Math.abs(Math.round(diff))}ms`);
+    info = (r.contact.aimMiss ? '배트가 공 길에서 벗어났어요' : r.contact.bunt && k !== 'MISS' ? '번트' : `${diff < 0 ? '빠름' : '늦음'} ${Math.abs(Math.round(diff))}ms`);
     if (k === 'MISS') { playSound('whiff'); ball.result = r; return; }   // 공은 미트까지 날아간 뒤 판정
     const q = r.contact.quality;
     if (r.event === 'HR') playSound('homerun', { crowd: true });   // 맞는 순간 관중이 일어난다(받은 녹음 전체)
@@ -493,13 +515,14 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     }
     playSound('mitt', { speed: ball.pitch.speedKmh });
     const r = ball.result || resolveUserSwing(match, ball.pitch, null, rng, null, tactic);
-    if (!ball.swung) info = `${ball.pitch.speedKmh}km/h ${PITCH_TYPES[ball.pitch.type].name}`;
+    if (!ball.swung) info = '';
     apply(r, false);
   }
 
   // 결과 반영: 인플레이면 타구 화면 → 결과, 아니면 바로 결과
   function apply(r, userPitched) {
     mode = 'msg';
+    if (ball && ball.pitch) speedTag = { v: ball.pitch.speedKmh, k: ball.pitch.type, name: PITCH_TYPES[ball.pitch.type].name, at: performance.now() };
     const prev = match.game;
     const finish = () => settle(prev, r, userPitched);
     const batter = matchup(match).batter;
@@ -524,6 +547,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     hold = matchup(match);
     const logN = match.log.length;
     match = r.match;
+    if (ball && ball.pitch) paDots.push({ x: ball.pitch.plate.x, y: ball.pitch.plate.y, k: ball.pitch.type, n: paDots.length + 1 });
+    if (match.log.length > logN || practice || match.game.half !== prev.half) dotsClear = true;   // 타석이 끝났다 → 다음 타석에 지운다
     if (practice) {                                     // 연습: 점수를 쌓고, 아웃·주자·이닝은 매번 되돌린다
       practice.n++; practice.pts += userPitched ? pitchPts(ball.pitch) : swingPts(r.contact);
       match = { ...match, game: { ...match.game, inning: 1, half: practice.kind === 'pitch' ? 'top' : 'bottom', outs: 0, bases: [false, false, false], score: { away: 0, home: 0 }, over: false, result: null }, pitchCount: { home: 0, away: 0 } };
@@ -544,8 +569,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     const color = r.event === 'FOUL' ? '#ffffff' : good ? '#2ecc71' : '#e74c3c';
     // 불방망이: 이번 안타로 그 경기 2안타 이상이 됐다
     const nh = heatOn && match.log.length > logN && HIT_PA.includes(match.log[match.log.length - 1].event) ? hitsToday(match.log, hold.batter.id) : 0;
-    const fire = nh >= 2 ? (nh === 2 ? ' · 🔥 불방망이!' : ` · 🔥 오늘 ${nh}안타!`) : '';
-    const sub = (r.runs && !practice ? `${r.runs}점 득점! · ` : '') + info + fire;
+    const fire = nh >= 2 ? (nh === 2 ? '🔥 불방망이!' : `🔥 오늘 ${nh}안타!`) : '';
+    const sub = [r.runs && !practice ? `${r.runs}점 득점!` : '', info, fire].filter(Boolean).join(' · ');
     const g = match.game;
     const halfOver = !g.over && (g.half !== prev.half || g.inning !== prev.inning);
     updateBoard();
@@ -559,7 +584,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
         play = null; ball = null;
         const was = todAt(prev.inning).phase, now = todAt(g.inning).phase;
         const note = now !== was ? (now === 'night' ? ' · 조명이 켜졌어요' : now === 'dusk' ? ' · 해가 지고 있어요' : '') : '';
-        return showMsg('공수교대', '#9fb3cc', 1200, `${g.inning}회${g.half === 'top' ? '초' : '말'}${note}`, nextPlay);
+        showLineScore(2300);
+        return showMsg('공수교대', '#9fb3cc', 2300, `${g.inning}회${g.half === 'top' ? '초' : '말'}${note}`, nextPlay);
       }
       nextPlay();
     }, !!cut);
@@ -606,9 +632,21 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     const g = match.game;
     const won = g.result === mySide;
     const res = won ? '승리' : g.result === 'home' || g.result === 'away' ? '패배' : '무승부';
+    // MVP · 이닝별 점수표 · 우리 타자 성적표
+    const nameOf = id => { for (const s of ['home', 'away']) { const t = match.teams[s], p = t.batters.find(q => q.id === id) || t.pitchers.find(q => q.id === id); if (p) return { name: p.name, team: t }; } return { name: '?', team: userTeam }; };
+    const myIds = new Set([...match.teams[mySide].batters, ...match.teams[mySide].pitchers].map(p => p.id));
+    const mvp = gameMvp(match.log, { mine: id => myIds.has(id), userSide: mySide, result: g.result });
+    const who = mvp && nameOf(mvp.id);
+    const mvpHtml = mvp ? `<div class="mvp" style="--c:${who.team.colors.main}"><span>MVP</span><div><b>${who.name}</b><small>${who.team.short} · ${mvp.text}</small></div></div>` : '';
+    const line = playerLine({}, match.log).bat, order = match.lineups[mySide].order;
+    const box = order.map(id => { const b = line[id], p = nameOf(id);
+      return b ? `<tr class="${b.h ? 'h' : ''}"><td>${p.name}</td><td>${b.ab}-${b.h}</td><td>${b.hr || ''}</td><td>${b.rbi || ''}</td></tr>` : `<tr><td>${p.name}</td><td>-</td><td></td><td></td></tr>`; }).join('');
     overlay.innerHTML = `<div class="end-card ${won ? 'win' : ''}">
       <div class="tag">경기 종료 · ${g.inning}회</div><h1>${res}</h1>
       <div class="final"><span>${cpuTeam.short}</span><b>${g.score.away}</b><i>:</i><b>${g.score.home}</b><span>${userTeam.short}</span></div>
+      ${lineScoreHtml()}
+      ${mvpHtml}
+      <details class="box"><summary>${match.teams[mySide].short} 타자 성적</summary><table><tr><th>타자</th><th>타수-안타</th><th>홈런</th><th>타점</th></tr>${box}</table></details>
       <button class="primary" data-act="menu">계속</button>
       <button class="ghost" data-act="log">경기 기록 보기</button></div>`;
     overlay.classList.remove('hidden');
@@ -677,6 +715,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     closeOverlay();
     timers.forEach(clearTimeout); timers = [];
     ball = null; play = null; msg = null; hold = null; swingAt = null; pitchAt = 0; mode = 'msg';
+    paDots = []; dotsClear = false; speedTag = null;
     const from = match.log.length, g0 = match.game;
     match = kind === 'half' ? simulateHalf(match, rng) : kind === 'inning' ? simulateInning(match, rng) : simulateRest(match, rng);
     updateBoard(); setView();
@@ -841,42 +880,82 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   function drawHUD() {
     const mu = shownMu(), p = mu.pitcher, pc = match.pitchCount[mu.pitchingSide];
     const left = energy(pc, p.stamina), f = fatigue(pc, p.stamina);
-    ctx.fillStyle = 'rgba(6,14,26,.62)'; ctx.fillRect(10, 10, 124, 38);
-    ctx.font = '12px system-ui,sans-serif'; ctx.textAlign = 'left'; ctx.fillStyle = '#e4ecf6';
-    ctx.fillText(`${p.name} 체력${f > 0 ? ' · 지침' : ''}`, 16, 25);
-    ctx.fillStyle = '#22344d'; ctx.fillRect(16, 33, 112, 7);
-    ctx.fillStyle = f > 0.5 ? '#e74c3c' : f > 0 ? '#f1c40f' : '#2ecc71'; ctx.fillRect(16, 33, 112 * left, 7);
+    panel(10, 10, 124, 38);
+    ctx.font = '700 11.5px system-ui,sans-serif'; ctx.textAlign = 'left'; ctx.fillStyle = '#e4ecf6';
+    ctx.fillText(`${p.name} 체력${f > 0 ? ' · 지침' : ''}`, 18, 25);
+    const fc = f > 0.5 ? '#ff6b6b' : f > 0 ? '#ffd43b' : '#51cf66';
+    bar(18, 33, 108, 6, left, fc);
     if (heatOn && !userPitching() && !match.game.over) drawRally();
     const cx = W - 36, cy = 30, d = 11, bases = match.game.bases;
-    ctx.fillStyle = 'rgba(6,14,26,.62)'; ctx.fillRect(cx - 25, cy - 21, 50, 36);
+    panel(cx - 26, cy - 21, 52, 36);
     [[cx + d, cy], [cx, cy - d], [cx - d, cy]].forEach(([x, y], i) => {
       ctx.save(); ctx.translate(x, y); ctx.rotate(Math.PI / 4);
-      ctx.fillStyle = bases[i] ? '#f1c40f' : 'rgba(255,255,255,.25)'; ctx.fillRect(-5, -5, 10, 10); ctx.restore();
+      if (bases[i]) { ctx.shadowColor = 'rgba(255,212,59,.8)'; ctx.shadowBlur = 8; }
+      ctx.fillStyle = bases[i] ? '#ffd43b' : 'rgba(255,255,255,.22)'; ctx.fillRect(-5, -5, 10, 10); ctx.restore();
     });
+    drawSpeed();
+  }
+  // 중계 그래픽 같은 반투명 판(둥근 모서리 + 얇은 테두리 + 위쪽이 조금 밝다)
+  function panel(x, y, w, h, r = 9) {
+    ctx.save();
+    const gr = ctx.createLinearGradient(0, y, 0, y + h);
+    gr.addColorStop(0, 'rgba(22,36,60,.78)'); gr.addColorStop(1, 'rgba(6,13,26,.72)');
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.14)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.roundRect(x + 0.5, y + 0.5, w - 1, h - 1, r); ctx.stroke();
+    ctx.restore();
+  }
+  function bar(x, y, w, h, k, color) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,255,255,.1)'; ctx.beginPath(); ctx.roundRect(x, y, w, h, h / 2); ctx.fill();
+    if (k > 0) { ctx.fillStyle = color; ctx.beginPath(); ctx.roundRect(x, y, Math.max(h, w * k), h, h / 2); ctx.fill(); }
+    ctx.restore();
+  }
+  // 방금 공의 구속·구종(오른쪽 위, 주자 표시 아래). 2.4초 동안 보이고 사라진다
+  function drawSpeed() {
+    if (!speedTag) return;
+    const t = performance.now() - speedTag.at;
+    if (t > 2400) return;
+    const a = Math.max(0, Math.min(1, t / 120, (2400 - t) / 300));
+    const w = 96, h = 46, x = W - 10 - w, y = 54;
+    ctx.save(); ctx.globalAlpha = a;
+    ctx.translate(0, (1 - Math.min(1, t / 160)) * -6);
+    panel(x, y, w, h);
+    ctx.textAlign = 'right'; ctx.fillStyle = '#fff'; ctx.font = '900 24px system-ui,sans-serif';
+    ctx.fillText(String(speedTag.v), x + w - 36, y + 26);
+    ctx.font = '700 10.5px system-ui,sans-serif'; ctx.fillStyle = '#9fb3cc'; ctx.textAlign = 'left';
+    ctx.fillText('km/h', x + w - 33, y + 26);
+    ctx.textAlign = 'center'; ctx.font = '800 12px system-ui,sans-serif'; ctx.fillStyle = DOT_COLOR[speedTag.k] || '#ffd43b';
+    ctx.fillText(speedTag.name, x + w / 2, y + 40);
+    ctx.restore();
   }
   // 응원 열기 게이지(우리 공격 때 왼쪽 위, 투수 체력 아래). 꽉 차면 주황으로 깜빡인다
   function drawRally() {
     const g = match.game, rl = rally(match.log, g.inning, g.half), t = performance.now();
     const x = 10, y = 52, w = 124, h = 30;
-    ctx.fillStyle = 'rgba(6,14,26,.62)'; ctx.fillRect(x, y, w, h);
+    panel(x, y, w, h);
     ctx.font = '700 11.5px system-ui,sans-serif'; ctx.textAlign = 'left';
     ctx.fillStyle = rl.full ? '#ffb15c' : '#e4ecf6';
-    ctx.fillText(rl.full ? '📣 응원 폭발!' : '📣 응원 열기', x + 6, y + 13);
-    const sw = (w - 12 - (RALLY_MAX - 1) * 3) / RALLY_MAX;
+    ctx.fillText(rl.full ? '📣 응원 폭발!' : '📣 응원 열기', x + 8, y + 14);
+    const sw = (w - 16 - (RALLY_MAX - 1) * 3) / RALLY_MAX;
     for (let i = 0; i < RALLY_MAX; i++) {
       const on = i < rl.value;
       ctx.globalAlpha = on && rl.full ? 0.65 + 0.35 * Math.sin(t / 140) : 1;
-      ctx.fillStyle = on ? (rl.full ? '#ff922b' : '#ffc078') : '#22344d';
-      ctx.fillRect(x + 6 + i * (sw + 3), y + 19, sw, 6);
+      bar(x + 8 + i * (sw + 3), y + 19, sw, 6, on ? 1 : 0, rl.full ? '#ff922b' : '#ffc078');
     }
     ctx.globalAlpha = 1;
   }
   function drawMsg() {
     if (!msg || msg.hidden) return;
     const y = V && V.kind === 'pitcher' && !play ? H * 0.2 : H * 0.14;
+    // 튀어나오기: 크게 나타났다가 살짝 작아지며 자리 잡는다(0.26초)
+    const t = Math.min(1, (performance.now() - (msg.at || 0)) / 260);
+    const sc = t < 0.55 ? 1.6 - 0.75 * (t / 0.55) : 0.85 + 0.15 * Math.sin(((t - 0.55) / 0.45) * Math.PI / 2);
+    ctx.save(); ctx.globalAlpha = Math.min(1, t * 3);
+    ctx.translate(W / 2, y - 14); ctx.scale(sc, sc); ctx.translate(-W / 2, -(y - 14));
     ctx.textAlign = 'center'; ctx.lineJoin = 'round';
     ctx.font = '900 40px system-ui,sans-serif'; ctx.lineWidth = 7; ctx.strokeStyle = 'rgba(0,0,0,.65)';
     ctx.strokeText(msg.text, W / 2, y); ctx.fillStyle = msg.color; ctx.fillText(msg.text, W / 2, y);
+    ctx.restore(); ctx.textAlign = 'center'; ctx.lineJoin = 'round'; ctx.strokeStyle = 'rgba(0,0,0,.65)';
     if (msg.sub) { ctx.font = '600 15px system-ui,sans-serif'; ctx.lineWidth = 4; ctx.strokeText(msg.sub, W / 2, y + 28); ctx.fillStyle = '#e4ecf6'; ctx.fillText(msg.sub, W / 2, y + 28); }
     ctx.textAlign = 'left';
   }
@@ -1042,8 +1121,56 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       ctx.beginPath(); ctx.moveTo(x0 + zw * i / 3, y0); ctx.lineTo(x0 + zw * i / 3, y0 + zh); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(x0, y0 + zh * i / 3); ctx.lineTo(x0 + zw, y0 + zh * i / 3); ctx.stroke();
     }
+    drawDots();
+  }
+  // 이번 타석에 들어온 공 위치: 번호 붙은 점(직구 계열 빨강, 휘는 공 파랑, 떨어지는 공 초록). 공이 날아오는 동안은 흐리게
+  function drawDots() {
+    if (!paDots.length || practice) return;
+    const r = Math.max(7, V.zw * 0.075), dim = ball && !ball.result && !ball.hitAt && (mode === 'bflight' || mode === 'flight') ? 0.45 : 0.95;
+    ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = `800 ${Math.round(r * 1.15)}px system-ui,sans-serif`;
+    paDots.forEach((d, i) => {
+      const [x, y] = toS(V, d.x, d.y), last = i === paDots.length - 1;
+      ctx.globalAlpha = dim * (last ? 1 : 0.8);
+      ctx.fillStyle = DOT_COLOR[d.k] || '#ffd43b'; ctx.strokeStyle = last ? '#fff' : 'rgba(0,0,0,.55)'; ctx.lineWidth = last ? 2 : 1.2;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.fillText(String(d.n), x, y + 0.5);
+    });
+    ctx.restore();
   }
 
+  // ── 타자 소개 띠(타석에 들어설 때 왼쪽에서 밀려 나왔다 들어간다) ──
+  const POS = { C: '포수', '1B': '1루수', '2B': '2루수', '3B': '3루수', SS: '유격수', LF: '좌익수', CF: '중견수', RF: '우익수', DH: '지명타자' };
+  function showIntro() {
+    if (practice) return;
+    const g = match.game, mu = matchup(match), key = `${g.inning}${g.half}${g.battingIndex[mu.battingSide]}${match.log.length}`;
+    if (key === introKey) return;
+    introKey = key;
+    const b = mu.batter, mine = mu.battingSide === mySide, team = match.teams[mu.battingSide];
+    const st = stats && stats.bat && stats.bat[b.id];
+    const season = st && st.ab ? `시즌 ${avg(st)}${st.hr ? ` · ${st.hr}홈런` : ''}` : `컨택 ${b.contact} · 파워 ${b.power}`;
+    const el = $('.lower3');
+    el.style.setProperty('--c', team.colors.main);
+    el.innerHTML = `<i>${b.num ?? g.battingIndex[mu.battingSide] + 1}</i><div><b>${b.name}${heatOn && isHot(match.log, b.id) ? ' 🔥' : ''}</b>`
+      + `<small>${g.battingIndex[mu.battingSide] + 1}번 · ${POS[b.pos] || b.pos} · ${b.bats === 'L' ? '좌타' : b.bats === 'S' ? '양타' : '우타'}${mine ? '' : ` · ${team.short}`}</small></div>`
+      + `<div class="st"><em>${season}</em><small>${todayText(match.log, b.id)}</small></div>`;
+    el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  }
+
+  // ── 이닝별 점수표(공수교대 때 잠깐, 경기 끝 화면) ──
+  function lineScoreHtml() {
+    const ls = lineScore(match.log, match.game), cell = v => (v == null ? '' : v);
+    const head = Array.from({ length: ls.n }, (_, i) => `<th>${i + 1}</th>`).join('');
+    const row = (side, team) => `<tr><td class="tn" style="--c:${team.colors.main}">${team.short}</td>${ls[side].map(v => `<td>${cell(v)}</td>`).join('')}<td class="rr">${ls.R[side]}</td><td class="hh">${ls.H[side]}</td></tr>`;
+    return `<table class="ls${ls.n > 9 ? ' x' : ''}"><tr><th></th>${head}<th class="rr">R</th><th class="hh">H</th></tr>${row('away', match.teams.away)}${row('home', match.teams.home)}</table>`;
+  }
+  function showLineScore(ms) {
+    const el = $('.linescore');
+    el.innerHTML = lineScoreHtml();
+    el.classList.add('show');
+    later(() => el.classList.remove('show'), ms - 200);
+  }
+
+  window.__ui = { showLineScore };                    // 확인용
   window.__match = f => { if (f) { match = f(match); updateBoard(); } return match; };   // 확인용
   window.__game = () => ({ mode, dragging, V: !!V, W, H, target, ball: !!ball, ballStart: ball ? ball.start : null, arrival: ball ? ball.arrival : null, swung: !!(ball && ball.swung), pitchAt, play: play && play.start ? { ms: Math.round(performance.now() - play.start), event: play.event } : null });
   const loop = startLoop(frame);

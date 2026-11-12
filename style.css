@@ -189,7 +189,46 @@ button.danger{color:var(--red)}
 .controls p{margin:0;color:#c9d6e8;font-size:13px;text-align:center;line-height:1.4;text-shadow:0 1px 3px rgba(0,0,0,.8)}
 .controls p b{color:var(--fg)}
 .controls p small{opacity:.75}
-.controls .o{color:#ff922b!important}.mu .hot{color:#ff922b;font-weight:800;font-size:.9em}
+.controls .o{color:#ff922b!important}
+/* 점수가 난 줄이 반짝 */
+.tm.flash{animation:scoreflash 1.4s ease-out}.tm.flash .r{animation:scorepop .6s cubic-bezier(.2,1.6,.4,1)}
+@keyframes scoreflash{0%,30%{background:rgba(242,193,78,.45)}100%{background:transparent}}
+@keyframes scorepop{0%{transform:scale(1.8)}100%{transform:scale(1)}}
+/* 타자 소개 띠 */
+.lower3{position:absolute;left:10px;top:92px;z-index:2;pointer-events:none;display:flex;align-items:center;gap:10px;max-width:calc(100% - 20px);
+  padding:7px 14px 7px 7px;border-radius:12px;background:linear-gradient(90deg,rgba(10,20,38,.92),rgba(10,20,38,.78));
+  border:1px solid rgba(255,255,255,.14);box-shadow:inset 4px 0 0 var(--c,#3b82f6),0 6px 18px rgba(0,0,0,.35);opacity:0;transform:translateX(-120%)}
+.lower3.show{animation:lower3 3s cubic-bezier(.2,.9,.3,1) both}
+@keyframes lower3{0%{opacity:0;transform:translateX(-120%)}12%{opacity:1;transform:none}85%{opacity:1;transform:none}100%{opacity:0;transform:translateX(-30px)}}
+.lower3>i{font-style:normal;font-weight:900;font-size:17px;min-width:34px;height:34px;display:grid;place-items:center;border-radius:9px;background:var(--c,#3b82f6);color:#fff;margin-left:4px}
+.lower3 b{display:block;font-size:15px;font-weight:800;color:#fff;white-space:nowrap}
+.lower3 small{display:block;font-size:11px;color:#9fb3cc;white-space:nowrap}
+.lower3 .st{padding-left:10px;border-left:1px solid rgba(255,255,255,.14)}
+.lower3 .st em{display:block;font-style:normal;font-size:12px;font-weight:800;color:#ffd43b;white-space:nowrap}
+/* 이닝별 점수표 */
+.ls{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums;color:#e4ecf6}
+.ls th{font-size:10.5px;color:#7f93ad;font-weight:700;padding:3px 0}
+.ls td{text-align:center;padding:5px 0;border-top:1px solid rgba(255,255,255,.08);min-width:18px}
+.ls .tn{text-align:left;font-weight:800;padding-left:8px;box-shadow:inset 3px 0 0 var(--c);white-space:nowrap;padding-right:6px}
+.ls .rr{font-weight:900;color:#fff;border-left:1px solid rgba(255,255,255,.14);padding-left:4px}.ls td.rr{font-size:14px}
+.ls .hh{color:#9fb3cc}
+.ls.x{font-size:10.5px}
+.linescore{position:absolute;left:12px;right:12px;top:calc(14% + 50px);z-index:2;pointer-events:none;padding:8px 8px 4px;border-radius:14px;
+  background:rgba(8,16,30,.88);border:1px solid rgba(255,255,255,.14);box-shadow:0 10px 30px rgba(0,0,0,.4);opacity:0;transform:translateY(10px) scale(.97);transition:opacity .25s,transform .25s}
+.linescore.show{opacity:1;transform:none}
+/* 경기 끝: 점수표·MVP·타자 성적 */
+.end-card{max-height:calc(100% - 8px);overflow-y:auto}
+.end-card .ls{margin:-8px 0 14px}
+.end-card .mvp{display:flex;align-items:center;gap:12px;text-align:left;padding:10px 12px;margin-bottom:12px;border-radius:14px;
+  background:linear-gradient(90deg,rgba(242,193,78,.2),rgba(242,193,78,.05));border:1px solid rgba(242,193,78,.4)}
+.end-card .mvp>span{font-size:12px;font-weight:900;letter-spacing:.06em;color:#1a1300;background:var(--gold);border-radius:7px;padding:5px 7px}
+.end-card .mvp b{display:block;font-size:17px;font-weight:900}.end-card .mvp small{display:block;color:var(--dim);font-size:12px}
+.end-card .box{margin-bottom:14px;text-align:left}
+.end-card .box summary{cursor:pointer;color:var(--dim);font-size:13px;font-weight:700;padding:4px 2px}
+.end-card .box table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:6px;font-variant-numeric:tabular-nums}
+.end-card .box th{font-size:11px;color:var(--dim2);font-weight:700;text-align:center;padding:3px 0}.end-card .box th:first-child,.end-card .box td:first-child{text-align:left}
+.end-card .box td{text-align:center;padding:5px 0;border-top:1px solid rgba(255,255,255,.07)}
+.end-card .box tr.h td{color:#fff;font-weight:700}.mu .hot{color:#ff922b;font-weight:800;font-size:.9em}
 .controls .g{color:var(--green)!important}.controls .y{color:var(--yellow)!important}.controls .r{color:var(--red)!important}
 .row{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}.row button{flex:1 1 30%;background:var(--card2);box-shadow:inset 0 0 0 1px var(--line2)}
 .row button.ghost{background:var(--card)}
