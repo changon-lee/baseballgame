@@ -1152,7 +1152,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     el.style.setProperty('--c', team.colors.main);
     el.innerHTML = `<i>${b.num ?? g.battingIndex[mu.battingSide] + 1}</i><div><b>${b.name}${heatOn && isHot(match.log, b.id) ? ' 🔥' : ''}</b>`
       + `<small>${g.battingIndex[mu.battingSide] + 1}번 · ${POS[b.pos] || b.pos} · ${b.bats === 'L' ? '좌타' : b.bats === 'S' ? '양타' : '우타'}${mine ? '' : ` · ${team.short}`}</small></div>`
-      + `<div class="st"><em>${season}</em><small>${todayText(match.log, b.id)}</small></div>`;
+      + `<div class="l3s"><em>${season}</em><small>${todayText(match.log, b.id)}</small></div>`;
     el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
   }
 

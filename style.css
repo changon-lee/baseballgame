@@ -200,11 +200,12 @@ button.danger{color:var(--red)}
   border:1px solid rgba(255,255,255,.14);box-shadow:inset 4px 0 0 var(--c,#3b82f6),0 6px 18px rgba(0,0,0,.35);opacity:0;transform:translateX(-120%)}
 .lower3.show{animation:lower3 3s cubic-bezier(.2,.9,.3,1) both}
 @keyframes lower3{0%{opacity:0;transform:translateX(-120%)}12%{opacity:1;transform:none}85%{opacity:1;transform:none}100%{opacity:0;transform:translateX(-30px)}}
+.lower3{width:max-content}.lower3>*{flex-shrink:0}
 .lower3>i{font-style:normal;font-weight:900;font-size:17px;min-width:34px;height:34px;display:grid;place-items:center;border-radius:9px;background:var(--c,#3b82f6);color:#fff;margin-left:4px}
 .lower3 b{display:block;font-size:15px;font-weight:800;color:#fff;white-space:nowrap}
 .lower3 small{display:block;font-size:11px;color:#9fb3cc;white-space:nowrap}
-.lower3 .st{padding-left:10px;border-left:1px solid rgba(255,255,255,.14)}
-.lower3 .st em{display:block;font-style:normal;font-size:12px;font-weight:800;color:#ffd43b;white-space:nowrap}
+.lower3 .l3s{padding-left:10px;border-left:1px solid rgba(255,255,255,.14)}
+.lower3 .l3s em{display:block;font-style:normal;font-size:12px;font-weight:800;color:#ffd43b;white-space:nowrap}
 /* 이닝별 점수표 */
 .ls{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums;color:#e4ecf6}
 .ls th{font-size:10.5px;color:#7f93ad;font-weight:700;padding:3px 0}
