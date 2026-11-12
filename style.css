@@ -564,3 +564,17 @@ button.primary{background:linear-gradient(180deg,#4c97ff,#1f6fe5 52%,#0a4fb8);bo
 .mode-card small{font-size:13px;color:var(--dim);line-height:1.45;font-weight:500}
 .mode-card em{font-style:normal;font-size:12px;font-weight:800;color:var(--gold);margin-top:2px}
 .mode-card>u{text-decoration:none;font-size:26px;color:var(--dim2);flex:none}
+
+/* ── 육성모드 시즌 기록(상위 %)과 설명 말풍선 ── */
+.rz-season .card-h{display:flex;align-items:center;gap:6px}
+.rz-sgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:10px}
+.rz-st{display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 4px 8px;border-radius:var(--r2);background:var(--card2);border:1px solid var(--line2);min-width:0;text-align:center}
+.rz-st .k{display:flex;align-items:center;gap:2px;font-size:11.5px;color:var(--dim);font-weight:700;white-space:nowrap;max-width:100%}
+.rz-st b{font-size:19px;font-weight:900;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.rz-st em{font-style:normal;font-size:11px;font-weight:800;color:var(--dim)}
+.rz-st.t1{border-color:rgba(242,193,78,.6);background:rgba(242,193,78,.1)}.rz-st.t1 em{color:var(--gold)}
+.rz-st.t2{border-color:rgba(61,220,132,.45)}.rz-st.t2 em{color:var(--green)}
+.rz-st.t4 em{color:#ff9a7a}
+.tip{flex:none;display:inline-grid;place-items:center;width:20px;height:20px;min-height:0;padding:0;margin-left:1px;border:0;border-radius:50%;background:transparent;color:var(--dim2);font-size:13px;line-height:1;cursor:help}
+.tip:hover,.tip:focus-visible{color:var(--fg)}
+.tipbox{position:fixed;z-index:1000;padding:10px 12px;border-radius:12px;background:#0d1626;border:1px solid var(--line2);color:#e4ecf6;font-size:13px;line-height:1.5;font-weight:500;box-shadow:0 8px 24px rgba(0,0,0,.45);pointer-events:none}

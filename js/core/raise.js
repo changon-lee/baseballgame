@@ -7,6 +7,7 @@ import { defaultLineup } from './team.js';
 import { createSeason, recordRound, standings, nextStarter } from './season.js';
 import { decisions, gameLine, raiseStep } from './raisematch.js';
 import { createMatch } from './match.js';
+import { leagueAdd, emptyLeague } from './raisestats.js';
 import { TRAITS } from './perks.js';
 
 const ME = USER_TEAM_ID;
@@ -69,7 +70,7 @@ export function newSlot(playerId, year = RAISE.firstYear) {
     growth: createGrowth(), condition: 0, fatigue: 0, traits: [],
     progress: { train: {}, feat: {} }, chosen: false,
     year, season: createSeason({ cycles: RAISE.seasonCycles, innings: 9, year }),
-    stats: {}, total: {}, history: [],
+    stats: {}, total: {}, history: [], league: emptyLeague(),
     seasonBase: baseOf(playerId, f.kind, createGrowth()),
   };
 }
@@ -308,6 +309,7 @@ export function applyDay(slot, result, rng) {
     ...slot, season: r.season, growth, condition, fatigue, chosen: false,
     traits: [...slot.traits, ...traitsNew], progress: { ...slot.progress, feat },
     stats: addStats(slot.stats, id, myLog, dec, appeared), total: addStats(slot.total, id, myLog, dec, appeared),
+    league: leagueAdd(slot.league, r.games.map(g => g.log)),   // 리그 전체 기록(상위 몇 %를 내려고)
   };
   const st = standings(r.season).find(x => x.id === ME);
   return {
@@ -330,6 +332,6 @@ export function nextSeason(slot) {
   const year = slot.year + 1;
   return {
     ...slot, year, season: createSeason({ cycles: RAISE.seasonCycles, innings: 9, year }),
-    stats: {}, fatigue: 0, condition: 0, chosen: false, history: [...slot.history, entry], seasonBase: baseOf(slot.playerId, slot.kind, slot.growth),
+    stats: {}, league: emptyLeague(), fatigue: 0, condition: 0, chosen: false, history: [...slot.history, entry], seasonBase: baseOf(slot.playerId, slot.kind, slot.growth),
   };
 }

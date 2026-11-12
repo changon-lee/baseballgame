@@ -8,6 +8,7 @@ import { TRAITS } from '../core/perks.js';
 import { PRACTICE } from '../core/practice.js';
 import { defaultLineup } from '../core/team.js';
 import { RAISE, DRILLS, newSlot, loadRaise, saveRaise, slotPlayer, raiseTeam, canChoose, choose, dayInfo, applyDay, seasonOver, nextSeason, seasonGains, prelude } from '../core/raise.js';
+import { seasonCard } from '../core/raisestats.js';
 import { face, badge } from './hub.js';
 
 const ME = USER_TEAM_ID;
@@ -43,11 +44,57 @@ function seasonLine(slot, st) {
   return `평균자책 ${era(st.pit)} · ${ip(st.pit)}이닝 · ${st.w || 0}승 ${st.l || 0}패${slot.role === 'CL' ? ` ${st.sv || 0}세이브` : ''} · 탈삼진 ${st.pit.so}`;
 }
 
+// 설명 단추(ⓘ): 마우스를 올리거나 누르면 data-tip 글이 뜬다
+const tip = (text, label) => `<button type="button" class="tip" data-tip="${esc(text)}" aria-label="${esc(label)} 설명">ⓘ</button>`;
+const tier = p => (p == null ? '' : p <= 10 ? 't1' : p <= 30 ? 't2' : p > 70 ? 't4' : 't3');
+
+// 이번 시즌 기록 카드: 수치마다 설명(ⓘ)과 리그 상위 몇 %
+function seasonStatsCard(slot) {
+  const c = seasonCard(slot);
+  const group = c.kind === 'bat' ? '타자' : slot.role === 'SP' ? '선발 투수' : '불펜 투수';
+  const head = `상위 N%: 이번 시즌 규정(${c.need})을 채운 리그 ${group} ${c.pool}명 중 내 순위예요. 1%에 가까울수록 리그 최고예요.`;
+  return `<section class="card rz-season"><div class="card-h">📊 ${slot.year} 시즌 기록 ${tip(head, '상위 퍼센트')}</div>
+      <div class="rz-sgrid">${c.rows.map(r => `<div class="rz-st ${tier(r.pct)}">
+        <span class="k">${esc(r.name)}${tip(r.info, r.name)}</span><b>${esc(r.text)}</b><em>${r.pct ? `상위 ${r.pct}%` : '&nbsp;'}</em></div>`).join('')}</div>
+      <p class="hint">${esc(c.extra)}</p>
+      ${c.qualified ? '' : `<p class="hint">규정(${c.need})을 채우면 리그에서 상위 몇 %인지 나와요</p>`}
+    </section>`;
+}
+
+// 설명 말풍선 하나를 화면에 띄워 두고 돌려 쓴다(폰은 누르기, 컴퓨터는 마우스 올리기)
+function tipBox(root) {
+  if (root.__tipHide) return root.__tipHide;          // 육성모드에 다시 들어와도 듣는 곳은 한 번만
+  let box = document.querySelector('.tipbox'), cur = null;
+  if (!box) { box = document.createElement('div'); box.className = 'tipbox'; box.hidden = true; document.body.appendChild(box); }
+  const hide = () => { box.hidden = true; cur = null; };
+  const show = el => {
+    cur = el; box.textContent = el.dataset.tip; box.hidden = false;
+    const r = el.getBoundingClientRect(), w = Math.min(260, window.innerWidth - 24);
+    box.style.width = w + 'px';
+    box.style.left = Math.max(12, Math.min(window.innerWidth - w - 12, r.left + r.width / 2 - w / 2)) + 'px';
+    const below = r.bottom + 8, h = box.offsetHeight;
+    box.style.top = (below + h > window.innerHeight - 8 ? r.top - h - 8 : below) + 'px';
+  };
+  root.addEventListener('pointerover', e => { const t = e.target.closest && e.target.closest('.tip'); if (t && e.pointerType === 'mouse') show(t); });
+  root.addEventListener('pointerout', e => { const t = e.target.closest && e.target.closest('.tip'); if (t && e.pointerType === 'mouse') hide(); });
+  root.addEventListener('click', e => {
+    const t = e.target.closest && e.target.closest('.tip');
+    if (!t) return hide();
+    e.preventDefault(); e.stopPropagation();
+    if (cur === t && !box.hidden) hide(); else show(t);
+  }, true);
+  window.addEventListener('scroll', hide, true);
+  root.__tipHide = hide;
+  return hide;
+}
+
 export function showRaise(root, { storage, loadGame, onBack }) {
   let data = loadRaise(storage), saveOk = true, brokenShown = false;
   const rng = createRng((Date.now() ^ (Math.random() * 1e9)) >>> 0);
   const persist = () => { saveOk = saveRaise(storage, data); };
+  const hideTip = tipBox(root);
   const screen = (html, cls = '') => {
+    hideTip();
     root.innerHTML = `<div class="screen menu raise ${cls}">${html}${saveOk ? '' : '<p class="note center">이 브라우저에서는 저장이 안 돼요. 창을 닫으면 진행이 사라져요.</p>'}</div>`;
     const sc = root.querySelector('.screen'); if (sc) sc.scrollTop = 0;
   };
@@ -197,6 +244,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
         <p class="hint">컨디션 ${condHtml(rep.condFrom)} → ${condHtml(rep.condTo)} · 피로 ${Math.round(s.fatigue)}</p>
         ${rep.ups.length ? `<div class="ups">${rep.ups.map(u => `<div><b>${STAT_ICON[u.stat]} ${STAT_KO[u.stat]}</b><span><em>+${u.n}${u.stat === 'velo' ? 'km' : ''}</em></span></div>`).join('')}</div>` : ''}
       </section>
+      ${seasonStatsCard(s)}
       <div class="actions"><button class="primary big" data-act="ok">${rep.seasonOver ? '시즌 결산 보기' : '확인'}</button></div>`, 'result');
     act('ok', () => hubView(i));
   }
