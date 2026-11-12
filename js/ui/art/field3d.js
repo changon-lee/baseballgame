@@ -110,22 +110,34 @@ export function cameraAt(sc, t, W, H) {
 // ── 배경 ──
 function drawSky(ctx, K, dusk, night) {
   const g = ctx.createLinearGradient(0, 0, 0, K.H);
-  if (dusk === 'game') { g.addColorStop(0, '#34416f'); g.addColorStop(0.45, '#5a6ca2'); g.addColorStop(1, '#7387b8'); }   // 경기 중 노을: 노을 그림 하늘 윗부분(푸른 보라)에 맞춤
+  // 경기장: 관중석 그림 윗줄 하늘의 평균색 한 가지(그림 윗부분도 이 색으로 풀려 있어 경계가 없다).
+  // 화면 기준으로 위를 짙게 하면, 카메라가 올려다봐 관중석 윗줄이 화면 위쪽에 올 때 다시 경계가 생긴다
+  const sb = dusk !== 'practice' ? skyBlend(standsImage('field')) : null;
+  // 노을·밤에는 나중에 땅·벽을 어둡게 하는 곱하기 색(GRADE)이 화면 전체(하늘 포함)에 덮인다. 관중석 그림은 그 뒤에 그려 안 덮이므로
+  // 하늘은 그만큼 미리 밝혀 둬야 그림과 같은 색이 된다
+  if (sb) {
+    const m = night ? GRADE.night : dusk === 'game' ? GRADE.dusk : [255, 255, 255];
+    ctx.fillStyle = `rgb(${sb.col.map((v, i) => Math.min(255, Math.round(v * 255 / m[i]))).join(',')})`;
+    ctx.fillRect(0, 0, K.W, K.H); return;
+  }
+  // 경기 중 노을: 화면 위는 조금 짙게, 관중석 그림 윗줄 하늘색(#667aac)으로 내려와 이어진다(그림 위쪽은 투명하게 풀어 둔다)
+  if (dusk === 'game') { g.addColorStop(0, '#3e4c82'); g.addColorStop(0.3, '#5c70a6'); g.addColorStop(0.45, '#667aac'); g.addColorStop(1, '#6d80b0'); }
   else if (night) { g.addColorStop(0, '#03060d'); g.addColorStop(0.5, '#0b1428'); g.addColorStop(1, '#1b2a48'); }   // 밤 그림 하늘(짙은 남색)에 맞춤
   else if (dusk) { g.addColorStop(0, '#5b4a6e'); g.addColorStop(0.12, '#b46a62'); g.addColorStop(0.28, '#f09a58'); g.addColorStop(0.5, '#f8c47e'); g.addColorStop(1, '#fbd99a'); }   // 연습장 그림처럼 노을
-  else { g.addColorStop(0, '#4b98e6'); g.addColorStop(0.45, '#5ea5ea'); g.addColorStop(1, '#b9dcf6'); }   // 관중석 그림 윗부분 하늘색에 맞춤
+  else { g.addColorStop(0, '#5aa2ea'); g.addColorStop(0.4, '#79b3ee'); g.addColorStop(1, '#a9d2f4'); }   // 관중석 그림 윗줄 하늘색(#79b3ee)에 맞춤
   ctx.fillStyle = g; ctx.fillRect(0, 0, K.W, K.H);
 }
 // 밤 경기: 땅·벽을 조명 아래처럼 조금 어둡고 차갑게(관중석 그림은 이미 밤이라 그 전에)
+const GRADE = { night: [0x9a, 0xa8, 0xc4], dusk: [0xd8, 0xcc, 0xd2] };   // 밤·노을 땅 곱하기 색
 function nightGrade(ctx, W, H) {
   ctx.save(); ctx.globalCompositeOperation = 'multiply';
-  ctx.fillStyle = '#9aa8c4'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = `rgb(${GRADE.night.join(',')})`; ctx.fillRect(0, 0, W, H);
   ctx.restore();
 }
 // 노을 경기: 땅·벽을 해 질 녘처럼 조금 어둡고 살짝 분홍빛으로(관중석은 노을 그림이라 그 전에)
 function duskGround(ctx, W, H) {
   ctx.save(); ctx.globalCompositeOperation = 'multiply';
-  ctx.fillStyle = '#d8ccd2'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = `rgb(${GRADE.dusk.join(',')})`; ctx.fillRect(0, 0, W, H);
   ctx.restore();
 }
 // 연습장 조명탑: 담장 너머에 기둥과 켜진 조명(연습장 배경 그림처럼)
@@ -144,12 +156,25 @@ function drawTowers(ctx, K) {
   }
 }
 // 그림 속 삼각형(u,v)을 화면 삼각형(x,y)에 붙인다(경계를 살짝 넓혀 이음새가 안 보이게)
+// 삼각형을 모서리마다 바깥으로 e픽셀 밀어 넓힌다(이웃 조각과 겹쳐 틈이 안 보이게).
+// 가운데서 밀어내면 길쭉한 삼각형은 긴 변이 거의 안 움직여 실금이 남는다(노을 하늘에서 세로줄로 보였다)
+function growTri(d0, d1, d2, e = 0.9) {
+  const P = [d0, d1, d2], cx = (d0.x + d1.x + d2.x) / 3, cy = (d0.y + d1.y + d2.y) / 3;
+  const N = P.map((p, i) => {                             // 변 i(점 i → i+1)의 바깥쪽 단위 법선
+    const q = P[(i + 1) % 3], l = Math.hypot(q.x - p.x, q.y - p.y) || 1;
+    let nx = (q.y - p.y) / l, ny = -(q.x - p.x) / l;
+    if (((p.x + q.x) / 2 - cx) * nx + ((p.y + q.y) / 2 - cy) * ny < 0) { nx = -nx; ny = -ny; }
+    return [nx, ny];
+  });
+  return P.map((p, i) => {
+    const a = N[(i + 2) % 3], b = N[i], k = e / Math.max(0.25, 1 + a[0] * b[0] + a[1] * b[1]);   // 뾰족한 꼭짓점은 너무 길게 안 나가게
+    return [p.x + (a[0] + b[0]) * k, p.y + (a[1] + b[1]) * k];
+  });
+}
 function imgTri(ctx, img, s0, s1, s2, d0, d1, d2) {
-  const cx = (d0.x + d1.x + d2.x) / 3, cy = (d0.y + d1.y + d2.y) / 3, grow = p => {
-    const dx = p.x - cx, dy = p.y - cy, l = Math.hypot(dx, dy) || 1; return [p.x + dx / l * 0.7, p.y + dy / l * 0.7];
-  };
+  const g = growTri(d0, d1, d2);
   ctx.save();
-  ctx.beginPath(); ctx.moveTo(...grow(d0)); ctx.lineTo(...grow(d1)); ctx.lineTo(...grow(d2)); ctx.closePath(); ctx.clip();
+  ctx.beginPath(); ctx.moveTo(...g[0]); ctx.lineTo(...g[1]); ctx.lineTo(...g[2]); ctx.closePath(); ctx.clip();
   // (u,v) → (x,y) 아핀 변환 풀기
   const du1 = s1[0] - s0[0], dv1 = s1[1] - s0[1], du2 = s2[0] - s0[0], dv2 = s2[1] - s0[1];
   const det = du1 * dv2 - du2 * dv1;
@@ -224,8 +249,30 @@ const SIDE = (() => {
   }
   return out;
 })();
+// 관중석 그림 윗부분(하늘)을 그 그림 하늘의 평균색 한 가지로 서서히 덮은 사본 + 그 색.
+// 코드로 그린 하늘도 아래쪽을 이 색으로 칠하면 그림과 하늘이 경계 없이 이어진다(투명하게 풀면 조각이 겹친 곳이 밝은 줄로 보인다)
+const BLEND = 110;                                        // 그림 윗줄부터 이만큼(픽셀)에 걸쳐 평균색 → 그림
+const blended = new WeakMap();
+function skyBlend(img) {
+  if (!img) return null;
+  let r = blended.get(img);
+  if (r) return r;
+  const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+  const x = c.getContext('2d');
+  x.drawImage(img, 0, 0);
+  const d = x.getImageData(0, 0, c.width, 24).data;       // 맨 위 24줄 평균 = 하늘색
+  let R = 0, G = 0, B = 0;
+  for (let i = 0; i < d.length; i += 4) { R += d[i]; G += d[i + 1]; B += d[i + 2]; }
+  const n = d.length / 4, col = [R / n, G / n, B / n].map(Math.round), css = a => `rgba(${col[0]},${col[1]},${col[2]},${a})`;
+  const g = x.createLinearGradient(0, 0, 0, BLEND);
+  g.addColorStop(0, css(1)); g.addColorStop(0.35, css(0.85)); g.addColorStop(1, css(0));
+  x.fillStyle = g; x.fillRect(0, 0, c.width, BLEND);
+  r = { img: c, col };
+  blended.set(img, r);
+  return r;
+}
 function drawStands(ctx, K, crowdTint) {
-  const img = standsImage('field');
+  const sb = skyBlend(standsImage('field')), img = sb && sb.img;
   // 외야: 관중석 그림을 펜스 뒤에 빙 둘러 세운다
   const step = 2;
   for (let a = -SPAN_A; a < SPAN_A - 0.01; a += step) {
