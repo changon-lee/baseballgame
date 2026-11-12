@@ -30,6 +30,10 @@ test('judgeTap: inside the window is a catch, closer is perfect, no tap is a mis
   assert.equal(judgeTap(null), 'miss');
   assert.equal(judgeTap(150, 'easy'), 'good');
   assert.equal(judgeTap(150, 'hard'), 'miss');
+  // 다이빙 캐치는 더 빡빡하다
+  assert.equal(judgeTap(80, 'normal', 'dive'), 'miss');
+  assert.equal(judgeTap(50, 'normal', 'dive'), 'good');
+  assert.equal(judgeTap(80, 'normal', 'throw'), 'good');
 });
 
 test('good and bad outcomes differ the way the rules expect', () => {

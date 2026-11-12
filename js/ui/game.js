@@ -13,7 +13,7 @@ import { BUNT } from '../core/bunt.js';
 import { stealRunners } from '../core/rules.js';
 import { heatBoost, hitsToday, isHot, rally, RALLY_MAX } from '../core/heat.js';
 import { lineScore, todayText, gameMvp } from '../core/boxscore.js';
-import { fieldChance, judgeTap, FIELD_WIN } from '../core/fielding.js';
+import { fieldChance, judgeTap, fieldWin, CPU_DIVE } from '../core/fielding.js';
 import { playerLine, avg } from '../core/growth.js';
 import { loadPrefs, savePrefs, LEVELS, LEVEL_NAME } from './prefs.js';
 import { volRow, bindVol } from './volume.js';
@@ -537,6 +537,14 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       return;
     }
     if (['BALL', 'STRIKE', 'FOUL', 'HBP', 'WILD', 'BUNT_FOUL'].includes(r.event)) return finish();
+    // 내가 친 타구가 다이빙 상황(호수비·텍사스 안타)이면 상대 수비수는 CPU_DIVE 확률로만 잡는다
+    if (!userPitched && !practice && !net && ball && ball.pitch) {
+      const ch = fieldChance(r, prev.bases);
+      if (ch && ch.kind === 'dive') {
+        const o = rng() < CPU_DIVE ? ch.good : r.event === 'SINGLE' ? null : ch.bad;   // 못 잡으면: 원래 안타는 그대로, 호수비는 다이빙 실패 안타로
+        if (o) { r = applyDecision(match, ball.pitch, { event: o.event, contact: r.contact, fly: o.fly, style: o.style, swung: true }); delete r.pitch; delete r.swing; res.r = r; }
+      }
+    }
     // 대결이면 서버가 준 씨앗으로: 두 폰에서 같은 장면이 나온다
     play = (userPitched && fieldOn() && fieldScene(r, batter, prev, res))
       || buildPlay({ event: r.event, fly: r.fly, style: r.style, contact: r.contact, bats: batter.bats, bases: prev.bases, rng: r.seed != null ? createRng(r.seed) : rng });
@@ -550,7 +558,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   // 아슬아슬한 수비면 성공/실패 두 장면을 같은 씨앗으로 만들어 둔다(터치할 순간까지 똑같다). 성공 장면부터 보여 주고,
   // 링이 나타나면 장면이 느려진다. 터치(또는 시간 초과)하는 순간 둘 중 하나로 갈아 끼우고 경기 결과도 그에 맞게 다시 정한다
   const fieldOn = () => !!prefs.fielding && !practice && !net && !auto;
-  const FC_LEAD = 420, FC_SLOW = 0.32;                  // 터치할 순간 0.42초(장면 시간) 전부터 링, 그동안 0.32배 느리게
+  const FC_SLOW = 0.32;                                  // 링이 떠 있는 동안 장면은 0.32배 느리게
+  const fcLead = kind => (kind === 'dive' ? 300 : 420);  // 터치할 순간 몇 ms(장면 시간) 전부터 링이 뜨나 — 다이빙은 더 짧게
   const FC_NAME = { dive: '다이빙!', throw: '1루 송구!', home: '홈 송구!' };
   function fieldScene(r, batter, prev, res) {
     const ch = fieldChance(r, prev.bases);
@@ -565,18 +574,18 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   function fieldTick(now) {
     const f = play.fc, ms = now - play.start;
     if (!f.r0) {
-      if (ms < f.tHit - FC_LEAD) return;
+      if (ms < f.tHit - fcLead(f.kind)) return;
       f.r0 = now; f.s0 = ms; f.hitAt = now + (f.tHit - ms) / FC_SLOW;
       vibrate(15);
     }
     play.start = now - (f.s0 + (now - f.r0) * FC_SLOW);
-    if (now > f.hitAt + FIELD_WIN[lvl()]) decideField(null);
+    if (now > f.hitAt + fieldWin(lvl(), f.kind)) decideField(null);
   }
   // err: 링이 겹친 순간과의 차이(ms, 빠르면 음수). null = 안 눌렀다
   function decideField(err) {
     const f = play && play.fc;
     if (!f || f.state !== 'wait') return;
-    const grade = judgeTap(err, lvl()), ok = grade !== 'miss', now = performance.now(), ms = now - play.start;
+    const grade = judgeTap(err, lvl(), f.kind), ok = grade !== 'miss', now = performance.now(), ms = now - play.start;
     const next = ok ? f.good : f.bad, o = ok ? f.ch.good : f.ch.bad;
     Object.assign(f, { state: 'done', grade, err, at: now });
     Object.assign(next, { fc: f, start: play.start, then: play.then, landed: false, si: 0 });
@@ -598,7 +607,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     if (f.state === 'wait' && !f.r0) {
       say('🧤 수비 준비', cx, cy + 6, 16, `rgba(255,255,255,${0.6 + 0.4 * Math.sin(now / 110)})`, 4);
     } else if (f.state === 'wait') {
-      const span = f.hitAt - f.r0, k = (f.hitAt - now) / span, band = FIELD_WIN[lvl()] * R0 * GROW / span;
+      const span = f.hitAt - f.r0, k = (f.hitAt - now) / span, band = fieldWin(lvl(), f.kind) * R0 * GROW / span;
       ctx.fillStyle = 'rgba(6,13,26,.38)'; ctx.beginPath(); ctx.arc(cx, cy, R0 * (1 + GROW) + 8, 0, Math.PI * 2); ctx.fill();
       ring(R0, 'rgba(46,204,113,.42)', band * 2);                 // 성공 구간
       ring(R0, '#a8ffcb', 3);                                     // 겹쳐야 할 원
@@ -1258,7 +1267,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   }
 
   // 확인용: 지금 타석에 정해진 타구 장면을 바로 띄운다(수비 조작 확인)
-  const testPlay = (event, fly = false, style = null, pull = 0) => { const pitch = cpuPitchToUser(match, rng); ball = null; apply({ ...applyDecision(match, pitch, { event, contact: { kind: 'INPLAY', pull, quality: 0.6 }, fly, style, swung: true }), pitch }, true); };
+  const testPlay = (event, fly = false, style = null, pull = 0, batting = false) => { const pitch = cpuPitchToUser(match, rng); ball = batting ? { pitch } : null; apply({ ...applyDecision(match, pitch, { event, contact: { kind: 'INPLAY', pull, quality: 0.6 }, fly, style, swung: true }), pitch }, !batting); };
   window.__ui = { showLineScore, testPlay };
   window.__match = f => { if (f) { match = f(match); updateBoard(); } return match; };   // 확인용
   window.__game = () => ({ mode, dragging, V: !!V, W, H, target, ball: !!ball, ballStart: ball ? ball.start : null, arrival: ball ? ball.arrival : null, swung: !!(ball && ball.swung), pitchAt, play: play && play.start ? { ms: Math.round(performance.now() - play.start), event: play.event, fc: play.fc ? { state: play.fc.state, ring: !!play.fc.r0, hitAt: play.fc.hitAt, grade: play.fc.grade || null } : null } : null });
