@@ -140,6 +140,19 @@ function intercept(path, f0, speed, tMin, zMax = 4.5) {
   return { t: Math.max(path.t1, REACT + hyp(...f0, e[0], e[1]) / speed), x: e[0], y: e[1] };
 }
 const hang = H => 2 * Math.sqrt(2 * H / G) * 0.95;
+// 수비수가 공이 떨어질 때까지 뛰어서 닿을 수 있는 거리(반응 시간 빼고). 안타가 떨어지는 곳은 모두에게 이보다 멀어야 자연스럽다
+export const reachBy = (n, T) => runSpeed(n) * Math.max(0, T - REACT);
+// 아무도 못 잡는 곳에 떨어지는 안타: pick()으로 뽑은 { ang, dist, H } 중 모든 수비수가 닿지 못하는 첫 자리(못 찾으면 마지막)
+function dropSpot(pick) {
+  let c;
+  for (let i = 0; i < 30; i++) {
+    c = pick(i);
+    if (Math.abs(c.ang) <= 45) c.dist = Math.min(c.dist, fenceAt(c.ang) - 12);
+    const [x, y] = polar(c.ang, c.dist), T = hang(c.H);
+    if ([...IF, ...OF].every(n => hyp(...SPOTS[n], x, y) > reachBy(n, T) + 6)) return c;
+  }
+  return c;
+}
 const cutAt = (segs, t) => { const s = segs[segs.length - 1]; s.t1 = Math.min(s.t1, t); };
 
 // ── 대본 만들기 ──
@@ -357,10 +370,16 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
       sc.ball.length = 0;
     } else {
       let dist, H;
-      if (ev === 'TRIPLE') { ang = (ang < 0 ? -1 : 1) * (19 + rng() * 9); dist = fenceAt(ang) - 25; H = 45; }
-      else if (ev === 'DOUBLE') { ang = (ang < 0 ? -1 : 1) * (rng() < 0.5 ? 14 + rng() * 9 : 36 + rng() * 6); dist = 255 + rng() * 55; H = 38 + rng() * 15; }
-      else if (style === 'bloop') { dist = 128 + rng() * 22; H = 30 + rng() * 10; }   // 텍사스 안타: 내야수 머리 위, 외야수 앞
-      else { dist = 150 + rng() * 55; H = 18 + rng() * 22; }
+      const sgn = ang < 0 ? -1 : 1, ang0 = ang;
+      if (ev === 'TRIPLE') { ang = sgn * (19 + rng() * 9); dist = fenceAt(ang) - 25; H = 45; }
+      else if (ev === 'DOUBLE') {                    // 외야 사이(좌·우중간)를 가르거나 선상으로 빠지는 낮은 타구 — 외야수가 못 닿는 곳
+        ({ ang, dist, H } = dropSpot(() => (rng() < 0.55
+          ? { ang: sgn * (10 + rng() * 8), dist: 290 + rng() * 45, H: 20 + rng() * 12 }
+          : { ang: sgn * (37 + rng() * 5), dist: 265 + rng() * 50, H: 16 + rng() * 10 })));
+      } else if (style === 'bloop') { dist = 128 + rng() * 22; H = 30 + rng() * 10; }   // 텍사스 안타: 내야수 머리 위, 외야수 앞
+      else {                                         // 라인드라이브 안타: 내야수 뒤·외야수 앞, 둘 다 못 닿는 곳에 낮게
+        ({ ang, dist, H } = dropSpot(i => ({ ang: clamp(ang0 + (i > 6 ? randNormal(rng) * 10 : 0), -42, 42), dist: 180 + rng() * 60, H: 12 + rng() * 16 })));
+      }
       dist = Math.min(dist, fenceAt(ang) - 12);
       const [x, y] = polar(ang, dist), T = hang(H);
       if (style === 'bloop') {
@@ -695,6 +714,17 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
 
   // 남은 수비수: 공 쪽을 보며 몇 걸음, 내야수는 가까운 베이스로
   const bl = (() => { const s = sc.ball.find(q => q.type === 'fly') || sc.ball.find(q => q.type === 'path'); if (!s) return [0, 120]; const p = s.type === 'fly' ? s.p1 : pathPos(s, s.t1); return [p[0], p[1]]; })();
+  // 뜬공(파울·홈런 제외): 떨어지는 곳 가까이(110피트 안)의 수비수는 그쪽으로 달려간다. 잡는 사람과 부딪히지 않게 14피트 앞에서 멈춘다
+  const flyS = event !== 'HR' && style !== 'foul' && !steal ? sc.ball.find(q => q.type === 'fly') : null;
+  const converge = (n, keys) => {
+    if (!flyS) return false;
+    const a = angOf(flyS.p1[0], flyS.p1[1]), r = Math.min(hyp(0, 0, flyS.p1[0], flyS.p1[1]), fenceAt(a) - 6);
+    const [lx, ly] = polar(a, r), [sx, sy] = SPOTS[n], d = hyp(sx, sy, lx, ly);
+    if (d > 110 || d < 16) return false;
+    const go = Math.min(reachBy(n, flyS.t1 - flyS.t0) + 4, d - 14), k = go / d;
+    runTo(keys, REACT + 0.05, sx + (lx - sx) * k, sy + (ly - sy) * k, runSpeed(n), 'watch');
+    return true;
+  };
   for (const n of Object.keys(F)) {
     if (used.has(n)) continue;
     const keys = F[n];
@@ -702,6 +732,7 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
     if (n === 'P') { act(keys, 0.35, 'watch'); continue; }
     if (n === '1B' && !bunt && (hit || event === 'OUT' || event === 'LINE_DP')) { runTo(keys, 0.4, ...BAG[1], 20, 'cover'); continue; }
     if (n === '3B' && hit && !fly) { act(keys, 0.4, 'watch'); continue; }
+    if (n !== 'P' && n !== 'C' && converge(n, keys)) continue;
     const [sx, sy] = SPOTS[n], k = OF.includes(n) ? 0.3 : 0.1;
     runTo(keys, 0.35, sx + (bl[0] - sx) * k, sy + (bl[1] - sy) * k, OF.includes(n) ? 16 : 10, 'watch');
   }
