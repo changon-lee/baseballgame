@@ -1,13 +1,13 @@
 // 경기 화면: 투구(조준 → 구종 → 게이지), 타격(타이밍 터치), 타구 화면, 투수 교체, 경기 종료
 import { CONFIG } from '../config.js';
 import { createRng } from '../core/rng.js';
-import { PITCH_TYPES, gaugePos, gaugeError, sweetWidth, gaugePeriod, energy, aimFromTouch, fatigue, ZONE_K } from '../core/pitch.js';
+import { PITCH_TYPES, gaugePos, gaugeError, sweetWidth, gaugePeriod, energy, aimFromTouch, fatigue, ZONE_K, computePitch } from '../core/pitch.js';
 import { availableRelievers } from '../core/team.js';
 import { createMatch, matchup, playUserPitch, cpuPitchToUser, resolveUserSwing, changePitcher, cpuMaybeChangePitcher, simulateHalf, simulateInning, lastPitch, simulateRest, applyDecision } from '../core/match.js';
 import { cpuChoosePitch, cpuSwing } from '../core/ai.js';
-import { pitchPts, swingPts } from '../core/practice.js';
+import { swingPts, controlGrade } from '../core/practice.js';
 import { createCutins, cutinFor, CUT_MS, HR_NAME } from './cutin.js';
-import { decoratePractice, practiceArtSettled } from './art/practice.js';
+import { decoratePractice, practiceArtSettled, preloadPractice } from './art/practice.js';
 import { batReach, graceMs } from '../core/batting.js';
 import { BUNT } from '../core/bunt.js';
 import { stealRunners } from '../core/rules.js';
@@ -91,6 +91,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     : timeOfDay(inning, innings);
   setTimeOfDay(todAt(1));
   if (!practice) preloadEvening();
+  else preloadPractice();
+  const soloPitch = !!practice && practice.kind === 'pitch';   // 투구 연습: 타자 없이 던지고 제구만 본다
   // 불방망이·응원 열기: 내가 하는 일반 경기에서만(연습·1:1 대결은 없다)
   const heatOn = !practice && !net;
   let rallyShown = -1;           // 응원 폭발을 알린 때의 기록 길이(같은 폭발을 두 번 알리지 않는다)
@@ -186,7 +188,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     root.querySelectorAll('.bases i').forEach((el, i) => el.classList.toggle('on', !!g.bases[i]));
     const dots = (cls, n, max) => Array.from({ length: max }, (_, i) => `<i class="${cls}${i < n ? ' on' : ''}"></i>`).join('');
     $('.bso').innerHTML = `<div><em>B</em>${dots('b', g.balls, 3)}</div><div><em>S</em>${dots('s', g.strikes, 2)}</div><div><em>O</em>${dots('o', g.outs, 2)}</div>`;
-    $('.mu').innerHTML = practice ? `<b>${mu.pitcher.name}</b> <span class="vs">vs</span> <b>${mu.batter.name}</b> <small>· 연습 ${practice.n}/${practice.goal}구</small>`
+    $('.mu').innerHTML = soloPitch ? `<b>${mu.pitcher.name}</b> <small>· 투구 연습 ${practice.n}/${practice.goal}구</small>`
+      : practice ? `<b>${mu.pitcher.name}</b> <span class="vs">vs</span> <b>${mu.batter.name}</b> <small>· 연습 ${practice.n}/${practice.goal}구</small>`
       : `<b>${mu.pitcher.name}</b>${condTag(mu.pitcher.id)} <small>${match.pitchCount[mu.pitchingSide]}구</small> <span class="vs">vs</span> <small>${g.battingIndex[mu.battingSide] + 1}번</small> <b>${mu.batter.name}</b>${condTag(mu.batter.id)}${heatOn && isHot(match.log, mu.batter.id) ? ` <span class="hot">🔥${hitsToday(match.log, mu.batter.id)}안타</span>` : ''}`;
   }
   const setControls = html => { controls.innerHTML = html; if (!['aim', 'pick'].includes(mode)) hideBullpenChip(); };
@@ -465,7 +468,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       setControls(`<p>${GRADE[q]} <small>· 상대 타자를 기다리는 중</small></p>`);
       return;
     }
-    const r = playUserPitch(match, { type: pitchType, target, gaugePos: gpos, level }, rng);
+    const r = soloPitch ? soloThrow(gpos, level) : playUserPitch(match, { type: pitchType, target, gaugePos: gpos, level }, rng);
     const start = performance.now() + CONFIG.WIND_USER_MS;
     const pitch = viewPitch(r.pitch);
     ball = { pitch, start, wind: CONFIG.WIND_USER_MS, arrival: start + pitch.travelMs, result: r };
@@ -474,6 +477,13 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     const grade = !r.pitch.onTarget ? '<b class="r">타이밍 실패 — 제구가 흔들렸어요</b>'
       : r.pitch.err < r.pitch.sweet * 0.35 ? '<b class="g">완벽한 타이밍!</b>' : '<b class="y">괜찮은 타이밍</b>';
     setControls(`<p>${grade}</p>`);
+  }
+
+  // 투구 연습 한 구: 경기 상태는 그대로, 공이 어디 꽂혔는지만(노린 곳은 aim에 남긴다)
+  function soloThrow(gpos, level) {
+    const mu = matchup(match);
+    const pitch = computePitch({ pitcher: mu.pitcher, type: pitchType, target, gaugePos: gpos, pitchCount: 0, rng, level });
+    return { match, pitch, swing: null, event: 'PRACTICE', contact: null, fly: null, style: null, runs: 0, paEnded: false, aim: { ...target } };
   }
 
   function throwCpuPitch() {
@@ -565,7 +575,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       play.then = finish;
       return;
     }
-    if (['BALL', 'STRIKE', 'FOUL', 'HBP', 'WILD', 'BUNT_FOUL'].includes(r.event)) return finish();
+    if (['BALL', 'STRIKE', 'FOUL', 'HBP', 'WILD', 'BUNT_FOUL', 'PRACTICE'].includes(r.event)) return finish();
     // 내가 친 타구가 다이빙 상황(호수비·텍사스 안타)이면 상대 수비수는 CPU_DIVE 확률로만 잡는다
     if (!userPitched && !practice && !net && ball && ball.pitch) {
       const ch = fieldChance(r, prev.bases);
@@ -665,7 +675,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     if (ball && ball.pitch) paDots.push({ x: ball.pitch.plate.x, y: ball.pitch.plate.y, k: ball.pitch.type, n: paDots.length + 1 });
     if (match.log.length > logN || practice || match.game.half !== prev.half) dotsClear = true;   // 타석이 끝났다 → 다음 타석에 지운다
     if (practice) {                                     // 연습: 점수를 쌓고, 아웃·주자·이닝은 매번 되돌린다
-      practice.n++; practice.pts += userPitched ? pitchPts(ball.pitch) : swingPts(r.contact);
+      practice.n++; practice.pts += r.aim ? controlGrade(ball.pitch, r.aim).pts : swingPts(r.contact);
       match = { ...match, game: { ...match.game, inning: 1, half: practice.kind === 'pitch' ? 'top' : 'bottom', outs: 0, bases: [false, false, false], score: { away: 0, home: 0 }, over: false, result: null }, pitchCount: { home: 0, away: 0 } };
     }
     if (r.chk && r.chk !== checkOf(match)) console.warn('경기 상태가 서버와 달라요', r.chk, checkOf(match));
@@ -678,10 +688,12 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       label = `${r.steal.lead + 2}루 도루 ${r.steal.ok ? '성공!' : '실패'} · ${label}`;
       playSound(r.steal.ok ? 'cheer' : 'aww', { gain: 0.7 });
     }
-    crowd(prev, r, userPitched);
+    const cg = r.aim ? controlGrade(ball.pitch, r.aim) : null;   // 투구 연습: 제구 평가만
+    if (cg) label = cg.label;
+    else crowd(prev, r, userPitched);
     const good = r.steal && !userPitched ? r.steal.ok
       : userPitched ? (r.event === 'STRIKE' || OUTS.includes(r.event) || r.event === 'SINGLE_HOME_OUT') : (HITS.includes(r.event) || FREE.includes(r.event) || r.event === 'SAC_BUNT');
-    const color = r.event === 'FOUL' ? '#ffffff' : good ? '#2ecc71' : '#e74c3c';
+    const color = cg ? ['#e74c3c', '#ffd43b', '#2ecc71', '#2ecc71'][cg.q] : r.event === 'FOUL' ? '#ffffff' : good ? '#2ecc71' : '#e74c3c';
     // 불방망이: 이번 안타로 그 경기 2안타 이상이 됐다
     const nh = heatOn && match.log.length > logN && HIT_PA.includes(match.log[match.log.length - 1].event) ? hitsToday(match.log, hold.batter.id) : 0;
     const fire = nh >= 2 ? (nh === 2 ? '🔥 불방망이!' : `🔥 오늘 ${nh}안타!`) : '';
@@ -1087,6 +1099,11 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     if (!W || !V) resize();
     setAmbience(true);
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    if (practice && !practiceArtSettled()) {            // 연습장 그림을 불러오는 중: 경기장이 잠깐 비치지 않게 어둡게만
+      if (pitchAt) pitchAt = Math.max(pitchAt, now + CONFIG.WIND_CPU_MS + 500);
+      ctx.fillStyle = '#05080f'; ctx.fillRect(0, 0, W, H); drawMsg();
+      return;
+    }
     if (mode === 'bwait' && pitchAt && overlayOpen()) pitchAt = Math.max(pitchAt, now + CONFIG.WIND_CPU_MS + 500);
     else if (mode === 'bwait' && pitchAt && now >= pitchAt) throwCpuPitch();
 
@@ -1147,7 +1164,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       const aiming = mode === 'aim' || mode === 'pick' || mode === 'gauge' || mode === 'netwait' || (ball && !ball.hitAt);
       if (!drawCatcherSprite(ctx, V, aiming ? target : null, now)) drawCatcherAndUmpire(ctx, V, aiming ? target : null, uni[mu.pitchingSide]);
       drawZone(0.7);
-      drawB();
+      if (!soloPitch) drawB();
       if (bp && bp.prog <= 1.02) { drawTrail(now); drawBall(ctx, bp.x, bp.y, bp.r, bp.spin); }
       drawP();
     } else {

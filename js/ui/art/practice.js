@@ -27,6 +27,8 @@ function fitOf(e) {
   if (!e || typeof e !== 'object' || !Array.isArray(e.at)) return null;
   return { fx: num(e.at[0], 0, 1, 0.5), fy: num(e.at[1], 0, 1, 0.5), zoom: num(e.zoom, 1, 4, 1) };
 }
+// 연습장에 들어가자마자 불러 두기(첫 화면부터 연습장 그림이 나오게)
+export const preloadPractice = () => load();
 // 파일 목록과 그림 불러오기가 끝났나(끝나기 전에 그린 배경은 끝난 뒤 한 번 다시 그린다)
 export const practiceArtSettled = () => manifest !== null && pending === 0;
 

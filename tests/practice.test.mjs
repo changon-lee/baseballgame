@@ -3,7 +3,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRng } from '../js/core/rng.js';
 import { newCareer, loadCareer, startSeason, applyUserGame, applyAutoGame, userTeamNow, userTeamTired } from '../js/core/career.js';
-import { PRACTICE, practiceLeft, applyPractice, pitchPts, swingPts } from '../js/core/practice.js';
+import { PRACTICE, practiceLeft, applyPractice, swingPts, controlGrade } from '../js/core/practice.js';
+import { computePitch } from '../js/core/pitch.js';
 import { loadNow, daysToRecover, fatigueAfterGame, applyFatigue } from '../js/core/fatigue.js';
 import { getTeam } from '../js/data/rosters.js';
 
@@ -72,11 +73,30 @@ test('practice rejects a stat that does not fit the kind', () => {
   assert.equal(r.xp, 0);
 });
 
-test('better pitches and swings are worth more practice points', () => {
-  assert.ok(pitchPts({ onTarget: true, err: 0, sweet: 0.1 }) > pitchPts({ onTarget: true, err: 0.09, sweet: 0.1 }));
-  assert.ok(pitchPts({ onTarget: true, err: 0.09, sweet: 0.1 }) > pitchPts({ onTarget: false, err: 0.5, sweet: 0.1 }));
+test('better swings are worth more practice points', () => {
   assert.ok(swingPts({ kind: 'INPLAY', quality: 0.9 }) > swingPts({ kind: 'INPLAY', quality: 0.3 }));
   assert.ok(swingPts({ kind: 'INPLAY', quality: 0.3 }) > swingPts({ kind: 'MISS' }));
+});
+
+test('pitching practice grades only how close the ball came to the target', () => {
+  const at = (x, y) => controlGrade({ plate: { x, y } }, { x: 0.5, y: -0.5 });
+  const best = at(0.5, -0.5), good = at(0.5 + 0.3, -0.5), poor = at(0.5, -0.5 + 0.6), bad = at(-0.6, 0.7);
+  assert.deepEqual([best.q, good.q, poor.q, bad.q], [3, 2, 1, 0]);
+  assert.ok(best.pts > good.pts && good.pts > poor.pts && poor.pts > bad.pts);
+  // 스트라이크인지 볼인지는 따지지 않는다: 존 밖을 노리고 거기 꽂으면 완벽
+  assert.equal(controlGrade({ plate: { x: 1.3, y: 0 } }, { x: 1.3, y: 0 }).q, 3);
+  assert.ok(best.label && bad.label);
+});
+
+test('a good pitcher with good timing scores about the reference over 5 pitches', () => {
+  const rng = createRng(7), p = { control: 70, velo: 145, stamina: 90, throws: 'R' };
+  let pts = 0;
+  for (let i = 0; i < 500; i++) {
+    const target = { x: 0.4, y: -0.3 };
+    pts += controlGrade(computePitch({ pitcher: p, type: 'FB', target, gaugePos: 0.5, pitchCount: 0, rng }), target).pts;
+  }
+  const per5 = pts / 100;
+  assert.ok(per5 > 5 && per5 < 7.5, `5구 평균 ${per5.toFixed(2)}`);
 });
 
 test('old saves without day/fatigue/practice load with defaults', () => {

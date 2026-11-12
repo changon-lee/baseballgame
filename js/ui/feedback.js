@@ -156,7 +156,7 @@ const SOUNDS = {
   roar: o => { if (!sample('crowd_cheer_big', o.gain || 1, 1, AMB)) SYNTH.cheer(); },
   ooh: o => { if (!sample('crowd_ooh', 0.8 * (o.gain || 1), jit(0.04), AMB)) SYNTH.ooh(); },
   aww: o => { sample('crowd_aww', 0.65 * (o.gain || 1), jit(0.03), AMB); },
-  jingle: () => { sample('jingle_hr', 0.6, 1, AMB); },
+  jingle: () => { sample('jingle_hr', 0.85, 1, AMB); },
 };
 // 확인용: 지금 불러온 소리와 돌고 있는 반복 소리
 export const audioDebug = () => ({ state: AC && AC.state, loaded: Object.keys(BUF), loops: Object.keys(amb.nodes) });

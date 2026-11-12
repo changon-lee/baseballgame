@@ -172,18 +172,74 @@ save('fence_hit', fade(room(f, 0.3, 0.2, 2000), 0.001, 0.08))
 
 
 
-# 홈런 팡파레: 야구장 오르간 느낌(배음을 더한 음), 위로 올라가는 짧은 가락
-def organ(freq, dur, vel=1.0):
+# 홈런·연습 끝 팡파레: 금관 합주(세 명이 함께 부는 부드러운 금관 + 처음에만 밝게 열리는 소리) 화음,
+# 팀파니, 위에서 반짝이는 종소리, 넓은 홀 울림(좌우가 다른 잔향). 가락은 솔·도·미 꾸밈음 → IV(파 화음) → I(도 화음)로 끝나는 진행
+def brass(freq, dur, vel=1.0):
+    n = int((dur + 0.3) * SR); t = np.arange(n) / SR
+    y = np.zeros(n)
+    for k, cents in enumerate((-6, 0, 5)):           # 살짝씩 다른 음높이 세 개 → 합주처럼 두꺼워진다
+        f = freq * 2 ** (cents / 1200)
+        vib = 1 + 0.003 * np.sin(2 * np.pi * (5.0 + 0.4 * k) * t + k) * np.clip((t - 0.3) / 0.4, 0, 1)
+        ph = 2 * np.pi * np.cumsum(f * vib) / SR
+        y += sum(np.sin(h * ph) / h for h in range(1, int(min(28, 6000 / f)) + 1))
+    mellow, bright = filt(y, 'low', 1100), filt(y, 'low', 3600)
+    k = 0.9 * np.minimum(1, t / 0.03) * np.exp(-t / 0.28)   # 불기 시작할 때만 '빠앙' 밝게
+    amp = np.minimum(1, t / 0.04) * np.where(t < dur, 1 - 0.12 * t / max(dur, 1e-3), np.clip(1 - (t - dur) / 0.28, 0, 1))
+    return (mellow + bright * k) * amp * vel
+
+
+def bell(freq, vel=1.0, dur=2.2):
     n = int(dur * SR); t = np.arange(n) / SR
-    vib = 1 + 0.004 * np.sin(2 * np.pi * 6 * t)
-    y = sum(a * np.sin(2 * np.pi * freq * h * vib * t) for h, a in [(1, 1), (2, 0.6), (3, 0.35), (4, 0.25), (6, 0.12), (8, 0.08)])
-    e = np.minimum(1, t / 0.012) * np.where(t < dur - 0.06, 1, np.clip((dur - t) / 0.06, 0, 1))
-    return y * e * vel
+    return vel * sum(a * np.sin(2 * np.pi * freq * r * t) * np.exp(-t * 2.2 * r ** 0.6) for r, a in [(1, 1), (2.76, 0.4), (5.4, 0.18), (8.93, 0.08)]) * np.minimum(1, t / 0.002)
 
 
-notes = [(392, 0.16), (523, 0.16), (659, 0.16), (784, 0.3), (659, 0.14), (784, 0.7)]    # 솔 도 미 솔 - 미 솔
-jl = np.zeros(int(sum(d for _, d in notes) * SR) + SR); p = 0
-for fq, d in notes:
-    y = organ(fq, d + 0.02) + 0.5 * organ(fq / 2, d + 0.02)
-    jl[p:p + len(y)] += y; p += int(d * SR)
-save('jingle_hr', fade(room(jl, 0.8, 0.3, 4000), 0.002, 0.5))
+def timpani(freq, vel=1.0, dur=1.6):
+    n = int(dur * SR); t = np.arange(n) / SR
+    f = freq * (1 + 0.06 * np.exp(-t / 0.05))
+    body = np.sin(2 * np.pi * np.cumsum(f) / SR) + 0.35 * np.sin(2 * np.pi * np.cumsum(f * 1.5) / SR) * np.exp(-t / 0.25)
+    hit = filt(noise(n), 'band', [80, 900]) * np.exp(-t / 0.03) * 0.6
+    return vel * (body * np.exp(-t / 0.55) + hit) * np.minimum(1, t / 0.003)
+
+
+def hall(x, dur=2.6, mix=0.32):                       # 넓은 홀 울림: 왼쪽·오른쪽 잔향을 따로 만들어 퍼지게
+    n = int(dur * SR); out = []
+    pre = int(0.018 * SR)
+    for c in range(2):
+        ir = noise(n) * np.exp(-np.linspace(0, 6.5, n)); ir = filt(ir, 'low', 4200)
+        ir = np.concatenate([np.zeros(pre), ir])
+        w = fftconvolve(x[:, c], ir)[:len(x) + n + pre]
+        out.append(np.pad(w, (0, len(x) + n + pre - len(w))))
+    wet = np.stack(out, axis=1)
+    dry = np.concatenate([x, np.zeros((n + pre, 2))])
+    return dry + wet / (np.abs(wet).max() + 1e-9) * np.abs(x).max() * mix
+
+
+def place(buf, y, t0, pan=0.0):                       # pan: -1 왼쪽 … 1 오른쪽
+    i = int(t0 * SR); y = y[:len(buf) - i]
+    buf[i:i + len(y), 0] += y * np.sqrt((1 - pan) / 2) * 1.414
+    buf[i:i + len(y), 1] += y * np.sqrt((1 + pan) / 2) * 1.414
+
+
+N = lambda m: 440 * 2 ** ((m - 69) / 12)            # MIDI 음 번호 → 주파수
+fan = np.zeros((int(3.0 * SR), 2))
+# 꾸밈음 셋: 솔 · 도 · 미 (옥타브 아래를 겹쳐 두껍게)
+for i, m in enumerate((67, 72, 76)):
+    place(fan, brass(N(m), 0.1, 0.8), 0.13 * i, 0.15)
+    place(fan, brass(N(m - 12), 0.1, 0.45), 0.13 * i, -0.15)
+# IV 화음(파·라·도) — 맨 위 가락 파
+t4, d4 = 0.4, 0.4
+for m, v, p in ((41, 0.55, 0), (53, 0.5, -0.35), (57, 0.45, 0.35), (60, 0.45, -0.2), (65, 0.5, 0.2), (69, 0.45, -0.4), (77, 0.8, 0.1)):
+    place(fan, brass(N(m), d4, v), t4, p)
+place(fan, timpani(N(29), 0.5), t4)
+# I 화음(도·미·솔) — 맨 위 가락 솔로 한 계단 올라가 길게
+t1, d1 = 0.82, 1.35
+for m, v, p in ((36, 0.6, 0), (48, 0.5, -0.3), (55, 0.45, 0.3), (60, 0.45, -0.25), (64, 0.45, 0.25), (67, 0.5, -0.4), (72, 0.5, 0.4), (79, 0.85, 0.1)):
+    place(fan, brass(N(m), d1, v), t1, p)
+place(fan, timpani(N(24), 0.9), t1)
+# 종소리: 도 화음을 위로 흩뿌린다
+for i, m in enumerate((84, 88, 91, 96)):
+    place(fan, bell(N(m), 0.22 - 0.03 * i), t1 + 0.06 + 0.07 * i, (-0.5, 0.5, -0.3, 0.3)[i])
+fan = filt(fan, 'high', 45, 2)                       # 귀에 안 들리는 아주 낮은 울림은 덜어 낸다
+fan = hall(fan)
+fan = fan[:int(4.2 * SR)]
+save('jingle_hr', fade(fan, 0.002, 1.4), kbps=112)

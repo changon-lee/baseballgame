@@ -12,9 +12,17 @@ export const PRACTICE_STATS = { pitch: ['velo', 'control', 'stamina'], bat: ['po
 export const practiceLeft = c => PRACTICE.perDay - (c.practice && c.practice.day === c.day ? c.practice.used : 0);
 
 // 공 하나의 연습 점수. 잘 던질수록 / 잘 칠수록 많이 쌓인다
-export function pitchPts(pitch) {
-  if (!pitch.onTarget) return 0.4;                          // 제구 실패
-  return pitch.err < pitch.sweet * 0.35 ? 1.5 : 1;          // 완벽 / 성공
+// 투구 연습(타자 없음): 노린 곳에 얼마나 가깝게 꽂혔나만 본다. 스트라이크·볼은 따지지 않는다
+// 거리는 존 좌표(1 = 존 가로 반폭). 공 하나 안쪽이면 완벽
+export const CONTROL_GRADES = [
+  { q: 3, max: 0.17, pts: 1.5, label: '제구 완벽!' },
+  { q: 2, max: 0.4, pts: 1, label: '제구 좋아요' },
+  { q: 1, max: 0.8, pts: 0.5, label: '조금 빗나갔어요' },
+  { q: 0, max: Infinity, pts: 0.2, label: '제구 실패' },
+];
+export function controlGrade(pitch, target) {
+  const d = Math.hypot(pitch.plate.x - target.x, pitch.plate.y - target.y);
+  return { ...CONTROL_GRADES.find(g => d <= g.max), d };
 }
 export function swingPts(contact) {                         // contact: 안 쳤으면 null
   if (!contact) return 0.3;
