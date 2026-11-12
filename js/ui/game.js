@@ -13,6 +13,7 @@ import { BUNT } from '../core/bunt.js';
 import { stealRunners } from '../core/rules.js';
 import { hitsToday, isHot, rally, RALLY_MAX } from '../core/heat.js';
 import { boostFor } from '../core/perks.js';
+import { raiseStep } from '../core/raisematch.js';
 import { lineScore, todayText, gameMvp } from '../core/boxscore.js';
 import { fieldChance, judgeTap, fieldWin, CPU_DIVE } from '../core/fielding.js';
 import { playerLine, avg } from '../core/growth.js';
@@ -50,6 +51,8 @@ const paName = l => PLAY_NAME[l.play] || STYLE_NAME[l.style] || (l.event === 'OU
 const PITCH_E = { BALL: '볼', HBP: '사구', WILD: '폭투', STRIKE: '스트', FOUL: '파울', BUNT_FOUL: '번트파울' };
 // 구종 칩 색(빠른 공은 따뜻한 색, 떨어지는 공은 차가운 색)
 const PITCH_COLORS = { FB: '#ff6b5e', SI: '#ffa94d', CT: '#ffd43b', SL: '#69db7c', CU: '#4dabf7', CH: '#b197fc', FO: '#f783ac' };
+const COND_ICON = ['⬇⬇', '⬇', '➖', '⬆', '⬆⬆'];
+const RAISE_NOTE = { end: '남은 경기를 진행했어요', pinch: '대타로 교체됐어요', pulled: '강판됐어요', noshow: '오늘은 등판이 없었어요' };
 const basesText = b => { const on = [1, 2, 3].filter((n, i) => b[i]); return on.length === 3 ? '만루' : on.length ? on.join('·') + '루' : '주자 없음'; };
 
 // 두 폰(과 서버)이 같은 경기를 보고 있는지 확인용 요약(server.mjs와 같게)
@@ -73,8 +76,10 @@ function goFullscreen() {
 }
 
 // practice(연습장): { kind: 'pitch'|'bat', playerId, stat, goal } — 아웃·이닝 없이 goal구를 채우면 onExit({ practice: { kind, playerId, stat, n, pts } })
+// raise(육성모드): { kind, role, playerId, cond } — 내 선수 장면(내 타석 / 내가 던지는 초 공격 / 마무리 9·10회초)만 직접 하고 나머지는 자동.
+//   perks = { id, cond, traits }(컨디션·특성 효과). 끝까지 하면 onExit({ home, away, log, starterId, raise: { note } })
 // stats: 우리 선수 시즌 기록 { bat: { id: { ab, h, hr } } } (타자 소개 띠에 시즌 타율을 보여 준다). 없으면 능력치를 보여 준다
-export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterId, title, net = null, cpuLineup = null, practice = null, stats = null }, onExit) {
+export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterId, title, net = null, cpuLineup = null, practice = null, stats = null, perks = null, raise = null }, onExit) {
   goFullscreen();
   loadSprites();                                     // 메인 화면에서 아직 다 못 받았으면 지금 바로
   const rng = createRng((Date.now() ^ (Math.random() * 1e9)) >>> 0);
@@ -97,7 +102,9 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   try { hints = { ...hints, ...JSON.parse(localStorage.getItem(HINT_KEY) || '{}') }; } catch (e) { /* 저장소 막힘 */ }
   const hintSeen = k => { hints[k]++; try { localStorage.setItem(HINT_KEY, JSON.stringify(hints)); } catch (e) { /* 무시 */ } };
   const hintFull = k => hints[k] < HINT_FULL;
-  let match = createMatch({ userTeam, cpuTeam, userLineup: lineup, innings, rng, cpuStarterId, cpuLineup, heat: heatOn });
+  let match = createMatch({ userTeam, cpuTeam, userLineup: lineup, innings, rng, cpuStarterId, cpuLineup, heat: heatOn, perks });
+  let raiseNote = null;          // 육성모드: 내 선수가 어떻게 경기를 마쳤나(end / pinch / pulled / noshow)
+  const condTag = id => (raise && id === raise.playerId ? ` <span class="cond">${COND_ICON[raise.cond + 2]}</span>` : '');
   if (practice) {                                    // 타격 연습은 내가 말 공격으로 시작한다
     practice = { ...practice, n: 0, pts: 0 };
     if (practice.kind === 'bat') match = { ...match, game: { ...match.game, half: 'bottom' } };
@@ -180,12 +187,31 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     const dots = (cls, n, max) => Array.from({ length: max }, (_, i) => `<i class="${cls}${i < n ? ' on' : ''}"></i>`).join('');
     $('.bso').innerHTML = `<div><em>B</em>${dots('b', g.balls, 3)}</div><div><em>S</em>${dots('s', g.strikes, 2)}</div><div><em>O</em>${dots('o', g.outs, 2)}</div>`;
     $('.mu').innerHTML = practice ? `<b>${mu.pitcher.name}</b> <span class="vs">vs</span> <b>${mu.batter.name}</b> <small>· 연습 ${practice.n}/${practice.goal}구</small>`
-      : `<b>${mu.pitcher.name}</b> <small>${match.pitchCount[mu.pitchingSide]}구</small> <span class="vs">vs</span> <small>${g.battingIndex[mu.battingSide] + 1}번</small> <b>${mu.batter.name}</b>${heatOn && isHot(match.log, mu.batter.id) ? ` <span class="hot">🔥${hitsToday(match.log, mu.batter.id)}안타</span>` : ''}`;
+      : `<b>${mu.pitcher.name}</b>${condTag(mu.pitcher.id)} <small>${match.pitchCount[mu.pitchingSide]}구</small> <span class="vs">vs</span> <small>${g.battingIndex[mu.battingSide] + 1}번</small> <b>${mu.batter.name}</b>${condTag(mu.batter.id)}${heatOn && isHot(match.log, mu.batter.id) ? ` <span class="hot">🔥${hitsToday(match.log, mu.batter.id)}안타</span>` : ''}`;
   }
   const setControls = html => { controls.innerHTML = html; if (!['aim', 'pick'].includes(mode)) hideBullpenChip(); };
   function showMsg(text, color, ms, sub, then, hidden = false) {   // hidden: 컷인이 대신 보여 주므로 글자는 숨긴다
     msg = { text, color, sub, hidden, at: performance.now() };
     later(() => { msg = null; if (then) then(); }, ms);
+  }
+
+  // 육성모드: 내 장면까지 넘긴다. 넘겼으면 상황을 잠깐 보여 주고 다시 nextPlay, 더 할 장면이 없으면 결과로. 처리했으면 true
+  function raiseTurn() {
+    const r = raiseStep(match, raise, rng);
+    if (r.match !== match) {
+      match = r.match; paDots = []; dotsClear = false; ball = null; play = null; speedTag = null;
+      updateBoard(); setView();
+    }
+    const g = match.game, sc = `${cpuTeam.short} ${g.score.away} : ${g.score.home} ${userTeam.short}`;
+    if (r.phase === 'done') {
+      raiseNote = r.note; mode = 'msg'; setControls('');
+      return showMsg(RAISE_NOTE[r.note] || RAISE_NOTE.end, '#9fb3cc', 1600, sc, showEnd), true;
+    }
+    if (!r.skipped) return false;
+    mode = 'msg'; setControls('');
+    const where = `${g.inning}회${g.half === 'top' ? '초' : '말'}`, mine = raise.kind === 'bat' ? '내 타석' : '내 투구';
+    showMsg(`${where} · ${mine}`, '#9fb3cc', 1300, `${sc} · ${g.outs}아웃 ${basesText(g.bases)}`, nextPlay);
+    return true;
   }
 
   // ── 진행 ──
@@ -195,6 +221,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     speedTag = null;
     updateBoard();
     if (match.game.over) return showEnd();
+    if (raise && raiseTurn()) return;
     showIntro();
     ball = null; play = null; swingAt = null; pitchAt = 0;
     setView();
@@ -745,7 +772,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     overlay.querySelector('[data-act=log]').onclick = () => showLog(match.log, '경기 기록', showEnd);
     if (won) { playSound('roar'); playSound('jingle'); vibrate([80, 60, 80, 60, 160]); cutins.play('win'); }
     overlay.querySelector('[data-act=menu]').onclick = () => (net ? exit() : exit({
-      home: g.score.home, away: g.score.away, log: match.log, starterId: lineup.starterId }));
+      home: g.score.home, away: g.score.away, log: match.log, starterId: lineup.starterId, ...(raise ? { raise: { note: raiseNote || 'end' } } : {}) }));
     setControls('');
   }
 
@@ -766,7 +793,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     const g = match.game;
     overlay.innerHTML = `<div class="end-card menu-card">
       <div class="tag">${g.inning}회${g.half === 'top' ? '초' : '말'} · 진행 메뉴</div>
-      ${net ? '' : `<button class="primary" data-act="auto">${auto ? '자동 진행 끄기' : '자동 진행 켜기'}</button>
+      ${net || raise ? '' : `<button class="primary" data-act="auto">${auto ? '자동 진행 끄기' : '자동 진행 켜기'}</button>
       <p class="hint">투수가 알아서 던지고, 타자가 알아서 칩니다</p>`}
       <div class="row2"><button class="ghost" data-act="guide">${prefs.guide ? '궤적 안내 켜짐' : '궤적 안내 꺼짐'}</button>
         ${net ? `<button class="ghost" disabled>난이도: ${LEVEL_NAME[lvl()]}</button>` : `<button class="ghost" data-act="level">난이도: ${LEVEL_NAME[prefs.level]}</button>`}</div>
@@ -776,7 +803,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       <div class="row2 snd"><button class="ghost" data-act="sfx">효과음 ${prefs.sfx ? '켜짐' : '꺼짐'}</button>
         <button class="ghost" data-act="amb">관중·응원 ${prefs.amb ? '켜짐' : '꺼짐'}</button></div>
       <div class="vols">${volRow('🔊', '효과음', 'sfxVol', prefs.sfxVol)}${volRow('👏', '배경음', 'ambVol', prefs.ambVol)}</div>
-      ${net ? '' : `<button class="ghost" data-act="half">이번 ${userPitching() ? '수비' : '공격'} 넘기기</button>
+      ${net ? '' : raise ? '<button class="ghost" data-act="game">남은 경기 자동으로 끝내기</button>' : `<button class="ghost" data-act="half">이번 ${userPitching() ? '수비' : '공격'} 넘기기</button>
       <button class="ghost" data-act="inning">이번 이닝 넘기기</button>
       <button class="ghost" data-act="game">이번 경기 넘기기</button>`}
       <button class="ghost" data-act="log">경기 기록 보기</button>
