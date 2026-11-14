@@ -13,7 +13,7 @@ import { BUNT } from '../core/bunt.js';
 import { stealRunners } from '../core/rules.js';
 import { hitsToday, isHot, rally, RALLY_MAX } from '../core/heat.js';
 import { boostFor } from '../core/perks.js';
-import { raiseStep } from '../core/raisematch.js';
+import { raiseStep, raiseSteal } from '../core/raisematch.js';
 import { lineScore, todayText, gameMvp } from '../core/boxscore.js';
 import { fieldChance, judgeTap, fieldWin, CPU_DIVE } from '../core/fielding.js';
 import { playerLine, avg } from '../core/growth.js';
@@ -208,6 +208,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       updateBoard(); setView();
     }
     const g = match.game, sc = `${cpuTeam.short} ${g.score.away} : ${g.score.home} ${userTeam.short}`;
+    if (r.phase === 'steal') return askSteal(r.spot), true;
     if (r.phase === 'done') {
       raiseNote = r.note; mode = 'msg'; setControls('');
       return showMsg(RAISE_NOTE[r.note] || RAISE_NOTE.end, '#9fb3cc', 1600, sc, showEnd), true;
@@ -218,6 +219,39 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     const where = `${g.inning}회${g.half === 'top' ? '초' : '말'}`, mine = raise.kind === 'bat' ? '내 타석' : '내 투구';
     showMsg(`${where} · ${mine}`, '#9fb3cc', 1300, `${sc} · ${g.outs}아웃 ${basesText(g.bases)}`, nextPlay);
     return true;
+  }
+
+  // 육성모드: 내 타자가 1루(2루)에 나가 있다 → 다음 타자 첫 공 전에 도루할지 묻는다. 주력이 빠를수록 잘 산다
+  function askSteal(spot) {
+    mode = 'steal'; setControls('');
+    const to = spot.base + 2, pct = Math.round(spot.p * 100);
+    overlay.innerHTML = `<div class="end-card menu-card steal-ask"><div class="tag">🏃 주루</div><h1 style="font-size:24px">${to}루 도루할까요?</h1>
+      <p class="hint">${basesText(match.game.bases)} · ${match.game.outs}아웃 · 성공 확률 약 <b>${pct}%</b></p>
+      <button class="primary" data-act="go">🏃 도루!</button>
+      <button class="ghost" data-act="stay">가만히 있기</button></div>`;
+    overlay.classList.remove('hidden');
+    overlay.querySelector('[data-act=stay]').onclick = () => { closeOverlay(); match = raiseSteal(match, raise.playerId, false, rng).match; nextPlay(); };
+    overlay.querySelector('[data-act=go]').onclick = () => {
+      closeOverlay();
+      const prev = match.game, s = raiseSteal(match, raise.playerId, true, rng);
+      mode = 'msg'; ball = null;
+      const batter = matchup(match).batter;
+      play = buildPlay({ event: s.ok ? 'STEAL' : 'CAUGHT_STEALING', steal: { lead: s.lead, trail: s.trail ?? null }, bats: batter.bats, bases: prev.bases, rng });
+      play.sounds.sort((a, b) => a.t - b.t);
+      play.start = performance.now() + 200; play.si = 0;
+      play.then = () => {
+        hold = matchup(match);
+        match = s.match; updateBoard();
+        playSound(s.ok ? 'cheer' : 'aww', { gain: 0.7 });
+        vibrate(s.ok ? 40 : [20, 40, 20]);
+        const half = match.game.half !== prev.half || match.game.inning !== prev.inning;
+        showMsg(`${to}루 도루 ${s.ok ? '성공!' : '실패'}`, s.ok ? '#2ecc71' : '#e74c3c', 1500, s.ok ? '' : `${prev.outs + 1}아웃`, () => {
+          play = null; hold = null;
+          if (half) setView();
+          nextPlay();
+        });
+      };
+    };
   }
 
   // ── 진행 ──
@@ -589,7 +623,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     }
     // 대결이면 서버가 준 씨앗으로: 두 폰에서 같은 장면이 나온다
     play = (userPitched && fieldOn() && fieldScene(r, batter, prev, res))
-      || buildPlay({ event: r.event, fly: r.fly, style: r.style, contact: r.contact, bats: batter.bats, bases: prev.bases, rng: r.seed != null ? createRng(r.seed) : rng });
+      || buildPlay({ event: r.event, fly: r.fly, style: r.style, contact: r.contact, bats: batter.bats, bases: prev.bases, rng: r.seed != null ? createRng(r.seed) : rng, run: batter.speed });
     if (practice) play = practicePlay(play);            // 연습장: 수비수·주자 없이 공만
     play.sounds.sort((a, b) => a.t - b.t);
     play.start = performance.now() + 320; play.si = 0;
@@ -607,7 +641,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     const ch = fieldChance(r, prev.bases);
     if (!ch || !r.pitch) return null;
     const seed = Math.floor(rng() * 2147483647);
-    const mk = o => { const sc = buildPlay({ ...o, contact: r.contact, bats: batter.bats, bases: prev.bases, rng: createRng(seed) }); sc.sounds.sort((a, b) => a.t - b.t); return sc; };
+    const mk = o => { const sc = buildPlay({ ...o, contact: r.contact, bats: batter.bats, bases: prev.bases, rng: createRng(seed), run: batter.speed }); sc.sounds.sort((a, b) => a.t - b.t); return sc; };
     const good = mk(ch.good), bad = mk(ch.bad);
     if (!good.chance || !bad.chance || Math.min(good.chance.until, bad.chance.until) - good.chance.t < 0.12) return null;
     good.fc = { kind: ch.kind, ch, good, bad, res, pitch: r.pitch, contact: r.contact, tHit: toMs(good.chance.t), state: 'wait' };
@@ -787,7 +821,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     overlay.querySelector('[data-act=log]').onclick = () => showLog(match.log, '경기 기록', showEnd);
     if (won) { playSound('roar'); playSound('jingle'); vibrate([80, 60, 80, 60, 160]); cutins.play('win'); }
     overlay.querySelector('[data-act=menu]').onclick = () => (net ? exit() : exit({
-      home: g.score.home, away: g.score.away, log: match.log, starterId: lineup.starterId, ...(raise ? { raise: { note: raiseNote || 'end' } } : {}) }));
+      home: g.score.home, away: g.score.away, log: match.log, starterId: lineup.starterId, ...(raise ? { raise: { note: raiseNote || 'end' }, steals: match.steals || [] } : {}) }));
     setControls('');
   }
 

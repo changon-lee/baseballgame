@@ -70,3 +70,21 @@ test('when the year ends the salary goes into assets and the new salary applies'
   const o = nextSeason(old);
   assert.equal(o.assets, startSalary('samsung-b06'));
 });
+
+test('Korean Series MVP: only for a champion with a big series; pays a prize into assets', async () => {
+  const { ksMvp } = await import('../js/core/raisepay.js');
+  const s = { ...newSlot('samsung-b06'), salary: 22000 };
+  const st = { bat: bat(115, 100, 30, 6, 12, 6) };
+  const hot = { bat: bat(18, 15, 7, 2, 3, 1) }, cold = { bat: bat(18, 16, 3, 0, 2) };
+  assert.equal(ksMvp({ ...done(s, st, 'samsung'), ksStats: hot }), true);
+  assert.equal(ksMvp({ ...done(s, st, 'samsung'), ksStats: cold }), false);
+  assert.equal(ksMvp({ ...done(s, st, 'lg'), ksStats: hot }), false);           // 준우승이면 MVP 없음
+  const champ = { ...done(s, st, 'samsung'), ksStats: hot };
+  const c = contract(champ);
+  assert.equal(c.bonus, PAY.champBonus + PAY.mvpBonus); assert.equal(c.mvp, true);
+  const n = nextSeason(champ), h = n.history[n.history.length - 1];
+  assert.equal(h.mvp, true); assert.deepEqual(h.ksLine, hot); assert.equal(n.ksStats, undefined);
+  assert.equal(n.assets, 22000 + PAY.champBonus + PAY.mvpBonus);
+  const sp = { ...newSlot('samsung-p01'), salary: 100000 };
+  assert.equal(ksMvp({ ...done(sp, {}, 'samsung'), ksStats: { pit: { bf: 50, outs: 39, h: 6, hr: 0, bb: 3, so: 12, r: 2 }, w: 1 } }), true);
+});

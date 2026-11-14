@@ -172,9 +172,10 @@ const cutAt = (segs, t) => { const s = segs[segs.length - 1]; s.t1 = Math.min(s.
 // event: SINGLE/DOUBLE/TRIPLE/HR/OUT/SAC_FLY/DOUBLE_PLAY/INFIELD_SINGLE/ERROR/SINGLE_HOME_OUT/LINE_DP/SAC_BUNT/BUNT_SINGLE/BUNT_FC, fly: 뜬공 여부,
 // style: 같은 결과의 다른 장면(dive, wall, liner, home_safe, fumble, throw), contact.pull, bats: 'L'|'R'|'S', bases: 치기 전 주자
 // 도루 장면: event = 'STEAL'(세이프) | 'CAUGHT_STEALING'(아웃), steal = { lead: 뛴 앞 주자(0=1루, 1=2루), trail: 같이 뛴 뒤 주자 | null }
+// run: 타자 주력(육성모드. 없으면 50) — 빠를수록 1루까지 빨리 간다
 // 수비 조작용 짝 장면(같은 씨앗이면 sc.chance.until 전까지 똑같다): OUT/dive ↔ SINGLE/dive_miss, OUT/bang ↔ INFIELD_SINGLE,
 // SINGLE_HOME_OUT ↔ SINGLE/home_safe. sc.chance = { t: 터치할 순간, until: 두 장면이 갈라지는 순간, who: 수비수 }
-export function buildPlay({ event, fly, contact, bats, bases = [false, false, false], rng, style = null, steal = null }) {
+export function buildPlay({ event, fly, contact, bats, bases = [false, false, false], rng, style = null, steal = null, run = 50 }) {
   const hand = bats === 'L' ? 1 : bats === 'R' ? -1 : (rng() < 0.5 ? 1 : -1);
   const pull = contact ? contact.pull : 0;
   let ang = clamp(hand * pull * 35 + randNormal(rng) * 7, -42, 42);
@@ -262,7 +263,7 @@ export function buildPlay({ event, fly, contact, bats, bases = [false, false, fa
   };
   // 타자가 1루로 뛴다(아웃이면 outT보다 조금 늦게 도착)
   const batterTo1B = outT => {
-    const natural = 0.45 + 90 / 27.5;
+    const natural = 0.45 + 90 / (27.5 * (1 + 0.15 * ((run ?? 50) - 50) / 50));
     const arr = outT != null ? Math.max(natural, outT + 0.22) : natural;
     act(B.keys, 0.25, 'drop');
     key(B.keys, 0.45, B.keys[0].x, B.keys[0].y, 'run');

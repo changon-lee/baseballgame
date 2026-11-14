@@ -613,3 +613,63 @@ button.primary{background:linear-gradient(180deg,#4c97ff,#1f6fe5 52%,#0a4fb8);bo
 .rz-payrow span{color:var(--dim)}.rz-payrow b{font-weight:800;text-align:right}
 .rz-payrow.big b{font-size:18px}.rz-payrow em{font-style:normal;font-size:13px;margin-left:4px}
 .rz-payrow.up em{color:var(--green)}.rz-payrow.down em{color:#ff9a7a}
+
+/* ── 육성모드 우승 세리머니 ── */
+.cer{text-align:center;position:relative;z-index:1}
+.cer-stage{display:none;padding:22px 16px 20px;border:1px solid rgba(242,193,78,.55);background:radial-gradient(circle at 50% 0,rgba(242,193,78,.28),rgba(7,76,161,.18) 60%,rgba(255,255,255,.03))}
+.cer-stage.on{display:block;animation:cerIn .55s cubic-bezier(.2,1.2,.4,1) both}
+.cer-stage p{margin:6px 0;color:var(--fg);line-height:1.5}
+.cer-kicker{color:var(--gold);font-size:11px;font-weight:800;letter-spacing:.14em}
+.cer-title{margin:4px 0 6px;font-size:34px;font-weight:900;color:var(--gold);letter-spacing:-.02em;text-shadow:0 2px 18px rgba(242,193,78,.45)}
+.cer-h{margin:10px 0 4px;font-size:22px;font-weight:900;color:var(--fg)}
+.cer-tag{display:inline-block;margin-top:8px!important;padding:6px 12px;border-radius:999px;background:rgba(242,193,78,.16);color:var(--gold)!important;font-weight:800;font-size:13px}
+.cer-score{display:flex;align-items:center;justify-content:center;gap:10px;margin:12px 0 2px}
+.cer-score b{font-size:34px;font-weight:900;color:var(--fg);min-width:28px}
+.cer-score span{color:var(--dim);font-size:24px;font-weight:900}
+.cer-trophy{font-size:92px;line-height:1.1;margin:8px 0 2px;filter:drop-shadow(0 0 22px rgba(242,193,78,.75));animation:cerRise 1.3s cubic-bezier(.2,1.5,.4,1) both,cerGlow 2.4s 1.3s ease-in-out infinite}
+.cer-toss{position:relative;height:190px;margin:10px auto 0;max-width:320px}
+.cer-flyer{position:absolute;left:50%;top:56px;margin-left:-23px;animation:cerToss 1.15s ease-in-out infinite;z-index:2}
+.cer-flyer .av{box-shadow:0 0 0 3px var(--gold),0 6px 18px rgba(0,0,0,.5)}
+.cer-crowd{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:center;gap:6px}
+.cer-crowd span{display:flex;flex-direction:column-reverse;align-items:center;animation:cerHands 1.15s var(--d) ease-in-out infinite}
+.cer-crowd em{font-style:normal;font-size:22px;margin-bottom:-6px}
+.cer-chant{overflow:hidden;white-space:nowrap;margin:12px -16px 0;padding:8px 0;background:rgba(7,76,161,.55);border-block:1px solid rgba(255,255,255,.12);font-weight:900;color:#fff;font-size:15px}
+.cer-chant span{display:inline-block;animation:cerMarquee 9s linear infinite}
+.cer-medal{font-size:72px;line-height:1.15;margin:6px 0 0;animation:cerRise 1s cubic-bezier(.2,1.5,.4,1) both}
+.cer-who{display:flex;flex-direction:column;align-items:center;gap:6px;margin:8px 0}
+.cer-who b{font-size:22px;font-weight:900}
+.cer-ringwrap{perspective:600px;margin:14px 0 6px}
+.cer-ring{position:relative;width:132px;height:132px;margin:0 auto;border-radius:50%;background:radial-gradient(circle,transparent 44%,#fff1c2 45%,#e0aa2e 53%,#a8741a 60%,#ffe39a 66%,transparent 67%);filter:drop-shadow(0 0 18px rgba(242,193,78,.6));animation:cerSpin 3.2s ease-in-out infinite}
+.cer-ring i{position:absolute;left:50%;top:-6px;transform:translateX(-50%);font-style:normal;font-size:34px}
+.cer-engrave{display:inline-block;margin:6px 0 2px;padding:5px 12px;border-radius:6px;background:linear-gradient(90deg,#a8741a,#ffe39a,#a8741a);color:#3b2603;font-weight:900;font-size:12px;letter-spacing:.08em}
+.cer-gifts{display:grid;gap:6px;margin:12px auto 0;max-width:300px}
+.cer-gifts span{display:flex;justify-content:space-between;padding:8px 12px;border-radius:10px;background:var(--card2);font-size:13px;color:var(--dim)}
+.cer-gifts b{color:var(--fg)}
+.cer-photo{margin:0 auto;max-width:340px;padding:10px 10px 14px;border-radius:6px;background:#f7f3e8;box-shadow:0 10px 30px rgba(0,0,0,.5);transform:rotate(-1.5deg);animation:cerFlash .7s ease-out both}
+.cer-banner{padding:8px;border-radius:4px;background:linear-gradient(90deg,#074CA1,#1f6fe5,#074CA1);color:#fff;font-weight:900;letter-spacing:.06em;font-size:14px}
+.cer-row{display:flex;justify-content:center;flex-wrap:wrap;gap:4px;padding:6px 4px 0;background:linear-gradient(#0b2a5c,#074CA1)}
+.cer-row.back{padding-top:10px}
+.cer-row.front{align-items:flex-end;padding-bottom:10px}
+.cer-row .av.sm{width:30px;height:30px}
+.cer-me{position:relative;margin:0 4px}
+.cer-me em{position:absolute;left:50%;top:-20px;transform:translateX(-50%);font-style:normal;font-size:20px}
+.cer-me .av{box-shadow:0 0 0 3px var(--gold)}
+.cer-cap{padding:10px 4px 0;color:#1b2333;font-weight:900;font-size:15px}
+.cer-cap small{display:block;margin-top:2px;color:#5b6475;font-weight:700;font-size:12px}
+.cer-dots{display:flex;justify-content:center;gap:6px;margin:12px 0 4px}
+.cer-dots i{width:8px;height:8px;border-radius:50%;background:var(--line2)}
+.cer-dots i.on{background:var(--gold)}
+.cer-confetti{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:0}
+.cer-confetti i{position:absolute;top:-16px;width:8px;height:14px;border-radius:2px;opacity:.9;animation:cerFall linear infinite}
+.rz-ringbig.mvp{margin-left:6px;background:rgba(255,255,255,.1);color:var(--fg)}
+.pill.gold{background:rgba(242,193,78,.2);color:var(--gold)}
+@keyframes cerIn{0%{opacity:0;transform:translateY(16px) scale(.97)}100%{opacity:1;transform:none}}
+@keyframes cerRise{0%{opacity:0;transform:translateY(40px) scale(.4)}100%{opacity:1;transform:none}}
+@keyframes cerGlow{0%,100%{filter:drop-shadow(0 0 16px rgba(242,193,78,.55))}50%{filter:drop-shadow(0 0 32px rgba(242,193,78,.95))}}
+@keyframes cerToss{0%,100%{transform:translateY(0) rotate(0)}45%{transform:translateY(-58px) rotate(-14deg)}55%{transform:translateY(-58px) rotate(10deg)}}
+@keyframes cerHands{0%,100%{transform:translateY(0)}20%{transform:translateY(-10px)}45%{transform:translateY(2px)}}
+@keyframes cerMarquee{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+@keyframes cerSpin{0%,100%{transform:rotateY(0)}50%{transform:rotateY(180deg)}}
+@keyframes cerFlash{0%{opacity:0;filter:brightness(3)}100%{opacity:1;filter:none}}
+@keyframes cerFall{0%{transform:translateY(0) rotate(0)}100%{transform:translateY(110vh) rotate(var(--r))}}
+@media (prefers-reduced-motion:reduce){.cer-stage.on,.cer-trophy,.cer-flyer,.cer-crowd span,.cer-chant span,.cer-medal,.cer-ring,.cer-photo{animation:none}.cer-confetti{display:none}}

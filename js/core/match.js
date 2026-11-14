@@ -88,7 +88,7 @@ function decide(m, batter, pitch, timingDiffMs, rng, bat = null, bunt = false) {
   if (contact.kind === 'FOUL') return { event: 'FOUL', contact, fly: false, swung: true };
   const g = m.game;
   const info = battedBallInfo({ quality: contact.quality, pull: contact.pull, power: batter.power, outs: g.outs,
-    runnerOnFirst: g.bases[0], runnerOnSecond: g.bases[1], runnerOnThird: g.bases[2], rng, lift: contact.lift || 0 });
+    runnerOnFirst: g.bases[0], runnerOnSecond: g.bases[1], runnerOnThird: g.bases[2], rng, lift: contact.lift || 0, speed: batter.speed });
   return { event: info.event, contact, fly: info.fly, style: info.style || null, swung: true };
 }
 

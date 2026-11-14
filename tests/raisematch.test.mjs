@@ -7,7 +7,7 @@ import { battingSide } from '../js/core/rules.js';
 import { defaultLineup } from '../js/core/team.js';
 import { getTeam } from '../js/data/rosters.js';
 import { createRng } from '../js/core/rng.js';
-import { raiseStep, decisions, gameLine } from '../js/core/raisematch.js';
+import { raiseStep, raiseSteal, decisions, gameLine } from '../js/core/raisematch.js';
 
 const S = getTeam('samsung'), B = 'samsung-b03', SP = 'samsung-p01', CL = 'samsung-p05';
 const mk = (seed, starterId = S.pitchers[0].id) => {
@@ -22,6 +22,7 @@ function runGame(seed, raise, starterId, onMe = () => {}) {
   let { m, rng } = mk(seed, starterId), r, me = 0;
   for (let i = 0; i < 300; i++) {
     r = raiseStep(m, raise, rng);
+    if (r.phase === 'steal') { m = raiseSteal(r.match, raise.playerId, false, rng).match; continue; }   // 도루는 안 한다
     if (r.phase === 'done') return { r, me, m: r.match };
     me++; onMe(r.match);
     m = playMyPA(r.match, rng);

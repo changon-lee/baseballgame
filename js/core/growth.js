@@ -1,8 +1,8 @@
 // 선수 성장과 기록. 경기 타석 기록(log)에서 경험치를 쌓고, 일정량마다 능력치 +1.
-// 성장은 내 팀(삼성) 선수만. 능력치 상한: 타자·제구·체력 99, 구속 162km.
+// 성장은 내 팀(삼성) 선수만. 능력치 상한: 타자·제구·체력·주력 99, 구속 162km.
 
 const STEP = 12;                                    // 이만큼 쌓이면 +1
-const CAP = { power: 99, contact: 99, eye: 99, control: 99, stamina: 99, velo: 162 };
+const CAP = { power: 99, contact: 99, eye: 99, speed: 99, control: 99, stamina: 99, velo: 162 };
 
 // 타석 결과별로 어느 능력치에 경험치가 쌓이는지
 const BAT_XP = {

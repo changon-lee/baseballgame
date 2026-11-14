@@ -3,7 +3,7 @@
 // raise = { kind: 'bat'|'pitch', role: null|'SP'|'CL', playerId, cond }
 import { matchup, simulateUntil, simulateRest, changePitcher } from './match.js';
 import { fatigue } from './pitch.js';
-import { battingSide } from './rules.js';
+import { battingSide, applyEvent, stealRunners } from './rules.js';
 import { availableRelievers } from './team.js';
 import { playerLine } from './growth.js';
 
@@ -23,9 +23,48 @@ export function raiseStep(m, raise, rng) {
   return raise.role === 'CL' ? closerStep(m, raise, rng) : starterStep(m, raise, rng);
 }
 
+// ── 내 타자의 도루 ──
+// 내 타석이 끝나고 내가 1루(또는 2루)에 있으면, 다음 타자 첫 공 전에 도루할지 묻는다(phase 'steal').
+// 성공 확률은 주력으로: 2루 = 0.45 + 주력 × 0.005(주력 50 → 70%, 90 → 90%), 3루는 8%p 낮게
+export const RUN_SPEED = 50;
+export const STEAL = { base: 0.45, perSpeed: 0.005, third: -0.08, min: 0.3, max: 0.95 };
+export const stealOdds = (base, speed = RUN_SPEED) =>
+  Math.max(STEAL.min, Math.min(STEAL.max, STEAL.base + speed * STEAL.perSpeed + (base === 1 ? STEAL.third : 0)));
+// 타석 결과 → 타자가 선 베이스(0=1루, 1=2루). 안 나갔거나 알 수 없으면 없음
+const REACH = { SINGLE: 0, WALK: 0, HBP: 0, ERROR: 0, DOUBLE: 1 };
+const speedOf = (m, id) => { const b = m.teams.home.batters.find(x => x.id === id); return (b && b.speed) ?? RUN_SPEED; };
+
+// 지금 도루를 물어볼 자리 { base: 내가 있는 베이스, p: 성공 확률 } 또는 null
+export function stealSpot(m, id) {
+  const g = m.game, n = m.log.length, e = m.log[n - 1];
+  if (!e || e.batterId !== id || g.over || (m.pa && m.pa.length) || g.inning !== e.inning || g.half !== e.half || battingSide(g) !== 'home') return null;
+  let base = e.play === 'BUNT_FC' ? 0 : REACH[e.event];
+  if (base == null) return null;
+  const my = m.myRun && m.myRun.at === n ? m.myRun : null;     // 이번 타석 뒤에 이미 뛰었거나 안 뛰기로 했다
+  if (my) { if (my.stop) return null; base = my.base; }
+  if (base > 1 || !g.bases[base] || g.bases[base + 1]) return null;
+  const st = stealRunners(g.bases);
+  if (!st || st.lead !== base) return null;
+  return { base, p: stealOdds(base, speedOf(m, id)) };
+}
+
+// 도루한다(go) / 안 한다. 돌려주는 것: { match, ok, lead, trail } (안 하면 ok = null)
+export function raiseSteal(m, id, go, rng) {
+  const n = m.log.length, spot = stealSpot(m, id);
+  if (!spot || !go) return { match: { ...m, myRun: { at: n, stop: true } }, ok: null };
+  const st = stealRunners(m.game.bases), ok = rng() < spot.p;
+  const game = applyEvent(m.game, ok ? 'STEAL' : 'CAUGHT_STEALING').state;
+  return {
+    match: { ...m, game, myRun: ok ? { at: n, base: spot.base + 1 } : { at: n, stop: true }, steals: [...(m.steals || []), { id, ok, base: spot.base + 1 }] },
+    ok, lead: st.lead, trail: st.trail,
+  };
+}
+
 // ── 타자 ──
 function batStep(m0, { playerId: id, cond }, rng) {
   if (!m0.lineups.home.order.includes(id)) return finish(m0, rng, 'pinch', m0);
+  const spot = stealSpot(m0, id);
+  if (spot) return { match: m0, phase: 'steal', spot, note: null, skipped: false };
   const isMe = x => battingSide(x.game) === 'home' && matchup(x).batter.id === id;
   const m = simulateUntil(m0, rng, isMe);
   if (m.game.over) return out(m, 'end', m0);

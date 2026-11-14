@@ -36,6 +36,7 @@ export const PAY = {
   scale: 0.85,            // 실제 시세보다 조금 보수적으로
   champBonus: 5000,       // 한국시리즈 우승 보너스(자산으로 바로)
   champPremium: 1.1,      // 우승한 해는 다음 연봉 기준 +10%
+  mvpBonus: 3000,         // 한국시리즈 MVP 상금(자산으로 바로)
   // 성적 → 연봉 기준(억). [기록, 억]을 이어 그은 선
   batOps: [[0.55, 0.4], [0.65, 0.8], [0.75, 1.8], [0.85, 4], [0.95, 8], [1.05, 13], [1.15, 18], [1.3, 24]],
   spEra: [[2.0, 14], [2.5, 11], [3.0, 8], [3.5, 5], [4.0, 3], [4.5, 1.8], [5.0, 1.1], [6.0, 0.6], [8.0, 0.3]],
@@ -56,6 +57,20 @@ function curve(points, x) {
   return points[points.length - 1][1];
 }
 
+const opsOf = b => (b.h + b.bb) / (b.ab + b.bb) + (b.h + b.d2 + 2 * b.d3 + 3 * b.hr) / b.ab;
+
+// 한국시리즈 MVP: 삼성이 우승했고, 한국시리즈 기록(ksStats)이 이만큼이면
+//   타자: 8타석 이상 + (OPS .900 이상 또는 2홈런) / 선발: 6이닝 이상 평균자책 2.50 이하 또는 2승 / 마무리: 2세이브 이상 무실점
+export function ksMvp(slot) {
+  if (slot.season.champion !== 'samsung') return false;
+  const k = slot.ksStats || {};
+  if (slot.kind === 'bat') { const b = k.bat; return !!(b && b.pa >= 8 && b.ab && (opsOf(b) >= 0.9 || b.hr >= 2)); }
+  const p = k.pit;
+  if (!p || !p.outs) return false;
+  if (slot.role === 'SP') return (p.outs >= 18 && (p.r * 27) / p.outs <= 2.5) || (k.w || 0) >= 2;
+  return (k.sv || 0) >= 2 && p.r === 0;
+}
+
 // 이번 시즌 성적으로 본 연봉 기준(만원)
 function target(slot) {
   const st = slot.stats || {}, games = slot.season.schedule.length || 1;
@@ -63,7 +78,7 @@ function target(slot) {
   if (slot.kind === 'bat') {
     const b = st.bat;
     if (!b || !b.ab) return PAY.min;
-    const ops = (b.h + b.bb) / (b.ab + b.bb) + (b.h + b.d2 + 2 * b.d3 + 3 * b.hr) / b.ab;
+    const ops = opsOf(b);
     eok = curve(PAY.batOps, ops) * Math.min(1, b.pa / (PAY.full.bat * games));
   } else {
     const p = st.pit;
@@ -78,7 +93,7 @@ function target(slot) {
 // 1억 이상은 500만, 그 아래는 100만 단위(f: Math.round / ceil / floor — 한도를 넘지 않게)
 const roundPay = (m, f = Math.round) => { const u = m >= 10000 ? 500 : 100; return f(m / u) * u; };
 
-// 다음 해 연봉 협상: { from, to, pct(%), bonus(우승 보너스) }
+// 다음 해 연봉 협상: { from, to, pct(%), bonus(우승 보너스 + 한국시리즈 MVP 상금), mvp }
 export function contract(slot) {
   const from = slot.salary ?? startSalary(slot.playerId);
   const champ = slot.season.champion === 'samsung';
@@ -89,7 +104,8 @@ export function contract(slot) {
   if (to < lo) to = roundPay(lo, Math.ceil);
   if (to > hi) to = roundPay(hi, Math.floor);
   to = Math.max(PAY.min, to);
-  return { from, to, pct: Math.round(((to - from) / from) * 100), bonus: champ ? PAY.champBonus : 0 };
+  const mvp = ksMvp(slot);
+  return { from, to, pct: Math.round(((to - from) / from) * 100), bonus: champ ? PAY.champBonus + (mvp ? PAY.mvpBonus : 0) : 0, mvp };
 }
 
 // 만원 → '20억원', '2억 3000만원', '9000만원'
