@@ -5,7 +5,6 @@ import { standings } from '../core/season.js';
 import { avg, era, ip } from '../core/growth.js';
 import { createRng } from '../core/rng.js';
 import { TRAITS } from '../core/perks.js';
-import { PRACTICE } from '../core/practice.js';
 import { defaultLineup } from '../core/team.js';
 import { RAISE, DRILLS, newSlot, loadRaise, saveRaise, slotPlayer, raiseTeam, canChoose, choose, dayInfo, applyDay, seasonOver, nextSeason, seasonGains, prelude } from '../core/raise.js';
 import { seasonCard, leaderboard, STAT_DEFS, BOARD_TOP } from '../core/raisestats.js';
@@ -185,10 +184,11 @@ export function showRaise(root, { storage, loadGame, onBack }) {
       : `<div class="rz-drills">${drills.map(x => {
         const c = canChoose(s, x.id), n = s.progress.train[x.id] || 0, tr = x.trait && traitOf(x.trait);
         const sub = x.drill ? (s.traits.includes(x.trait) ? `${tr.name} 보유` : `→ ${tr.name} ${Math.min(n, RAISE.drillNeed)}/${RAISE.drillNeed}`) : `${STAT_ICON[x.stat]} ${STAT_KO[x.stat]} ${p[x.stat]}`;
-        return `<button class="chip ${x.drill ? 'drill' : ''}" data-act="choose" data-id="${x.id}" ${c.ok ? '' : 'disabled'}><b>${x.name}</b><small>${sub}</small><small class="${c.ok ? '' : 'tired'}">${c.ok ? `피로 +${x.cost} · ${s.kind === 'bat' ? `타격 ${PRACTICE.goal.bat}번` : `투구 ${PRACTICE.goal.pitch}구`}` : '너무 지쳤어요'}</small></button>`;
+        const how = x.light ? '바로 끝 · 효과 조금' : s.kind === 'bat' ? `타격 ${RAISE.practiceGoal.bat}번` : `투구 ${RAISE.practiceGoal.pitch}구`;
+        return `<button class="chip ${x.drill ? 'drill' : x.light ? 'light' : ''}" data-act="choose" data-id="${x.id}" ${c.ok ? '' : 'disabled'}><b>${x.light ? (x.stat === 'power' ? '🏋️ ' : '🧘 ') : ''}${x.name}</b><small>${sub}</small><small class="${c.ok ? '' : 'tired'}">${c.ok ? `피로 +${x.cost} · ${how}` : '너무 지쳤어요'}</small></button>`;
       }).join('')}
-        <button class="chip rest" data-act="choose" data-id="rest"><b>😴 휴식</b><small>피로 ${RAISE.rest} · 컨디션이 보통 쪽으로</small></button></div>
-      <p class="hint">훈련을 고르면 연습장에서 직접 ${s.kind === 'bat' ? '쳐요' : '던져요'}. 잘할수록 많이 오르고, 중간에 나가면 훈련은 없던 일이 돼요.</p>`;
+        <button class="chip rest" data-act="choose" data-id="rest"><b>😴 휴식</b><small>피로 ${RAISE.rest} · 컨디션이 보통 쪽으로</small><small>오늘 경기는 결장</small></button></div>
+      <p class="hint">훈련을 고르면 연습장에서 직접 ${s.kind === 'bat' ? '쳐요' : '던져요'}. 잘할수록 많이 오르고, 중간에 나가면 훈련은 없던 일이 돼요. 훈련한 날도 경기에는 나가요. 휴식한 날만 쉬어요.</p>`;
     screen(`<header class="bar"><button class="ghost small" data-act="back">←</button><h2>🌱 육성모드</h2><button class="ghost small rz-rec" data-act="records">📜 기록</button></header>
       <section class="card rz-card">
         <div class="rz-who">${face(p, s.kind === 'bat' ? 'b' : 'p', 'lg')}<div><b class="rz-name">${esc(p.name)}</b><small>삼성 · ${roleOf(s)} · ${s.year} 시즌</small></div>${condHtml(s.condition)}</div>
@@ -203,12 +203,15 @@ export function showRaise(root, { storage, loadGame, onBack }) {
         <div class="vs-row"><div class="side" style="--c:${opp.colors.main}">${badge(opp.id, 'lg')}<b>${opp.short}</b><small>✈️ 원정</small></div><span class="vs">VS</span><div class="side" style="--c:${getTeam(ME).colors.main}">${badge(ME, 'lg')}<b>삼성</b><small>🏠 홈</small></div></div>
         ${s.role === 'SP' ? `<p class="hint center">${d.myStart ? '🔥 오늘 선발 등판이에요' : `오늘은 등판이 없어요 · ${d.nextStartIn == null ? '이번 시즌 남은 선발이 없어요' : `다음 선발까지 ${d.nextStartIn}경기`}`}</p>` : ''}
         ${!s.chosen ? '<p class="hint center">선택 없이 경기에 나가면 피로가 조금만 풀려요</p>' : ''}
-        <div class="actions">${d.needsScreen ? '<button class="primary big" data-act="play">▶ 경기 시작</button>' : '<button class="primary big" data-act="play">⏩ 경기 진행 (등판 없음)</button>'}</div>
+        ${d.resting ? '<p class="hint center">😴 오늘은 휴식이라 경기에 나가지 않아요</p>' : ''}
+        <div class="actions">${d.needsScreen ? '<button class="primary big" data-act="play">▶ 경기 시작</button>' : `<button class="primary big" data-act="play">⏩ 경기 진행 (${d.resting ? '휴식 · 결장' : '등판 없음'})</button>`}</div>
       </section>`);
     act('back', () => { flash = null; slotsView(); });
     act('records', () => recordsView(i));
     act('choose', b => {
       const id = b.dataset.id;
+      const x = DRILLS.find(q => q.id === id);
+      if (x && x.light) return lightTraining(i, x);
       if (id !== 'rest') return training(i, id);
       const r = choose(data.slots[i], 'rest');
       data = { ...data, slots: data.slots.map((q, j) => (j === i ? r.slot : q)) }; persist();
@@ -216,6 +219,16 @@ export function showRaise(root, { storage, loadGame, onBack }) {
       hubView(i);
     });
     act('play', () => play(i));
+  }
+
+  // 가벼운 훈련(헬스·유연성): 연습장 없이 바로 끝
+  function lightTraining(i, x) {
+    if (!canChoose(data.slots[i], x.id).ok) return;
+    const r = choose(data.slots[i], x.id);
+    data = { ...data, slots: data.slots.map((q, j) => (j === i ? r.slot : q)) }; persist();
+    const ups = r.ups.map(u => `${STAT_KO[u.stat]} +${u.n}`).join(', ');
+    flash = `${x.name} 완료${ups ? ` · ${ups}` : ` · ${STAT_KO[x.stat]} 경험치가 조금 쌓였어요`}`;
+    hubView(i);
   }
 
   // 훈련 = 연습장 한 번(타자는 타격 연습, 투수는 투구 연습). 끝까지 하면 그 점수로 능력치 경험치가 쌓인다
@@ -228,7 +241,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
     const lineup = kind === 'pitch' ? { ...base, starterId: s.playerId } : { ...base, order: Array(9).fill(s.playerId) };
     mod.showGame(root, {
       userTeam: team, cpuTeam: getTeam('lg'), lineup, innings: 99, title: `${x.name} · ${slotPlayer(s).name}`,
-      practice: { kind, playerId: s.playerId, stat: x.stat, goal: PRACTICE.goal[kind] },
+      practice: { kind, playerId: s.playerId, stat: x.stat, goal: RAISE.practiceGoal[kind] },
     }, result => {
       const pr = result && result.practice;
       if (!pr) { flash = null; return hubView(i); }               // 중간에 나감: 훈련 안 한 것으로
@@ -266,7 +279,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
     const s = data.slots[i], p = slotPlayer(s), g = rep.game;
     const res = !g ? '경기 종료' : g.hs > g.as ? '승리' : g.hs < g.as ? '패배' : '무승부';
     const line = s.kind === 'bat' ? batLine(rep.line.bat) : pitLine(rep.line.pit, rep.dec);
-    const why = NOTE[note] || (!rep.appeared ? (s.kind === 'bat' ? '오늘은 타석에 서지 못했어요' : '오늘은 등판이 없었어요') : '');
+    const why = rep.rested ? '😴 오늘은 휴식하며 경기에 나가지 않았어요' : NOTE[note] || (!rep.appeared ? (s.kind === 'bat' ? '오늘은 타석에 서지 못했어요' : '오늘은 등판이 없었어요') : '');
     screen(`<div class="eyebrow center">${esc(p.name)} · ${s.year} 시즌 ${s.season.round}/${s.season.schedule.length}경기</div>
       <div class="re">${res === '승리' ? '🎉' : res === '패배' ? '😢' : '⚾'}</div>
       <h1 class="res ${res === '승리' ? 'win' : res === '패배' ? 'lose' : ''}">${res}</h1>

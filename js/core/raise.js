@@ -22,8 +22,11 @@ export const RAISE = {
   tiredAt: 70,                            // 이 이상으로 경기에 나가면 컨디션이 한 칸 더 떨어진다
   drillNeed: 4,                           // 같은 특훈을 이만큼 하면 특성
   drillXp: 0.4,                           // 특훈이 능력치에 주는 경험치(일반 훈련 대비)
-  // 훈련 = 연습장 한 번(타격 10번 / 투구 5구). 연습 점수가 기준이면 경험치 그대로, 잘하면 최대 1.5배, 못하면 0.3배까지
-  practiceRef: { bat: 10, pitch: 6 }, practiceMin: 0.3, practiceMax: 1.5,
+  // 훈련 = 연습장 한 번(타격 5번 / 투구 5구). 연습 점수가 기준이면 경험치 그대로, 잘하면 최대 1.5배, 못하면 0.3배까지
+  practiceGoal: { bat: 5, pitch: 5 },
+  practiceRef: { bat: 5, pitch: 6 }, practiceMin: 0.3, practiceMax: 1.5,
+  // 가벼운 훈련(헬스·유연성): 연습장 없이 바로. 피로도 덜, 효과도 덜(기준 연습의 이만큼)
+  lightCost: 10, lightXp: 0.5,
   xpBase: 6, xpMin: 1.8, xpSlope: 0.12,   // 훈련 경험치: max(xpMin, xpBase - (능력치-60)×xpSlope), 12점마다 +1
   seasonCycles: 3, startEvery: 4,         // 9개 팀 × 3 = 27경기, 선발은 4경기마다
   firstYear: 2027,
@@ -45,13 +48,15 @@ export const DRILLS = [
   { id: 'drillRisp', kind: 'bat', name: '득점권 대비 특훈', stat: 'contact', drill: true, trait: 'clutch' },
   { id: 'drillLhp', kind: 'bat', name: '좌투수 대비 특훈', stat: 'contact', drill: true, trait: 'lhpKiller' },
   { id: 'drillFirst', kind: 'bat', name: '초구 공략 특훈', stat: 'power', drill: true, trait: 'firstPitch' },
+  { id: 'gym', kind: 'bat', name: '헬스하기', stat: 'power', light: true },
+  { id: 'flex', kind: 'bat', name: '유연성 키우기', stat: 'contact', light: true },
   { id: 'velo', kind: 'pitch', name: '구속 훈련', stat: 'velo' },
   { id: 'control', kind: 'pitch', name: '제구 훈련', stat: 'control' },
   { id: 'stamina', kind: 'pitch', name: '체력 훈련', stat: 'stamina' },
   { id: 'drillEscape', kind: 'pitch', name: '위기 대비 특훈', stat: 'control', drill: true, trait: 'escape' },
   { id: 'drillLhb', kind: 'pitch', name: '좌타자 대비 특훈', stat: 'control', drill: true, trait: 'lhbKiller' },
   { id: 'drillFinish', kind: 'pitch', name: '결정구 특훈', stat: 'velo', drill: true, trait: 'finisher' },
-].map(d => ({ drill: false, ...d, cost: d.drill ? RAISE.drillCost : RAISE.trainCost }));
+].map(d => ({ drill: false, light: false, ...d, cost: d.light ? RAISE.lightCost : d.drill ? RAISE.drillCost : RAISE.trainCost }));
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
@@ -119,7 +124,7 @@ export function saveRaise(storage, r) {
 // ── 선수·팀 ──
 export const raiseTeam = (slot, { benchMe = false } = {}) => {
   const t = applyGrowth(getTeam(ME), slot.growth);
-  return benchMe ? { ...t, pitchers: t.pitchers.filter(p => p.id !== slot.playerId) } : t;
+  return benchMe ? { ...t, pitchers: t.pitchers.filter(p => p.id !== slot.playerId), batters: t.batters.filter(b => b.id !== slot.playerId) } : t;
 };
 export const slotPlayer = slot => {
   const t = raiseTeam(slot);
@@ -129,7 +134,7 @@ export const slotPlayer = slot => {
 // 기본 타순. 내 타자가 9명 밖(벤치)이면 지명타자 자리에 들어간다
 export function raiseLineup(slot, team) {
   const l = defaultLineup(team);
-  if (slot.kind !== 'bat' || l.order.includes(slot.playerId)) return l;
+  if (slot.kind !== 'bat' || l.order.includes(slot.playerId) || !team.batters.some(b => b.id === slot.playerId)) return l;   // 벤치(휴식)면 그대로
   const dh = l.order.findIndex(id => team.batters.find(b => b.id === id).pos === 'DH');
   const order = [...l.order];
   order[dh >= 0 ? dh : 8] = slot.playerId;
@@ -161,13 +166,14 @@ export function choose(slot, id, pts = null) {
   if (!c.ok) throw new Error(`고를 수 없어요: ${id} (${c.reason})`);
   if (id === 'rest') {
     const cond = slot.condition - Math.sign(slot.condition);
-    return { slot: { ...slot, chosen: true, fatigue: clamp(slot.fatigue + RAISE.rest, 0, 100), condition: cond }, ups: [], trait: null };
+    // 휴식한 날은 그날 경기에 나가지 않는다(벤치)
+    return { slot: { ...slot, chosen: true, resting: true, fatigue: clamp(slot.fatigue + RAISE.rest, 0, 100), condition: cond }, ups: [], trait: null };
   }
   const d = drillOf(id), now = slotPlayer(slot)[d.stat];
   let growth = slot.growth, ups = [];
   if (now < CAP[d.stat]) {
     const k = pts == null ? 1 : clamp(pts / RAISE.practiceRef[slot.kind], RAISE.practiceMin, RAISE.practiceMax);
-    const r = gainXp(growth, slot.playerId, d.stat, xpPerTraining(d.stat, now) * k * (d.drill ? RAISE.drillXp : 1));
+    const r = gainXp(growth, slot.playerId, d.stat, xpPerTraining(d.stat, now) * k * (d.drill ? RAISE.drillXp : d.light ? RAISE.lightXp : 1));
     growth = r.growth; ups = r.ups.map(u => ({ stat: u.stat, n: u.n }));
   }
   let progress = slot.progress, traits = slot.traits, trait = null;
@@ -187,18 +193,19 @@ const batterById = id => { const t = ownerOf(id); return t && t.batters.find(b =
 export function dayInfo(slot) {
   const s = slot.season, round = s.round, total = s.schedule.length;
   const g = round < total ? s.schedule[round].find(x => x.includes(ME)) : null;
-  const myStart = slot.role === 'SP' && round % RAISE.startEvery === 0;
+  const resting = !!slot.resting;
+  const myStart = slot.role === 'SP' && round % RAISE.startEvery === 0 && !resting;
   const k = (RAISE.startEvery - (round % RAISE.startEvery)) % RAISE.startEvery;
   return {
     nextStartIn: slot.role === 'SP' && round + k < total ? k : null,      // 다음 선발까지 남은 경기(이번 시즌에 없으면 null)
     round, total, opponentId: g ? g.find(x => x !== ME) : null,
     label: `${slot.year} 시즌 ${Math.min(round + 1, total)}/${total}경기`,
-    myStart, needsScreen: slot.kind === 'bat' || slot.role === 'CL' || myStart,
+    myStart, resting, needsScreen: !resting && (slot.kind === 'bat' || slot.role === 'CL' || myStart),
   };
 }
 
-// 오늘 삼성 팀: 선발 투수가 쉬는 날에는 내 선수를 빼 둔다(다른 선발이 돌고, 불펜으로도 안 나온다)
-const todayTeam = slot => raiseTeam(slot, { benchMe: slot.role === 'SP' && !dayInfo(slot).myStart });
+// 오늘 삼성 팀: 휴식한 날, 선발 투수가 쉬는 날에는 내 선수를 빼 둔다(다른 선발이 돌고, 불펜으로도 안 나온다)
+const todayTeam = slot => raiseTeam(slot, { benchMe: !!slot.resting || (slot.role === 'SP' && !dayInfo(slot).myStart) });
 const getterFor = slot => { const mine = todayTeam(slot); return id => (id === ME ? mine : getTeam(id)); };
 
 export function starterFor(slot) {
@@ -308,7 +315,7 @@ export function applyDay(slot, result, rng) {
   const traitsNew = Object.entries(RAISE.feat)
     .filter(([t, [k, need]]) => traitKind(t) === slot.kind && (feat[k] || 0) >= need && !slot.traits.includes(t)).map(([t]) => t);
   const next = {
-    ...slot, season: r.season, growth, condition, fatigue, chosen: false,
+    ...slot, season: r.season, growth, condition, fatigue, chosen: false, resting: false,
     traits: [...slot.traits, ...traitsNew], progress: { ...slot.progress, feat },
     stats: addStats(slot.stats, id, myLog, dec, appeared), total: addStats(slot.total, id, myLog, dec, appeared),
     league: leagueAdd(slot.league, r.games.map(g => g.log)),   // 리그 전체 기록(상위 몇 %를 내려고)
@@ -317,7 +324,7 @@ export function applyDay(slot, result, rng) {
   return {
     slot: next,
     report: {
-      line, dec, appeared, ups: ups.map(u => ({ stat: u.stat, n: u.n })), condFrom: slot.condition, condTo: condition, traitsNew,
+      line, dec, appeared, rested: !!slot.resting, ups: ups.map(u => ({ stat: u.stat, n: u.n })), condFrom: slot.condition, condTo: condition, traitsNew,
       game: game ? { home: game.home, away: game.away, hs: game.hs, as: game.as } : null,
       team: { w: st.w, l: st.l, d: st.d, rank: st.rank }, seasonOver: seasonOver(next),
     },
@@ -334,6 +341,6 @@ export function nextSeason(slot) {
   const year = slot.year + 1;
   return {
     ...slot, year, season: createSeason({ cycles: RAISE.seasonCycles, innings: 9, year }),
-    stats: {}, league: emptyLeague(), fatigue: 0, condition: 0, chosen: false, history: [...slot.history, entry], seasonBase: baseOf(slot.playerId, slot.kind, slot.growth),
+    stats: {}, league: emptyLeague(), fatigue: 0, condition: 0, chosen: false, resting: false, history: [...slot.history, entry], seasonBase: baseOf(slot.playerId, slot.kind, slot.growth),
   };
 }

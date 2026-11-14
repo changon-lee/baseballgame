@@ -25,7 +25,7 @@ test('newSlot: real Samsung player, role from roster', () => {
 
 test('DRILLS: three stat trainings and three trait drills per kind', () => {
   for (const kind of ['bat', 'pitch']) {
-    const d = DRILLS.filter(x => x.kind === kind);
+    const d = DRILLS.filter(x => x.kind === kind && !x.light);
     assert.equal(d.filter(x => !x.drill).length, 3); assert.equal(d.filter(x => x.drill).length, 3);
     for (const x of d) assert.equal(x.cost, x.drill ? RAISE.drillCost : RAISE.trainCost);
   }
@@ -47,7 +47,7 @@ test('training raises the stat with diminishing returns and caps', () => {
 test('training XP follows the practice score: a better session grows more', () => {
   const s = { ...newSlot('samsung-b03'), fatigue: 0 };
   const xp = r => r.slot.growth.xp['samsung-b03'].power + 12 * ((r.slot.growth.delta['samsung-b03'] || {}).power || 0);
-  const low = xp(choose(s, 'power', 2)), mid = xp(choose(s, 'power', RAISE.practiceRef.bat)), high = xp(choose(s, 'power', 25));
+  const low = xp(choose(s, 'power', 1)), mid = xp(choose(s, 'power', RAISE.practiceRef.bat)), high = xp(choose(s, 'power', 25));
   assert.ok(low < mid && mid < high, `${low} ${mid} ${high}`);
   near(mid, xpPerTraining('power', 72));
   near(high, xpPerTraining('power', 72) * RAISE.practiceMax);
@@ -271,7 +271,7 @@ test('nextSeason keeps growth/traits/total and resets the rest', () => {
   assert.deepEqual(nextSeason(nextSeason(n)).history[2].traitsNew, []);
 });
 
-test('balance: power training for 3 seasons hits clearly more HR than no training, and no stat rises more than 15 in one season', () => {
+test('balance: power training for 3 seasons hits HR clearly more often than no training, and no stat rises more than 15 in one season', () => {
   const run = (train, seed) => {
     let s = newSlot('samsung-b03'); const rng = createRng(seed), hr = [], gain = [];
     for (let y = 0; y < 3; y++) {
@@ -282,7 +282,7 @@ test('balance: power training for 3 seasons hits clearly more HR than no trainin
       }
       const p1 = slotPlayer(s);
       gain.push(Math.max(...['power', 'contact', 'eye'].map(k => p1[k] - p0[k])));
-      hr.push(s.stats.bat.hr);
+      hr.push(s.stats.bat.hr / s.stats.bat.pa);   // 휴식하면 결장이라 타석 수가 달라진다: 타석당 홈런으로
       s = nextSeason(s);
     }
     return { hr, gain, power: slotPlayer(s).power };
@@ -293,7 +293,7 @@ test('balance: power training for 3 seasons hits clearly more HR than no trainin
     trained += a.hr[2]; plain += b.hr[2];
     for (const g of [...a.gain, ...b.gain]) assert.ok(g <= 15, `season gain ${g}`);
   }
-  assert.ok(trained > plain * 1.3, `HR trained ${trained} vs plain ${plain}`);
+  assert.ok(trained > plain * 1.3, `HR/PA trained ${trained.toFixed(3)} vs plain ${plain.toFixed(3)}`);
 });
 
 test('prelude: a closer who does not pitch today gets the day without a game screen', async () => {
@@ -328,4 +328,49 @@ test('prelude: a batter always opens the screen at his first at-bat', async () =
   assert.ok(pre.match && !pre.result);
   assert.equal(pre.match.lineups.home.order[pre.match.game.battingIndex.home], 'samsung-b03');
   assert.equal(pre.match.game.half, 'bottom');
+});
+
+// ── 연습 5타 · 헬스/유연성 · 휴식만 결장 ──
+test('batting practice is 5 swings and the reference score follows', () => {
+  assert.equal(RAISE.practiceGoal.bat, 5); assert.equal(RAISE.practiceGoal.pitch, 5);
+  assert.equal(RAISE.practiceRef.bat, 5);
+});
+
+test('gym raises power and flexibility raises contact, lighter than a practice session', () => {
+  const light = DRILLS.filter(x => x.light);
+  assert.deepEqual(light.map(x => [x.id, x.kind, x.stat]), [['gym', 'bat', 'power'], ['flex', 'bat', 'contact']]);
+  assert.deepEqual(light.map(x => x.name), ['헬스하기', '유연성 키우기']);
+  const s = { ...newSlot('samsung-b03'), fatigue: 0 };
+  const xpOf = (r, k) => r.slot.growth.xp['samsung-b03'][k] + 12 * ((r.slot.growth.delta['samsung-b03'] || {})[k] || 0);
+  const gym = choose(s, 'gym'), flex = choose(s, 'flex'), prac = choose(s, 'power', RAISE.practiceRef.bat);
+  assert.ok(xpOf(gym, 'power') > 0 && xpOf(gym, 'power') < xpOf(prac, 'power'));
+  near(xpOf(gym, 'power'), xpPerTraining('power', 72) * RAISE.lightXp);
+  assert.ok(xpOf(flex, 'contact') > 0);
+  assert.ok(gym.slot.fatigue > 0 && gym.slot.fatigue < prac.slot.fatigue);
+  assert.equal(gym.slot.fatigue, RAISE.lightCost);
+});
+
+test('training still plays today; only rest sits me out of the game', () => {
+  const rng = createRng(7);
+  const b = newSlot('samsung-b03');
+  const trained = choose({ ...b }, 'gym').slot;
+  assert.equal(dayInfo(trained).needsScreen, true);
+  const out = applyDay(trained, null, rng);
+  assert.equal(out.report.appeared, true);
+  const rested = choose({ ...b }, 'rest').slot;
+  assert.equal(rested.resting, true);
+  const d = dayInfo(rested);
+  assert.equal(d.needsScreen, false); assert.equal(d.resting, true);
+  assert.ok(!matchSetup(rested).lineup.order.includes('samsung-b03'));
+  const r = applyDay(rested, null, rng);
+  assert.equal(r.report.appeared, false); assert.equal(r.report.rested, true);
+  assert.equal(r.slot.resting, false);
+  assert.ok(!Object.keys(r.slot.league.bat).includes('samsung-b03') || r.slot.league.bat['samsung-b03'].pa === 0);
+  // 선발 투수가 선발 날 쉬면 그날은 다른 투수가 선발
+  const sp = choose(newSlot('samsung-p01'), 'rest').slot;
+  assert.equal(dayInfo(sp).myStart, false);
+  assert.notEqual(starterFor(sp), 'samsung-p01');
+  // 마무리도 쉬는 날은 불펜에 없다
+  const cl = choose(newSlot('samsung-p05'), 'rest').slot;
+  assert.ok(!matchSetup(cl).userTeam.pitchers.some(p => p.id === 'samsung-p05'));
 });
