@@ -4,7 +4,7 @@
 import { getTeam, USER_TEAM_ID } from '../data/rosters.js';
 import { createGrowth, gainXp, applyGrowth, gainFromLog, playerLine } from './growth.js';
 import { defaultLineup } from './team.js';
-import { createSeason, recordRound, standings, nextStarter } from './season.js';
+import { createSeason, recordRound, standings, nextStarter, nextPostGame, recordPostGame, seasonSummary } from './season.js';
 import { decisions, gameLine, raiseStep } from './raisematch.js';
 import { createMatch } from './match.js';
 import { leagueAdd, emptyLeague } from './raisestats.js';
@@ -195,17 +195,30 @@ const ownerOf = id => getTeam(id.split('-')[0]);
 const pitcherById = id => { const t = ownerOf(id); return t && t.pitchers.find(p => p.id === id); };
 const batterById = id => { const t = ownerOf(id); return t && t.batters.find(b => b.id === id); };
 
+// 포스트시즌에 삼성이 치른 경기 수
+const myPostGames = s => (s.post ? s.post.series.reduce((a, x) => a + x.games.filter(g => g.home === ME || g.away === ME).length, 0) : 0);
+// 지금 시리즈에서 삼성 { name, w, l }
+function seriesOf(s, idx = s.post && s.post.current) {
+  const ser = s.post && s.post.series[idx];
+  if (!ser || !ser.teams.includes(ME)) return null;
+  const mi = ser.teams.indexOf(ME);
+  return { name: ser.name, w: ser.wins[mi], l: ser.wins[1 - mi], need: ser.need };
+}
+
 export function dayInfo(slot) {
-  const s = slot.season, round = s.round, total = s.schedule.length;
-  const g = round < total ? s.schedule[round].find(x => x.includes(ME)) : null;
+  const s = slot.season, round = s.round, total = s.schedule.length, post = s.phase === 'post';
+  const g = !post && round < total ? s.schedule[round].find(x => x.includes(ME)) : null;
+  const pg = post ? nextPostGame(s) : null, ser = post ? seriesOf(s) : null;
+  const n = round + myPostGames(s);                                       // 삼성이 치른 경기 수(선발 로테이션)
   const resting = !!slot.resting;
-  const myStart = slot.role === 'SP' && round % RAISE.startEvery === 0 && !resting;
-  const k = (RAISE.startEvery - (round % RAISE.startEvery)) % RAISE.startEvery;
+  const myStart = slot.role === 'SP' && n % RAISE.startEvery === 0 && !resting;
+  const k = (RAISE.startEvery - (n % RAISE.startEvery)) % RAISE.startEvery;
+  const label = post ? `${pg.label}${ser ? ` · ${ser.w}승 ${ser.l}패` : ''}`
+    : s.phase === 'done' ? `${slot.year} 시즌 종료` : `${slot.year} 시즌 ${Math.min(round + 1, total)}/${total}경기`;
   return {
-    nextStartIn: slot.role === 'SP' && round + k < total ? k : null,      // 다음 선발까지 남은 경기(이번 시즌에 없으면 null)
-    round, total, opponentId: g ? g.find(x => x !== ME) : null,
-    label: `${slot.year} 시즌 ${Math.min(round + 1, total)}/${total}경기`,
-    myStart, resting, needsScreen: !resting && (slot.kind === 'bat' || slot.role === 'CL' || myStart),
+    nextStartIn: slot.role === 'SP' && (post || round + k < total) ? k : null,   // 다음 선발까지 남은 경기(이번 시즌에 없으면 null)
+    round, total, post, series: ser, opponentId: post ? pg.opponentId : g ? g.find(x => x !== ME) : null,
+    label, myStart, resting, needsScreen: !resting && (slot.kind === 'bat' || slot.role === 'CL' || myStart),
   };
 }
 
@@ -295,10 +308,25 @@ export function prelude(slot, rng) {
 }
 const traitKind = t => (TRAITS.find(x => x.id === t) || {}).kind;
 
+// 포스트시즌: 삼성 경기가 나올 때까지(또는 가을야구가 끝날 때까지) 다른 팀 경기를 돌린다
+function skipPost(season, rng, opts) {
+  let s = season;
+  for (let i = 0; i < 80 && s.phase === 'post' && !nextPostGame(s).userGame; i++) s = recordPostGame(s, null, rng, opts).season;
+  return s;
+}
+// 이번 시즌 가을야구 결과: '통합 우승' · '한국시리즈 우승' · '준우승' · '플레이오프 탈락' · '가을야구 실패' …
+export const postResult = slot => seasonSummary(slot.season).result;
+export const rings = slot => slot.history.filter(h => h.champion).length;     // 우승 반지
+
 // 하루 마무리: 경기 결과(내가 한 경기 { home, away, log, starterId } 또는 null = 자동)를 시즌·내 선수에 반영
 export function applyDay(slot, result, rng) {
-  const id = slot.playerId, team = todayTeam(slot);
-  const r = recordRound(slot.season, result, rng, { getT: getterFor(slot), userLineup: raiseLineup(slot, team), userStarterId: starterFor(slot), bat: RAISE.bat });
+  const id = slot.playerId, team = todayTeam(slot), post = slot.season.phase === 'post';
+  const opts = { getT: getterFor(slot), userLineup: raiseLineup(slot, team), userStarterId: starterFor(slot), bat: RAISE.bat };
+  const seriesIdx = post ? slot.season.post.current : null;
+  let r;
+  if (post) { const pr = recordPostGame(slot.season, result, rng, opts); r = { season: pr.season, games: pr.game ? [pr.game] : [] }; }
+  else r = recordRound(slot.season, result, rng, opts);
+  r = { ...r, season: skipPost(r.season, rng, opts) };
   const game = r.games.find(g => g.home === ME || g.away === ME);
   const log = (game && game.log) || [];
   const myLog = log.filter(e => e.batterId === id || e.pitcherId === id);
@@ -322,21 +350,34 @@ export function applyDay(slot, result, rng) {
   const next = {
     ...slot, season: r.season, growth, condition, fatigue, chosen: false, resting: false,
     traits: [...slot.traits, ...traitsNew], progress: { ...slot.progress, feat },
-    stats: addStats(slot.stats, id, myLog, dec, appeared), total: addStats(slot.total, id, myLog, dec, appeared),
-    league: leagueAdd(slot.league, r.games.map(g => g.log)),   // 리그 전체 기록(상위 몇 %를 내려고)
+    // 포스트시즌 기록은 따로(정규시즌 기록·통산·리그 순위에 안 들어간다)
+    ...(post ? { postStats: addStats(slot.postStats || {}, id, myLog, dec, appeared) }
+      : { stats: addStats(slot.stats, id, myLog, dec, appeared), total: addStats(slot.total, id, myLog, dec, appeared),
+        league: leagueAdd(slot.league, r.games.map(g => g.log)) }),   // 리그 전체 기록(상위 몇 %를 내려고)
   };
+  // 시리즈 결과(포스트시즌) / 정규시즌이 끝난 날의 가을야구 진출
+  let series = null, postStart = null;
+  if (post) {
+    const sr = seriesOf(r.season, seriesIdx);
+    series = { ...sr, won: sr.w >= sr.need ? true : sr.l >= sr.need ? false : null, champion: r.season.champion === ME };
+  } else if (r.season.phase !== 'regular') {
+    const seeds = (r.season.post || slot.season.post || { seeds: [] }).seeds;
+    const inPost = !!(r.season.post && r.season.post.seeds.includes(ME));
+    const first = inPost ? r.season.post.series.find(x => x.teams.includes(ME)) : null;
+    postStart = { inPost, seed: seeds.indexOf(ME) + 1, series: first ? first.name : null };
+  }
   const st = standings(r.season).find(x => x.id === ME);
   return {
     slot: next,
     report: {
       line, dec, appeared, rested: !!slot.resting, ups: ups.map(u => ({ stat: u.stat, n: u.n })), condFrom: slot.condition, condTo: condition, traitsNew,
       game: game ? { home: game.home, away: game.away, hs: game.hs, as: game.as } : null,
-      team: { w: st.w, l: st.l, d: st.d, rank: st.rank }, seasonOver: seasonOver(next),
+      team: { w: st.w, l: st.l, d: st.d, rank: st.rank }, seasonOver: seasonOver(next), post, series, postStart,
     },
   };
 }
 
-export const seasonOver = slot => slot.season.phase !== 'regular';
+export const seasonOver = slot => slot.season.phase === 'done';
 
 // 다음 시즌: 시즌 기록·순위는 새로, 능력치·특성·통산은 그대로. 비시즌에 푹 쉬어 피로 0, 컨디션 보통
 // games: 다음 시즌 경기 수(안 주면 이번 시즌과 같게)
@@ -344,10 +385,12 @@ export function nextSeason(slot, { games = slot.games } = {}) {
   games = gamesOf(games);
   const st = standings(slot.season).find(x => x.id === ME);
   const before = new Set(slot.history.flatMap(h => h.traitsNew || []));
-  const entry = { year: slot.year, line: slot.stats, rank: st.rank, w: st.w, l: st.l, d: st.d, traitsNew: slot.traits.filter(t => !before.has(t)) };
+  const entry = { year: slot.year, line: slot.stats, rank: st.rank, w: st.w, l: st.l, d: st.d, traitsNew: slot.traits.filter(t => !before.has(t)),
+    post: postResult(slot), champion: slot.season.champion === ME, ...(slot.postStats ? { postLine: slot.postStats } : {}) };
   const year = slot.year + 1;
+  const { postStats, ...rest } = slot;
   return {
-    ...slot, year, games, season: makeSeason(games, year),
+    ...rest, year, games, season: makeSeason(games, year),
     stats: {}, league: emptyLeague(), fatigue: 0, condition: 0, chosen: false, resting: false, history: [...slot.history, entry], seasonBase: baseOf(slot.playerId, slot.kind, slot.growth),
   };
 }

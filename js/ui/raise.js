@@ -6,7 +6,7 @@ import { avg, era, ip } from '../core/growth.js';
 import { createRng } from '../core/rng.js';
 import { TRAITS } from '../core/perks.js';
 import { defaultLineup } from '../core/team.js';
-import { RAISE, DRILLS, newSlot, loadRaise, saveRaise, slotPlayer, raiseTeam, canChoose, choose, dayInfo, applyDay, seasonOver, nextSeason, seasonGains, prelude } from '../core/raise.js';
+import { RAISE, DRILLS, newSlot, loadRaise, saveRaise, slotPlayer, raiseTeam, canChoose, choose, dayInfo, applyDay, seasonOver, nextSeason, seasonGains, prelude , postResult, rings } from '../core/raise.js';
 import { seasonCard, leaderboard, STAT_DEFS, BOARD_TOP } from '../core/raisestats.js';
 import { face, badge } from './hub.js';
 
@@ -41,6 +41,34 @@ function seasonLine(slot, st) {
   if (slot.kind === 'bat') return st.bat ? `타율 ${avg(st.bat)} · ${st.bat.hr}홈런 · ${st.bat.rbi}타점 · OPS ${ops(st.bat)}` : '아직 기록이 없어요';
   if (!st.pit) return '아직 기록이 없어요';
   return `평균자책 ${era(st.pit)} · ${ip(st.pit)}이닝 · ${st.w || 0}승 ${st.l || 0}패${slot.role === 'CL' ? ` ${st.sv || 0}세이브` : ''} · 탈삼진 ${st.pit.so}`;
+}
+
+// 우승 반지
+const ringHtml = s => (rings(s) ? ` <span class="rz-ring" title="한국시리즈 우승 ${rings(s)}회">💍${rings(s) > 1 ? '×' + rings(s) : ''}</span>` : '');
+// 가을야구 소식(경기 결과 화면): 정규시즌이 끝난 날의 진출 여부, 시리즈를 이기거나 진 날
+function postNews(rep) {
+  if (rep.postStart) {
+    const ps = rep.postStart;
+    return ps.inPost ? `<section class="card rz-post"><div class="card-h">🍂 가을야구 진출!</div><p class="hint">정규시즌 ${ps.seed}위 · ${ps.seed === 1 ? '한국시리즈에 바로 올라가요' : `${esc(ps.series)}부터 시작해요`}</p></section>`
+      : `<section class="card"><div class="card-h">🍃 가을야구 실패</div><p class="hint">정규시즌 ${rep.team.rank}위로 시즌을 마쳤어요</p></section>`;
+  }
+  const sr = rep.series;
+  if (!sr || sr.won == null) return '';
+  if (sr.won && sr.champion) return `<section class="card rz-post win"><div class="card-h">🏆 한국시리즈 우승!</div><p class="hint">${sr.w}승 ${sr.l}패로 정상에 올랐어요</p></section>`;
+  if (sr.won) return `<section class="card rz-post win"><div class="card-h">🎉 ${esc(sr.name)} 승리!</div><p class="hint">${sr.w}승 ${sr.l}패 · 다음 시리즈로 올라가요</p></section>`;
+  return `<section class="card"><div class="card-h">😢 ${esc(sr.name)} 탈락</div><p class="hint">${sr.w}승 ${sr.l}패 · 올해 가을야구는 여기까지예요</p></section>`;
+}
+// 삼성의 가을야구 길: 시리즈마다 상대와 승패
+function postPath(s) {
+  const post = s.season.post;
+  if (!post || !post.seeds.includes(ME)) return '';
+  const rows = post.series.filter(x => x.teams.includes(ME)).map(x => {
+    const mi = x.teams.indexOf(ME), opp = x.teams[1 - mi];
+    const won = x.wins[mi] >= x.need;
+    return `<tr class="${won ? 'me' : ''}"><td>${esc(x.name)}</td><td>${opp ? `${badge(opp)} ${getTeam(opp).short}` : '-'}</td><td>${x.wins[mi]}승 ${x.wins[1 - mi]}패 ${won ? '✅' : '❌'}</td></tr>`;
+  }).join('');
+  return `<section class="card flush"><div class="card-h pad">🍂 ${s.year} 가을야구</div><table class="rz-table">${rows}</table>
+    ${s.season.champion && s.season.champion !== ME ? `<p class="hint pad">우승: ${getTeam(s.season.champion).name}</p>` : ''}</section>`;
 }
 
 // 설명 단추(ⓘ): 마우스를 올리거나 누르면 data-tip 글이 뜬다
@@ -140,7 +168,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
     screen(`<header class="bar"><button class="ghost small" data-act="back">←</button><h2>🌱 육성모드</h2></header>
       <p class="hint">삼성 선수 한 명을 골라 끝없이 키워요. 경기와 경기 사이에 훈련이나 휴식을 하나 고르고, 경기에서는 내 선수 장면만 직접 해요.</p>${broken}
       ${data.slots.map((s, i) => s ? `<section class="card rz-slot">
-        <div class="rz-who">${face(slotPlayer(s), s.kind === 'bat' ? 'b' : 'p')}<div><b>${esc(slotPlayer(s).name)}</b><small>${roleOf(s)} · ${dayInfo(s).label}</small></div>${condHtml(s.condition)}</div>
+        <div class="rz-who">${face(slotPlayer(s), s.kind === 'bat' ? 'b' : 'p')}<div><b>${esc(slotPlayer(s).name)}${ringHtml(s)}</b><small>${roleOf(s)} · ${dayInfo(s).label}</small></div>${condHtml(s.condition)}</div>
         <p class="hint">${seasonLine(s, s.stats)}</p>
         <div class="actions"><button class="primary" data-act="open" data-i="${i}">▶ 이어서 키우기</button><button class="ghost small" data-act="del" data-i="${i}">지우기</button></div>
       </section>` : `<section class="card rz-slot empty"><div class="card-h">${i + 1}번 슬롯 · 비어 있음</div>
@@ -194,7 +222,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
       <p class="hint">훈련을 고르면 연습장에서 직접 ${s.kind === 'bat' ? '쳐요' : '던져요'}. 잘할수록 많이 오르고, 중간에 나가면 훈련은 없던 일이 돼요. 훈련한 날도 경기에는 나가요. 휴식한 날만 쉬어요.</p>`;
     screen(`<header class="bar"><button class="ghost small" data-act="back">←</button><h2>🌱 육성모드</h2><button class="ghost small rz-rec" data-act="records">📜 기록</button></header>
       <section class="card rz-card">
-        <div class="rz-who">${face(p, s.kind === 'bat' ? 'b' : 'p', 'lg')}<div><b class="rz-name">${esc(p.name)}</b><small>삼성 · ${roleOf(s)} · ${s.year} 시즌</small></div>${condHtml(s.condition)}</div>
+        <div class="rz-who">${face(p, s.kind === 'bat' ? 'b' : 'p', 'lg')}<div><b class="rz-name">${esc(p.name)}${ringHtml(s)}</b><small>삼성 · ${roleOf(s)} · ${s.year} 시즌</small></div>${condHtml(s.condition)}</div>
         <div class="rz-stats">${STATS[s.kind].map(k => `<span class="ms"><span>${STAT_ICON[k]} ${STAT_KO[k]}</span><i><u style="width:${barPct(k, p[k])}%"></u></i><em>${p[k]}${k === 'velo' ? 'km' : ''}</em></span>`).join('')}</div>
         <div class="rz-fat"><span>😮‍💨 피로</span><i><u class="${s.fatigue >= RAISE.tiredAt ? 'hi' : ''}" style="width:${s.fatigue}%"></u></i><em>${Math.round(s.fatigue)}</em></div>
         ${s.traits.length ? `<div class="rz-traits">${s.traits.map(t => `<span class="rz-trait" title="${esc(traitOf(t).desc)}">✨ ${esc(traitOf(t).name)}</span>`).join('')}</div>` : '<p class="hint">특성은 특훈을 4번 하거나 경기에서 활약하면 생겨요</p>'}
@@ -202,7 +230,8 @@ export function showRaise(root, { storage, loadGame, onBack }) {
       </section>
       <section class="card"><div class="card-h">🗓️ 오늘의 선택</div>${choiceHtml}</section>
       <section class="card next">
-        <div class="card-h">⚾ ${d.label}<span class="pill">${st.w}승 ${st.l}패${st.d ? ' ' + st.d + '무' : ''} · ${st.rank}위</span></div>
+        <div class="card-h">${d.post ? '🍂' : '⚾'} ${d.label}<span class="pill">${d.post ? `정규시즌 ${st.rank}위` : `${st.w}승 ${st.l}패${st.d ? ' ' + st.d + '무' : ''} · ${st.rank}위`}</span></div>
+        ${d.post ? `<p class="hint center">🍂 가을야구 · ${esc(d.series.name)} ${d.series.need}승 하면 다음 단계로${d.series.name === '한국시리즈' ? ' (우승!)' : ''}</p>` : ''}
         <div class="vs-row"><div class="side" style="--c:${opp.colors.main}">${badge(opp.id, 'lg')}<b>${opp.short}</b><small>✈️ 원정</small></div><span class="vs">VS</span><div class="side" style="--c:${getTeam(ME).colors.main}">${badge(ME, 'lg')}<b>삼성</b><small>🏠 홈</small></div></div>
         ${s.role === 'SP' ? `<p class="hint center">${d.myStart ? '🔥 오늘 선발 등판이에요' : `오늘은 등판이 없어요 · ${d.nextStartIn == null ? '이번 시즌 남은 선발이 없어요' : `다음 선발까지 ${d.nextStartIn}경기`}`}</p>` : ''}
         ${!s.chosen ? '<p class="hint center">선택 없이 경기에 나가면 피로가 조금만 풀려요</p>' : ''}
@@ -283,11 +312,12 @@ export function showRaise(root, { storage, loadGame, onBack }) {
     const res = !g ? '경기 종료' : g.hs > g.as ? '승리' : g.hs < g.as ? '패배' : '무승부';
     const line = s.kind === 'bat' ? batLine(rep.line.bat) : pitLine(rep.line.pit, rep.dec);
     const why = rep.rested ? '😴 오늘은 휴식하며 경기에 나가지 않았어요' : NOTE[note] || (!rep.appeared ? (s.kind === 'bat' ? '오늘은 타석에 서지 못했어요' : '오늘은 등판이 없었어요') : '');
-    screen(`<div class="eyebrow center">${esc(p.name)} · ${s.year} 시즌 ${s.season.round}/${s.season.schedule.length}경기</div>
+    screen(`<div class="eyebrow center">${esc(p.name)} · ${s.year} ${rep.post ? `가을야구 · ${esc(rep.series.name)}` : `시즌 ${s.season.round}/${s.season.schedule.length}경기`}</div>
       <div class="re">${res === '승리' ? '🎉' : res === '패배' ? '😢' : '⚾'}</div>
       <h1 class="res ${res === '승리' ? 'win' : res === '패배' ? 'lose' : ''}">${res}</h1>
       ${g ? `<div class="scoreline">${badge(g.away, 'lg')}<b>${g.as}</b><i>:</i><b>${g.hs}</b>${badge(g.home, 'lg')}</div>` : ''}
-      <p class="hint center">팀 ${rep.team.w}승 ${rep.team.l}패${rep.team.d ? ' ' + rep.team.d + '무' : ''} · ${rep.team.rank}위</p>
+      ${rep.post ? `<p class="hint center">${esc(rep.series.name)} ${rep.series.w}승 ${rep.series.l}패</p>` : `<p class="hint center">팀 ${rep.team.w}승 ${rep.team.l}패${rep.team.d ? ' ' + rep.team.d + '무' : ''} · ${rep.team.rank}위</p>`}
+      ${postNews(rep)}
       ${rep.traitsNew.length ? `<section class="card rz-newtrait">${rep.traitsNew.map(t => `<div class="card-h">✨ 새 특성 · ${esc(traitOf(t).name)}</div><p class="hint">${esc(traitOf(t).desc)}</p>`).join('')}</section>` : ''}
       <section class="card"><div class="card-h">📋 오늘 ${esc(p.name)}</div>
         <p class="rz-line">${line || '-'}</p>${why ? `<p class="hint">${why}</p>` : ''}
@@ -296,7 +326,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
       </section>
       ${seasonStatsCard(s)}
       ${boardCard(s, boardKey[s.kind])}
-      <div class="actions"><button class="primary big" data-act="ok">${rep.seasonOver ? '시즌 결산 보기' : '확인'}</button></div>`, 'result');
+      <div class="actions"><button class="primary big" data-act="ok">${rep.seasonOver ? (rep.series && rep.series.champion ? '🏆 우승 세리머니' : '시즌 결산 보기') : '확인'}</button></div>`, 'result');
     act('ok', () => hubView(i));
     bindBoard(s);
   }
@@ -306,8 +336,15 @@ export function showRaise(root, { storage, loadGame, onBack }) {
     const s = data.slots[i], p = slotPlayer(s), st = standings(s.season);
     const before = new Set(s.history.flatMap(h => h.traitsNew || []));
     const gained = s.traits.filter(t => !before.has(t)), ups = seasonGains(s);
+    const champ = s.season.champion === ME, result = postResult(s);
     screen(`<div class="eyebrow center">${s.year} 시즌 종료</div>
-      <div class="re">🏁</div><h1 class="res">${esc(p.name)}</h1>
+      ${champ ? `<section class="card rz-champ"><div class="rz-confetti">🎊 🏆 🎊</div><h1>${esc(result)}!</h1>
+        <p>${s.year} 삼성 라이온즈가 한국시리즈 정상에 올랐어요</p>
+        <div class="rz-ringbig">💍 우승 반지 ${rings(s) + 1}개째</div>
+        <p class="hint">${esc(p.name)}의 우승 반지는 슬롯과 허브에 계속 남아요</p></section>`
+        : `<div class="re">🏁</div><h1 class="res">${esc(p.name)}</h1><p class="hint center rz-postres">${s.season.post && s.season.post.seeds.includes(ME) ? '🍂' : '🍃'} ${esc(result)}</p>`}
+      ${s.postStats ? `<section class="card"><div class="card-h">🍂 가을야구 기록</div><p class="rz-line">${seasonLine(s, s.postStats)}</p></section>` : ''}
+      ${postPath(s)}
       <section class="card"><div class="card-h">📊 시즌 성적</div><p class="rz-line">${seasonLine(s, s.stats)}</p>
         ${ups.length ? `<div class="ups">${ups.map(u => `<div><b>${STAT_ICON[u.stat]} ${STAT_KO[u.stat]}</b><span><em>+${u.n}${u.stat === 'velo' ? 'km' : ''}</em></span></div>`).join('')}</div>` : '<p class="hint">이번 시즌에 오른 능력치는 없어요</p>'}
         ${gained.length ? `<div class="rz-traits">${gained.map(t => `<span class="rz-trait">✨ ${esc(traitOf(t).name)}</span>`).join('')}</div>` : ''}</section>
@@ -332,7 +369,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
     screen(`<header class="bar"><button class="ghost small" data-act="back">←</button><h2>📜 ${esc(p.name)} 기록</h2></header>
       ${seasonStatsCard(s)}
       ${boardCard(s, boardKey[s.kind])}
-      ${s.history.slice().reverse().map(h => `<section class="card slim"><div class="card-h">${h.year} 시즌 · 팀 ${h.rank}위 (${h.w}승 ${h.l}패)</div><p class="rz-line">${seasonLine(s, h.line)}</p>
+      ${s.history.slice().reverse().map(h => `<section class="card slim"><div class="card-h">${h.champion ? '🏆 ' : ''}${h.year} 시즌 · 팀 ${h.rank}위 (${h.w}승 ${h.l}패)${h.post ? `<span class="pill">${esc(h.post)}</span>` : ''}</div><p class="rz-line">${seasonLine(s, h.line)}</p>
         ${(h.traitsNew || []).length ? `<p class="hint">✨ ${h.traitsNew.map(t => esc(traitOf(t).name)).join(', ')}</p>` : ''}</section>`).join('')}
       <section class="card"><div class="card-h">🧮 통산</div><p class="rz-line">${seasonLine(s, s.total)}</p></section>
       <section class="card"><div class="card-h">✨ 특성</div>

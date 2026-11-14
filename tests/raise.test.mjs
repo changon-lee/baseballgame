@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { getTeam } from '../js/data/rosters.js';
 import { createRng } from '../js/core/rng.js';
+import { postResult, rings } from '../js/core/raise.js';
 import { newSlot, loadRaise, saveRaise, slotPlayer, raiseTeam, raiseLineup, xpPerTraining, canChoose, choose, DRILLS, RAISE,
   dayInfo, starterFor, matchSetup, applyDay, seasonOver, nextSeason, seasonGains } from '../js/core/raise.js';
 
@@ -158,6 +159,7 @@ test('starter pitches every 4th game; dayInfo restarts each season', () => {
     s = applyDay(s, null, rng).slot;
   }
   assert.deepEqual(starts, [0, 4, 8, 12, 16, 20, 24]);
+  for (let g = 0; g < 30 && !seasonOver(s); g++) s = applyDay(s, null, rng).slot;    // 가을야구까지
   assert.ok(seasonOver(s));
   const n = nextSeason(s);
   assert.equal(dayInfo(n).round, 0); assert.equal(dayInfo(n).myStart, true);
@@ -179,9 +181,12 @@ test('applyDay records the game, my line, standings; null result simulates', () 
   let s = newSlot('samsung-b03'); const rng = createRng(3);
   let last;
   for (let i = 0; i < 27; i++) { last = applyDay(s, null, rng); s = last.slot; }
-  assert.ok(seasonOver(s)); assert.equal(last.report.seasonOver, true);
   const me = last.report.team; assert.equal(me.w + me.l + me.d, 27); assert.ok(me.rank >= 1 && me.rank <= 10);
+  assert.ok(last.report.postStart, 'the last regular game says whether we made the postseason');
+  assert.equal(last.report.seasonOver, !last.report.postStart.inPost);
   assert.ok(s.stats.bat.pa > 50, `pa ${s.stats.bat.pa}`); assert.deepEqual(s.total.bat, s.stats.bat);
+  for (let g = 0; g < 30 && !seasonOver(s); g++) { last = applyDay(s, null, rng); s = last.slot; }
+  assert.ok(seasonOver(s)); assert.equal(last.report.seasonOver, true);
 });
 
 test('applyDay with a played game uses its log and score', () => {
@@ -283,17 +288,19 @@ test('balance: power training for 3 seasons hits HR clearly more often than no t
       const p1 = slotPlayer(s);
       gain.push(Math.max(...['power', 'contact', 'eye'].map(k => p1[k] - p0[k])));
       hr.push(s.stats.bat.hr / s.stats.bat.pa);   // 휴식하면 결장이라 타석 수가 달라진다: 타석당 홈런으로
+      for (let g = 0; g < 30 && !seasonOver(s); g++) s = applyDay(s, null, rng).slot;   // 가을야구
       s = nextSeason(s);
     }
     return { hr, gain, power: slotPlayer(s).power };
   };
   let trained = 0, plain = 0;
-  for (const seed of [1, 2, 3, 4]) {
+  for (const seed of [1, 2, 3, 4, 5, 6]) {
     const a = run(true, seed), b = run(false, seed);
     trained += a.hr[2]; plain += b.hr[2];
     for (const g of [...a.gain, ...b.gain]) assert.ok(g <= 15, `season gain ${g}`);
   }
-  assert.ok(trained > plain * 1.3, `HR/PA trained ${trained.toFixed(3)} vs plain ${plain.toFixed(3)}`);
+  // 육성모드 리그 타격 환경(RAISE.bat)에서는 홈런 자체가 줄어 차이도 줄었다(1.3배 → 약 1.27배)
+  assert.ok(trained > plain * 1.2, `HR/PA trained ${trained.toFixed(3)} vs plain ${plain.toFixed(3)}`);
 });
 
 test('prelude: a closer who does not pitch today gets the day without a game screen', async () => {
@@ -389,4 +396,62 @@ test('season length: 27 or 81 games, kept into the next season unless changed', 
   assert.equal(newSlot('samsung-b03', { games: 50 }).games, 27);          // 고를 수 없는 값은 27
   const old = { ...a }; delete old.games;                                  // 예전 저장: 27경기
   assert.equal(nextSeason(old).season.schedule.length, 27);
+});
+
+// ── 포스트시즌 ──
+// 정규시즌 마지막 경기 직전까지 결과를 만들어 둔다: meWins = 삼성이 이긴 경기 수 비율(1이면 전승, 0이면 전패)
+function lastDay(slot, meWins) {
+  const s = slot.season, results = [];
+  for (let r = 0; r < s.schedule.length - 1; r++) for (const [home, away] of s.schedule[r]) {
+    const me = home === 'samsung' || away === 'samsung';
+    const homeWins = me ? (home === 'samsung') === (meWins > 0.5) : (r + home.length) % 2 === 0;
+    results.push({ round: r, home, away, hs: homeWins ? 5 : 2, as: homeWins ? 2 : 5 });
+  }
+  return { ...slot, season: { ...s, round: s.schedule.length - 1, results } };
+}
+const win = s => ({ home: 6, away: 1, log: [], starterId: starterFor(s) });
+
+test('postseason: first place waits for the Korean Series and plays it; winning it is a championship', () => {
+  const rng = createRng(11);
+  let s = lastDay(newSlot('samsung-b03'), 1);
+  s = applyDay(s, win(s), rng).slot;                        // 정규시즌 마지막 경기
+  assert.equal(seasonOver(s), false);
+  assert.equal(s.season.phase, 'post');
+  const d = dayInfo(s);
+  assert.match(d.label, /^한국시리즈 1차전/);
+  assert.equal(d.post, true); assert.ok(d.opponentId && d.opponentId !== 'samsung');
+  assert.equal(d.needsScreen, true);
+  let games = 0, last = null;
+  while (!seasonOver(s) && games < 10) { last = applyDay(s, win(s), rng); s = last.slot; games++; }
+  assert.equal(games, 4);                                    // 4전 전승
+  assert.equal(s.season.champion, 'samsung');
+  assert.equal(last.report.series.name, '한국시리즈'); assert.equal(last.report.series.won, true);
+  assert.equal(postResult(s), '통합 우승');
+  const n = nextSeason(s);
+  assert.equal(n.history[0].post, '통합 우승'); assert.equal(n.history[0].champion, true);
+  assert.equal(rings(n), 1);
+});
+
+test('postseason: missing the top 5 ends the season right after the regular season', () => {
+  const rng = createRng(12);
+  let s = lastDay(newSlot('samsung-b03'), 0);
+  s = applyDay(s, { home: 0, away: 3, log: [], starterId: starterFor(s) }, rng).slot;
+  assert.equal(seasonOver(s), true);
+  assert.notEqual(s.season.champion, 'samsung');
+  assert.equal(postResult(s), '가을야구 실패');
+  assert.equal(rings(nextSeason(s)), 0);
+});
+
+test('postseason games keep their own record apart from the regular season', () => {
+  const rng = createRng(13);
+  let s = lastDay(newSlot('samsung-b03'), 1);
+  s = applyDay(s, win(s), rng).slot;
+  const before = JSON.stringify(s.stats), lgBefore = JSON.stringify(s.league);
+  const ev = { batterId: 'samsung-b03', pitcherId: 'lg-p01', event: 'HR', runs: 1, outs: 0, inning: 1, half: 'bottom', score: { home: 1, away: 0 } };
+  const r = applyDay(s, { ...win(s), log: [ev] }, rng);
+  assert.equal(JSON.stringify(r.slot.stats), before);
+  assert.equal(JSON.stringify(r.slot.league), lgBefore);
+  assert.equal(r.slot.postStats.bat.hr, 1);
+  assert.equal(r.report.appeared, true);
+  assert.equal(nextSeason(r.slot).postStats, undefined);
 });
