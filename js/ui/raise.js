@@ -9,6 +9,7 @@ import { defaultLineup } from '../core/team.js';
 import { RAISE, DRILLS, newSlot, loadRaise, saveRaise, slotPlayer, raiseTeam, canChoose, choose, dayInfo, applyDay, seasonOver, nextSeason, seasonGains, prelude , postResult, rings , withSpeed, instant } from '../core/raise.js';
 import { seasonCard, leaderboard, STAT_DEFS, BOARD_TOP } from '../core/raisestats.js';
 import { contract, startSalary, won, ksMvp, PAY } from '../core/raisepay.js';
+import { PRODUCTS, RISK, buy, sell, netWorth, investedValue } from '../core/invest.js';
 import { playSound, vibrate } from './feedback.js';
 import { face, badge } from './hub.js';
 
@@ -47,7 +48,9 @@ function seasonLine(slot, st) {
 
 // 연봉·자산(예전 저장은 연봉 표에서)
 const salaryOf = s => s.salary ?? startSalary(s.playerId);
-const moneyHtml = s => `<div class="rz-money"><span>💰 연봉 <b>${won(salaryOf(s))}</b></span><span>🏦 자산 <b>${won(s.assets || 0)}</b></span></div>`;
+const moneyHtml = s => `<div class="rz-money"><span>💰 연봉 <b>${won(salaryOf(s))}</b></span><span>🏦 자산 <b>${won(netWorth(s))}</b></span></div>`;
+const pctTxt = x => `${x > 0 ? '▲' : x < 0 ? '▼' : ''}${Math.abs(x).toFixed(1)}%`;
+const tone = x => (x > 0.05 ? 'up' : x < -0.05 ? 'down' : '');
 // 우승 반지
 const ringHtml = s => (rings(s) ? ` <span class="rz-ring" title="한국시리즈 우승 ${rings(s)}회">💍${rings(s) > 1 ? '×' + rings(s) : ''}</span>` : '');
 // 가을야구 소식(경기 결과 화면): 정규시즌이 끝난 날의 진출 여부, 시리즈를 이기거나 진 날
@@ -65,13 +68,14 @@ function postNews(rep) {
 }
 // 시즌 결산: 올해 연봉이 자산으로, 내년 연봉 협상
 function payCard(s) {
-  const c = contract(s), after = (s.assets || 0) + c.from + c.bonus;
-  const tone = c.pct > 0 ? 'up' : c.pct < 0 ? 'down' : '';
-  return `<section class="card rz-pay"><div class="card-h">💰 연봉 협상 ${tip('시즌 성적(타자: OPS·타석 / 선발: 평균자책점·이닝 / 마무리: 평균자책점·세이브)으로 내년 연봉이 정해져요. 한 번에 최대 3배까지 오르고, 최대 40%까지 깎여요. 한국시리즈 우승하면 보너스와 연봉 프리미엄이 붙어요.', '연봉 협상')}</div>
+  const c = contract(s), left = Math.max(0, c.from - (s.paid || 0)), now = netWorth(s), after = now + left + c.bonus;
+  const tn = c.pct > 0 ? 'up' : c.pct < 0 ? 'down' : '';
+  return `<section class="card rz-pay"><div class="card-h">💰 연봉 협상 ${tip('시즌 성적(타자: 타율·OPS·타석 / 선발: 평균자책점·이닝 / 마무리: 평균자책점·세이브)으로 내년 연봉이 정해져요. 지금 연봉에서 성적만큼 몇 배로 오르거나(미친 성적이면 3배) 실제 KBO 시세 쪽으로 뛰는 것 중 큰 쪽이에요. 최대 40%까지 깎여요. 한국시리즈 우승하면 보너스와 연봉 프리미엄이 붙어요.', '연봉 협상')}</div>
     <div class="rz-payrow"><span>${s.year} 연봉</span><b>${won(c.from)}</b></div>
+    ${left ? `<div class="rz-payrow"><span>💵 아직 안 받은 연봉</span><b>+${won(left)}</b></div>` : ''}
     ${c.bonus ? `<div class="rz-payrow"><span>🏆 우승 보너스${c.mvp ? ' + 🏅 MVP 상금' : ''}</span><b>+${won(c.bonus)}</b></div>` : ''}
-    <div class="rz-payrow"><span>🏦 자산</span><b>${won(s.assets || 0)} → ${won(after)}</b></div>
-    <div class="rz-payrow big ${tone}"><span>${s.year + 1} 연봉</span><b>${won(c.to)} <em>${c.pct > 0 ? '▲' : c.pct < 0 ? '▼' : ''}${Math.abs(c.pct)}%</em></b></div></section>`;
+    <div class="rz-payrow"><span>🏦 자산</span><b>${won(now)} → ${won(after)}</b></div>
+    <div class="rz-payrow big ${tn}"><span>${s.year + 1} 연봉</span><b>${won(c.to)} <em>${c.pct > 0 ? '▲' : c.pct < 0 ? '▼' : ''}${Math.abs(c.pct)}%</em></b></div></section>`;
 }
 
 // ── 우승 세리머니 ──
@@ -308,7 +312,8 @@ export function showRaise(root, { storage, loadGame, onBack }) {
         <div class="rz-stats">${STATS[s.kind].map(k => `<span class="ms"><span>${STAT_ICON[k]} ${STAT_KO[k]}</span><i><u style="width:${barPct(k, p[k])}%"></u></i><em>${p[k]}${k === 'velo' ? 'km' : ''}</em></span>`).join('')}</div>
         <div class="rz-fat"><span>😮‍💨 피로</span><i><u class="${s.fatigue >= RAISE.tiredAt ? 'hi' : ''}" style="width:${s.fatigue}%"></u></i><em>${Math.round(s.fatigue)}</em></div>
         ${s.traits.length ? `<div class="rz-traits">${s.traits.map(t => `<span class="rz-trait" title="${esc(traitOf(t).desc)}">✨ ${esc(traitOf(t).name)}</span>`).join('')}</div>` : '<p class="hint">특성은 특훈을 4번 하거나 경기에서 활약하면 생겨요</p>'}
-        <p class="hint">${seasonLine(s, s.stats)}</p>${moneyHtml(s)}
+        <p class="hint">${seasonLine(s, s.stats)}</p>
+        <div class="rz-moneyrow">${moneyHtml(s)}<button class="ghost small" data-act="invest">📈 재테크</button></div>
       </section>
       <section class="card"><div class="card-h">🗓️ 오늘의 선택</div>${choiceHtml}</section>
       <section class="card next">
@@ -322,6 +327,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
       </section>`);
     act('back', () => { flash = null; slotsView(); });
     act('records', () => recordsView(i));
+    act('invest', () => investView(i));
     act('choose', b => {
       const id = b.dataset.id;
       const x = DRILLS.find(q => q.id === id);
@@ -404,6 +410,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
       <section class="card"><div class="card-h">📋 오늘 ${esc(p.name)}</div>
         <p class="rz-line">${line || '-'}</p>${why ? `<p class="hint">${why}</p>` : ''}
         <p class="hint">컨디션 ${condHtml(rep.condFrom)} → ${condHtml(rep.condTo)} · 피로 ${Math.round(s.fatigue)}</p>
+        ${rep.money ? `<p class="hint rz-today-money">💵 연봉 +${won(rep.money.pay)}${rep.money.change ? ` · 📈 투자 <span class="${tone(rep.money.change)}">${rep.money.change > 0 ? '+' : ''}${won(rep.money.change)}</span>` : ''}</p>` : ''}
         ${rep.ups.length ? `<div class="ups">${rep.ups.map(u => `<div><b>${STAT_ICON[u.stat]} ${STAT_KO[u.stat]}</b><span><em>+${u.n}${u.stat === 'velo' ? 'km' : ''}</em></span></div>`).join('')}</div>` : ''}
       </section>
       ${seasonStatsCard(s)}
@@ -473,6 +480,46 @@ export function showRaise(root, { storage, loadGame, onBack }) {
     act('back', slotsView);
   }
 
+  // ── 재테크 ──
+  const STEPS = [[1000, '1000만'], [10000, '1억'], [100000, '10억']];
+  function investView(i, sel = null, msg = '') {
+    const s = data.slots[i], inv = s.invest || {}, cash = s.assets || 0;
+    const val = investedValue(s), cost = Object.values(inv).reduce((a, h) => a + h.c, 0);
+    const trade = (p, h) => `<div class="rz-trade">
+        <div><span>사기</span>${STEPS.map(([a, t]) => `<button class="chip" data-act="buy" data-a="${a}" ${cash >= a ? '' : 'disabled'}>+${t}</button>`).join('')}<button class="chip" data-act="buy" data-a="all" ${cash >= 1 ? '' : 'disabled'}>현금 전부</button></div>
+        <div><span>팔기</span>${STEPS.map(([a, t]) => `<button class="chip" data-act="sell" data-a="${a}" ${h && h.v >= a ? '' : 'disabled'}>-${t}</button>`).join('')}<button class="chip" data-act="sell" data-a="all" ${h ? '' : 'disabled'}>전부 팔기</button></div>
+        ${p.fee ? `<p class="hint">살 때 ${Math.round(p.fee * 100)}%는 세금·중개비로 나가요</p>` : ''}</div>`;
+    screen(`<header class="bar"><button class="ghost small" data-act="back">←</button><h2>📈 재테크</h2></header>
+      <section class="card rz-inv">
+        <div class="rz-payrow big"><span>🏦 총자산</span><b>${won(netWorth(s))}</b></div>
+        <div class="rz-payrow"><span>💵 현금</span><b>${won(cash)}</b></div>
+        <div class="rz-payrow ${tone(val - cost)}"><span>📦 투자 평가액</span><b>${won(val)}${cost ? ` <em>${pctTxt((val / cost - 1) * 100)}</em>` : ''}</b></div>
+        <p class="hint">연봉은 정규시즌 경기마다 나눠서 현금으로 들어와요. 시세는 정규시즌 하루마다 움직이고, 정규시즌 한 번이 1년이에요.</p>
+        ${msg ? `<p class="rz-done">✅ ${esc(msg)}</p>` : ''}
+      </section>
+      ${PRODUCTS.map(p => {
+        const h = inv[p.id], y = ((s.mkt || {})[p.id] ?? 1) - 1;
+        return `<section class="card rz-prod ${sel === p.id ? 'on' : ''}">
+          <button class="rz-prow" data-act="prod" data-id="${p.id}"><span class="rz-pico">${p.icon}</span><span class="rz-pname"><b>${esc(p.name)}</b><small>${esc(p.desc)}</small></span>
+            <span class="rz-pright"><small class="risk r${p.risk}">위험 ${RISK[p.risk]}</small><small class="${tone(y * 100)}">올해 ${pctTxt(y * 100)}</small></span></button>
+          ${h ? `<div class="rz-phold">보유 <b>${won(h.v)}</b> <em class="${tone(h.v - h.c)}">${pctTxt((h.v / h.c - 1) * 100)}</em><small>원금 ${won(h.c)}</small></div>` : ''}
+          ${sel === p.id ? trade(p, h) : ''}</section>`;
+      }).join('')}`);
+    act('back', () => hubView(i));
+    act('prod', b => investView(i, b.dataset.id === sel ? null : b.dataset.id));
+    const name = id => PRODUCTS.find(p => p.id === id).name;
+    const commit = (next, m) => { data = { ...data, slots: data.slots.map((q, j) => (j === i ? next : q)) }; persist(); investView(i, sel, m); };
+    act('buy', b => {
+      const a = b.dataset.a === 'all' ? cash : +b.dataset.a;
+      commit(buy(data.slots[i], sel, a), `${name(sel)}에 ${won(Math.min(a, cash))} 넣었어요`);
+    });
+    act('sell', b => {
+      const h = (data.slots[i].invest || {})[sel]; if (!h) return;
+      const a = b.dataset.a === 'all' ? h.v : +b.dataset.a;
+      commit(sell(data.slots[i], sel, a), `${name(sel)} ${won(Math.min(a, h.v))} 팔았어요`);
+    });
+  }
+
   // ── 기록 ──
   function recordsView(i) {
     const s = data.slots[i], p = slotPlayer(s);
@@ -485,7 +532,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
       ${seasonStatsCard(s)}
       ${boardCard(s, boardKey[s.kind])}
       ${s.history.slice().reverse().map(h => `<section class="card slim"><div class="card-h">${h.champion ? '🏆 ' : ''}${h.year} 시즌 · 팀 ${h.rank}위 (${h.w}승 ${h.l}패)${h.post ? `<span class="pill">${esc(h.post)}</span>` : ''}${h.mvp ? '<span class="pill gold">🏅 KS MVP</span>' : ''}</div><p class="rz-line">${seasonLine(s, h.line)}</p>
-        ${h.salary != null ? `<p class="hint">💰 연봉 ${won(h.salary)}${h.bonus ? ` · 🏆 우승 보너스 ${won(h.bonus)}` : ''} → 다음 해 ${won(h.nextSalary)}</p>` : ''}
+        ${h.salary != null ? `<p class="hint">💰 연봉 ${won(h.salary)}${h.bonus ? ` · 🏆 우승 보너스 ${won(h.bonus)}` : ''} → 다음 해 ${won(h.nextSalary)}${h.worth != null ? ` · 🏦 연말 자산 ${won(h.worth)}` : ''}</p>` : ''}
         ${(h.traitsNew || []).length ? `<p class="hint">✨ ${h.traitsNew.map(t => esc(traitOf(t).name)).join(', ')}</p>` : ''}</section>`).join('')}
       <section class="card"><div class="card-h">🧮 통산</div><p class="rz-line">${seasonLine(s, s.total)}</p>${moneyHtml(s)}</section>
       <section class="card"><div class="card-h">✨ 특성</div>

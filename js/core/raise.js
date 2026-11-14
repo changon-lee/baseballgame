@@ -11,6 +11,7 @@ import { createMatch } from './match.js';
 import { leagueAdd, emptyLeague } from './raisestats.js';
 import { TRAITS } from './perks.js';
 import { startSalary, contract, ksMvp } from './raisepay.js';
+import { tickMarket, netWorth } from './invest.js';
 
 const ME = USER_TEAM_ID;
 const KEY = 'baseball.raise.v1';
@@ -91,7 +92,8 @@ export function newSlot(playerId, { games = RAISE.seasonGames[0], year = RAISE.f
     progress: { train: {}, feat: {} }, chosen: false,
     year, games, season: makeSeason(games, year),
     stats: {}, total: {}, history: [], league: emptyLeague(),
-    salary: startSalary(playerId), assets: 0,                 // 만원. 한 해가 끝나면 연봉이 자산으로
+    salary: startSalary(playerId), assets: 0, paid: 0,       // 만원. 연봉은 정규시즌 경기마다 나눠서 현금(assets)으로
+    invest: {}, mkt: {},                                      // 재테크(core/invest.js)
     seasonBase: baseOf(playerId, f.kind, createGrowth()),
   };
 }
@@ -393,10 +395,20 @@ export function applyDay(slot, result, rng) {
     const first = inPost ? r.season.post.series.find(x => x.teams.includes(ME)) : null;
     postStart = { inPost, seed: seeds.indexOf(ME) + 1, series: first ? first.name : null };
   }
+  // 돈: 정규시즌 하루마다 연봉 1/N이 들어오고, 투자한 것의 시세가 움직인다
+  let money = null;
+  if (!post) {
+    const day = slot.season.round, n = slot.season.schedule.length, sal = slot.salary ?? startSalary(id);
+    const pay = Math.round((sal * (day + 1)) / n) - Math.round((sal * day) / n);
+    const m = tickMarket(slot, day, n);
+    Object.assign(next, { assets: (slot.assets || 0) + pay, paid: (slot.paid || 0) + pay, invest: m.invest, mkt: m.mkt });
+    money = { pay, change: Math.round(m.change) };
+  }
   const st = standings(r.season).find(x => x.id === ME);
   return {
     slot: next,
     report: {
+      money,
       line, dec, appeared, rested: !!slot.resting, run, ups: ups.map(u => ({ stat: u.stat, n: u.n })), condFrom: slot.condition, condTo: condition, traitsNew,
       game: game ? { home: game.home, away: game.away, hs: game.hs, as: game.as } : null,
       team: { w: st.w, l: st.l, d: st.d, rank: st.rank }, seasonOver: seasonOver(next), post, series, postStart,
@@ -415,14 +427,15 @@ export function nextSeason(slot, { games = slot.games } = {}) {
   const entry = { year: slot.year, line: slot.stats, rank: st.rank, w: st.w, l: st.l, d: st.d, traitsNew: slot.traits.filter(t => !before.has(t)),
     post: postResult(slot), champion: slot.season.champion === ME, ...(slot.postStats ? { postLine: slot.postStats } : {}),
     ...(slot.ksStats ? { ksLine: slot.ksStats } : {}), ...(ksMvp(slot) ? { mvp: true } : {}) };
-  // 한 해 끝: 올해 연봉(+우승 보너스)이 자산으로, 성적으로 정한 다음 해 연봉
+  // 한 해 끝: 올해 연봉 중 아직 안 들어온 몫(+우승 보너스)이 현금으로, 성적으로 정한 다음 해 연봉
   const pay = contract(slot);
-  Object.assign(entry, { salary: pay.from, nextSalary: pay.to, bonus: pay.bonus });
+  const assets = (slot.assets || 0) + Math.max(0, pay.from - (slot.paid || 0)) + pay.bonus;
+  Object.assign(entry, { salary: pay.from, nextSalary: pay.to, bonus: pay.bonus, worth: Math.round(netWorth({ ...slot, assets })) });
   const year = slot.year + 1;
   const { postStats, ksStats, ...rest } = slot;
   return {
     ...rest, year, games, season: makeSeason(games, year),
-    salary: pay.to, assets: (slot.assets || 0) + pay.from + pay.bonus,
+    salary: pay.to, assets, paid: 0, mkt: {},
     stats: {}, league: emptyLeague(), fatigue: 0, condition: 0, chosen: false, resting: false, history: [...slot.history, entry], seasonBase: baseOf(slot.playerId, slot.kind, slot.growth),
   };
 }
