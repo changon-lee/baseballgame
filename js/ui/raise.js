@@ -67,11 +67,11 @@ function boardTable(slot, key) {
   const b = leaderboard(slot, key);
   const tr = r => `<tr class="${r.me ? 'me' : ''}"><td>${r.rank == null ? '-' : `${r.tie ? '<small>공동</small>' : ''}${r.rank}`}</td>
       <td>${esc(r.name)} <small>${esc(r.team)}</small></td><td>${esc(r.text)}</td></tr>`;
-  const top = b.rows.slice(0, BOARD_TOP), rest = b.rows.slice(BOARD_TOP);   // 10위 밖이면 나만 따로 아래에
+  const top = b.rows.slice(0, BOARD_TOP), rest = b.rows.slice(BOARD_TOP);   // 50위 밖이면 나만 따로 아래에
   const gap = rest.some(r => r.gap) ? '<tr class="gap"><td colspan="3">⋯</td></tr>' : '';
   const mine = b.myRank != null ? `내 순위 <b>${b.rows.find(r => r.me).tie ? '공동 ' : ''}${b.myRank}위</b> / ${b.pool}명` : '규정을 채우면 순위에 들어가요';
   return `<p class="hint rz-bcap">${esc(b.name)}${b.low ? ' (낮을수록 좋아요)' : ''} · ${mine}</p>
-    ${b.rows.length ? `<table class="rz-table rz-board">${top.map(tr).join('')}${gap}${rest.map(tr).join('')}</table>` : '<p class="hint">아직 순위에 든 선수가 없어요</p>'}`;
+    ${b.rows.length ? `<div class="rz-bscroll"><table class="rz-table rz-board">${top.map(tr).join('')}${gap}${rest.map(tr).join('')}</table></div>` : '<p class="hint">아직 순위에 든 선수가 없어요</p>'}`;
 }
 function boardCard(slot, key) {
   const defs = STAT_DEFS[slot.kind === 'pitch' ? 'pit' : 'bat'];
@@ -120,11 +120,19 @@ export function showRaise(root, { storage, loadGame, onBack }) {
   const act = (name, fn) => root.querySelectorAll(`[data-act=${name}]`).forEach(b => { b.onclick = () => fn(b); });
   // 순위표 탭: 고른 기록은 기억해 두고 표만 바꾼다
   const boardKey = { bat: 'avg', pitch: 'era' };
-  const bindBoard = s => act('board', b => {
-    boardKey[s.kind] = b.dataset.k;
-    root.querySelectorAll('[data-act=board]').forEach(c => c.classList.toggle('on', c === b));
-    const body = root.querySelector('.rz-bbody'); if (body) body.innerHTML = boardTable(s, b.dataset.k);
-  });
+  // 순위표는 표 안에서만 스크롤된다. 처음에는 내 줄이 가운데 오게
+  const centerMe = () => {
+    const box = root.querySelector('.rz-bscroll'), me = box && box.querySelector('tr.me');
+    if (me) box.scrollTop = Math.max(0, me.offsetTop - box.clientHeight / 2 + me.offsetHeight / 2);
+  };
+  const bindBoard = s => {
+    act('board', b => {
+      boardKey[s.kind] = b.dataset.k;
+      root.querySelectorAll('[data-act=board]').forEach(c => c.classList.toggle('on', c === b));
+      const body = root.querySelector('.rz-bbody'); if (body) { body.innerHTML = boardTable(s, b.dataset.k); centerMe(); }
+    });
+    centerMe();
+  };
 
   // ── 슬롯 목록 ──
   function slotsView() {

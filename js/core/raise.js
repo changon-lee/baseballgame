@@ -27,6 +27,8 @@ export const RAISE = {
   xpBase: 6, xpMin: 1.8, xpSlope: 0.12,   // 훈련 경험치: max(xpMin, xpBase - (능력치-60)×xpSlope), 12점마다 +1
   seasonCycles: 3, startEvery: 4,         // 9개 팀 × 3 = 27경기, 선발은 4경기마다
   firstYear: 2027,
+  // 리그 타격 환경: 컴퓨터 타자 타이밍 흔들림 배수(리그 타율을 실제 KBO 수준으로)
+  bat: { k: 1.3 },
   // 경기 뒤 컨디션: 점수가 up 이상이면 한 칸 ↑, down 이하면 ↓
   condBat: { up: 2, down: -1 }, condSP: { up: 4, down: 0 },
   // 경기 활약 특성: [누적 카운터, 기준]
@@ -273,7 +275,7 @@ function addStats(prev, id, myLog, dec, appeared) {
 // 있으면 { set, match } — 그 순간의 경기부터 화면을 연다
 export function prelude(slot, rng) {
   const set = matchSetup(slot);
-  const m0 = createMatch({ userTeam: set.userTeam, cpuTeam: set.cpuTeam, userLineup: set.lineup, innings: 9, rng, cpuStarterId: set.cpuStarterId, heat: true, perks: set.perks });
+  const m0 = createMatch({ userTeam: set.userTeam, cpuTeam: set.cpuTeam, userLineup: set.lineup, innings: 9, rng, cpuStarterId: set.cpuStarterId, heat: true, perks: set.perks, bat: RAISE.bat });
   const r = raiseStep(m0, set.raise, rng);
   if (r.phase === 'me') return { set, match: r.match };
   const g = r.match.game;
@@ -284,7 +286,7 @@ const traitKind = t => (TRAITS.find(x => x.id === t) || {}).kind;
 // 하루 마무리: 경기 결과(내가 한 경기 { home, away, log, starterId } 또는 null = 자동)를 시즌·내 선수에 반영
 export function applyDay(slot, result, rng) {
   const id = slot.playerId, team = todayTeam(slot);
-  const r = recordRound(slot.season, result, rng, { getT: getterFor(slot), userLineup: raiseLineup(slot, team), userStarterId: starterFor(slot) });
+  const r = recordRound(slot.season, result, rng, { getT: getterFor(slot), userLineup: raiseLineup(slot, team), userStarterId: starterFor(slot), bat: RAISE.bat });
   const game = r.games.find(g => g.home === ME || g.away === ME);
   const log = (game && game.log) || [];
   const myLog = log.filter(e => e.batterId === id || e.pitcherId === id);

@@ -82,7 +82,7 @@ export function seasonCard(slot) {
 
 // 리그 순위표(기록 하나): 규정을 채운 같은 무리 선수들을 잘한 순서로. 위에서 top명 + (그 밖이면) 나
 // { key, name, low, pool, myRank, rows: [{ rank, tie, id, name, team, text, me }] }. 같은 기록은 같은 순위(공동)
-export const BOARD_TOP = 10;
+export const BOARD_TOP = 50;
 export function leaderboard(slot, key, top = BOARD_TOP) {
   const g = group(slot), d = STAT_DEFS[g.kind].find(x => x.key === key);
   const list = g.others.map(o => ({ id: o.id, v: d.val(o.line), me: false }));

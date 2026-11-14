@@ -16,7 +16,8 @@ const batterOf = (m, side) => m.teams[side].batters.find(b => b.id === m.lineups
 // cpuLineup: 원정팀 타순(1:1 대결에서 상대가 정한 것). 없으면 기본 타순
 // heat: 불방망이·응원 열기를 켠다(내가 하는 일반 경기). 1:1 대결·연습·다른 팀 경기 계산에는 없다
 // perks: 육성모드 내 선수의 컨디션·특성 { id, cond, traits } (perks.js). 다른 모드엔 없다
-export function createMatch({ userTeam, cpuTeam, userLineup, innings, rng, cpuStarterId, cpuLineup = null, heat = false, perks = null }) {
+// bat: 리그 타격 환경 { k } (육성모드만. 없으면 원래대로)
+export function createMatch({ userTeam, cpuTeam, userLineup, innings, rng, cpuStarterId, cpuLineup = null, heat = false, perks = null, bat = null }) {
   const sps = cpuTeam.pitchers.filter(p => p.role === 'SP');
   const cpuStarter = sps.find(p => p.id === cpuStarterId) || sps[Math.floor(rng() * sps.length)];
   const lineups = { home: userLineup, away: { ...(cpuLineup || defaultLineup(cpuTeam)), starterId: cpuStarter.id } };
@@ -31,6 +32,7 @@ export function createMatch({ userTeam, cpuTeam, userLineup, innings, rng, cpuSt
     pa: [],                       // 지금 타석에 던진 공: { k: 구종, v: 구속, e: 결과 }
     ...(heat ? { heat: true } : {}),
     ...(perks ? { perks } : {}),
+    ...(bat ? { bat } : {}),
   };
 }
 
@@ -97,7 +99,7 @@ export const lastPitch = m => { const p = m.pa && m.pa[m.pa.length - 1]; return 
 export function playUserPitch(m, { type, target, gaugePos, level = 'easy' }, rng) {
   const mu = matchup(m);
   const pitch = computePitch({ pitcher: mu.pitcher, type, target, gaugePos, pitchCount: m.pitchCount[mu.pitchingSide], rng, level });
-  const swing = cpuSwing({ batter: mu.batter, pitch, balls: m.game.balls, strikes: m.game.strikes, rng, prev: lastPitch(m) });
+  const swing = cpuSwing({ batter: mu.batter, pitch, balls: m.game.balls, strikes: m.game.strikes, rng, prev: lastPitch(m), k: m.bat ? m.bat.k : 1 });
   const d = decide(m, mu.batter, pitch, swing.swing ? swing.timingDiffMs : null, rng);
   const c = commit(m, d.event, mu.pitchingSide, pitch, d.fly, d.style);
   return { match: c.match, pitch, swing: swing.swing ? swing : null, event: d.event, contact: d.contact, fly: d.fly, style: d.style, runs: c.runs, paEnded: c.paEnded };

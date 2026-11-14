@@ -502,7 +502,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     mode = 'bflight';
     if (auto) {                  // 자동 진행: 컴퓨터 타자처럼 칠지 말지, 타이밍을 정한다
       const mu = matchup(match), b = ball;
-      const sw = cpuSwing({ batter: mu.batter, pitch, balls: match.game.balls, strikes: match.game.strikes, rng, prev: lastPitch(match) });
+      const sw = cpuSwing({ batter: mu.batter, pitch, balls: match.game.balls, strikes: match.game.strikes, rng, prev: lastPitch(match), k: match.bat ? match.bat.k : 1 });
       if (sw.swing) {
         const ts = b.arrival + sw.timingDiffMs;
         later(() => { if (auto && ball === b && mode === 'bflight') userSwing(ts); }, Math.max(0, ts - performance.now()));

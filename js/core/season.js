@@ -45,7 +45,7 @@ export function nextUserGame(s) {
 }
 
 // 한 경기: 결과가 주어지면(사용자가 직접 한 경기) 그대로, 아니면 시뮬레이션
-function playOne(s, home, away, given, rng, { getT = getTeam, userLineup, userStarterId } = {}) {
+function playOne(s, home, away, given, rng, { getT = getTeam, userLineup, userStarterId, bat = null } = {}) {
   const mine = home === ME && ((given && given.starterId) || userStarterId);
   const hsid = mine || nextStarter(s, home, getT);
   const asid = nextStarter(s, away, getT);
@@ -53,7 +53,7 @@ function playOne(s, home, away, given, rng, { getT = getTeam, userLineup, userSt
   if (given) { hs = given.home; as = given.away; }
   else {
     const r = simulateGame({ home: getT(home), away: getT(away), innings: s.innings, rng,
-      homeLineup: home === ME ? userLineup : undefined, homeStarterId: hsid, awayStarterId: asid });
+      homeLineup: home === ME ? userLineup : undefined, homeStarterId: hsid, awayStarterId: asid, bat });
     hs = r.score.home; as = r.score.away; log = r.log;
   }
   let rotation = advanceRotation(s.rotation, home, hsid, getT);

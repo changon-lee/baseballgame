@@ -3,10 +3,10 @@ import { createMatch, matchup, playUserPitch, cpuMaybeChangePitcher } from './ma
 import { cpuChoosePitch } from './ai.js';
 import { defaultLineup } from './team.js';
 
-export function simulateGame({ home, away, innings, rng, homeLineup, homeStarterId, awayStarterId }) {
+export function simulateGame({ home, away, innings, rng, homeLineup, homeStarterId, awayStarterId, bat = null }) {
   const hl = homeLineup || defaultLineup(home);
   const userLineup = homeStarterId ? { ...hl, starterId: homeStarterId } : hl;
-  let m = createMatch({ userTeam: home, cpuTeam: away, userLineup, innings, rng, cpuStarterId: awayStarterId });
+  let m = createMatch({ userTeam: home, cpuTeam: away, userLineup, innings, rng, cpuStarterId: awayStarterId, bat });
   for (let i = 0; i < 4000 && !m.game.over; i++) {
     m = cpuMaybeChangePitcher(m, rng, 'away');
     m = cpuMaybeChangePitcher(m, rng, 'home');

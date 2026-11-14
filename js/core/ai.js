@@ -38,7 +38,8 @@ const FAST = new Set(['FB', 'SI', 'CT']);
 //  - 구석 스트라이크: 존 끝에 걸칠수록 덜 휘두른다(루킹 스트라이크)
 //  - 유인구: 존 밖 변화구는 휘는 만큼, 존에 가까울수록 더 쫓는다
 //  - 완급 조절: 바로 전 공과 구속 차이가 클수록 타이밍이 흔들린다. 같은 공이 이어지면 눈에 익는다
-export function cpuSwing({ batter, pitch, balls, strikes, rng, prev = null }) {
+// k: 리그 타격 환경(육성모드). 1보다 크면 컴퓨터 타자의 타이밍이 더 흔들린다(타율·홈런이 내려간다)
+export function cpuSwing({ batter, pitch, balls, strikes, rng, prev = null, k = 1 }) {
   const B = CONFIG.BALANCE;
   const m = Math.max(Math.abs(pitch.plate.x), Math.abs(pitch.plate.y));
   const brk = Math.abs(pitch.breakX) + Math.abs(pitch.breakY);
@@ -58,5 +59,5 @@ export function cpuSwing({ batter, pitch, balls, strikes, rng, prev = null }) {
   }
   sigma *= (FAST.has(pitch.type) ? cs.fb : cs.off) ?? 1;
   if (strikes === 2) sigma *= TWO_STRIKE_SIGMA;
-  return { swing: true, timingDiffMs: randNormal(rng) * sigma };
+  return { swing: true, timingDiffMs: randNormal(rng) * sigma * k };
 }

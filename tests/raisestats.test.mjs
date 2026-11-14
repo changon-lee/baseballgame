@@ -102,7 +102,7 @@ test('leaderboard: only the top 10 plus me when I am further down', async () => 
   const bat = {};
   for (let i = 0; i < 20; i++) bat['b' + i] = { pa: 10, ab: 10, h: 2 + (i % 8), d2: 0, d3: 0, hr: 0, bb: 0, so: 0, rbi: i + 1 };
   bat['samsung-b03'] = { pa: 10, ab: 10, h: 1, d2: 0, d3: 0, hr: 0, bb: 0, so: 0, rbi: 0 };
-  const b = leaderboard(slotWith('samsung-b03', { bat, pit: {} }, 4), 'rbi');
+  const b = leaderboard(slotWith('samsung-b03', { bat, pit: {} }, 4), 'rbi', 10);
   assert.equal(b.rows.length, 11);
   assert.equal(b.rows[10].me, true); assert.equal(b.rows[10].rank, 21); assert.equal(b.rows[10].gap, true);
   assert.equal(b.rows[0].text, '20');
@@ -128,4 +128,37 @@ test('season card rows carry my rank too', () => {
   const lg = batLeague(10); lg.bat['samsung-b03'] = lg.bat.me; delete lg.bat.me;
   const c = seasonCard(slotWith('samsung-b03', lg, 4));
   assert.equal(c.rows.find(r => r.key === 'avg').rank, 1);
+});
+
+test('leaderboard shows the top 50 by default', async () => {
+  const { leaderboard, BOARD_TOP } = await import('../js/core/raisestats.js');
+  assert.equal(BOARD_TOP, 50);
+  const bat = {};
+  for (let i = 0; i < 80; i++) bat['b' + i] = { pa: 10, ab: 10, h: i % 10, d2: 0, d3: 0, hr: 0, bb: 0, so: 0, rbi: i };
+  bat['samsung-b03'] = { pa: 10, ab: 10, h: 1, d2: 0, d3: 0, hr: 0, bb: 0, so: 0, rbi: 0 };
+  const b = leaderboard(slotWith('samsung-b03', { bat, pit: {} }, 4), 'rbi');
+  assert.equal(b.rows.filter(r => !r.gap).length, 50);
+  assert.equal(b.rows.length, 51);
+  assert.equal(b.rows[50].me, true);
+});
+
+test('raise league plays with the real-KBO batting environment', async () => {
+  const { RAISE } = await import('../js/core/raise.js');
+  assert.ok(RAISE.bat.k > 1.2 && RAISE.bat.k < 1.4);
+});
+
+test('league batting environment widens CPU batter timing; createMatch keeps it', async () => {
+  const { cpuSwing } = await import('../js/core/ai.js');
+  const { createMatch } = await import('../js/core/match.js');
+  const { getTeam } = await import('../js/data/rosters.js');
+  const { defaultLineup } = await import('../js/core/team.js');
+  const pitch = { plate: { x: 0, y: 0 }, isStrike: true, breakX: 0, breakY: 0, speedKmh: 145, type: 'FB' };
+  const batter = { contact: 70, eye: 60, power: 60 };
+  const a = cpuSwing({ batter, pitch, balls: 0, strikes: 0, rng: createRng(9) });
+  const b = cpuSwing({ batter, pitch, balls: 0, strikes: 0, rng: createRng(9), k: 2 });
+  assert.equal(a.swing, true);
+  assert.ok(Math.abs(b.timingDiffMs - 2 * a.timingDiffMs) < 1e-9);
+  const t = getTeam('samsung'), m = createMatch({ userTeam: t, cpuTeam: getTeam('lg'), userLineup: { ...defaultLineup(t), starterId: t.pitchers[0].id }, innings: 9, rng: createRng(1), bat: { k: 1.3 } });
+  assert.equal(m.bat.k, 1.3);
+  assert.equal(createMatch({ userTeam: t, cpuTeam: getTeam('lg'), userLineup: { ...defaultLineup(t), starterId: t.pitchers[0].id }, innings: 9, rng: createRng(1) }).bat, undefined);
 });
