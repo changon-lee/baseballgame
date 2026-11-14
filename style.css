@@ -604,3 +604,12 @@ button.primary{background:linear-gradient(180deg,#4c97ff,#1f6fe5 52%,#0a4fb8);bo
 .rz-ringbig{display:inline-block;margin:12px 0 6px;padding:8px 16px;border-radius:999px;background:rgba(242,193,78,.18);color:var(--gold);font-weight:900;font-size:17px}
 @keyframes rzPop{0%{transform:scale(.3);opacity:0}60%{transform:scale(1.15);opacity:1}100%{transform:scale(1)}}
 .card .hint.pad{padding:8px 16px 12px;margin:0}
+
+/* ── 육성모드 연봉·자산 ── */
+.rz-money{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px;font-size:12.5px;color:var(--dim)}
+.rz-money b{color:var(--fg);font-weight:800}
+.rz-payrow{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:7px 0;border-top:1px solid var(--line);font-size:14px}
+.rz-payrow:first-of-type{border-top:0}
+.rz-payrow span{color:var(--dim)}.rz-payrow b{font-weight:800;text-align:right}
+.rz-payrow.big b{font-size:18px}.rz-payrow em{font-style:normal;font-size:13px;margin-left:4px}
+.rz-payrow.up em{color:var(--green)}.rz-payrow.down em{color:#ff9a7a}

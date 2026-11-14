@@ -8,6 +8,7 @@ import { TRAITS } from '../core/perks.js';
 import { defaultLineup } from '../core/team.js';
 import { RAISE, DRILLS, newSlot, loadRaise, saveRaise, slotPlayer, raiseTeam, canChoose, choose, dayInfo, applyDay, seasonOver, nextSeason, seasonGains, prelude , postResult, rings } from '../core/raise.js';
 import { seasonCard, leaderboard, STAT_DEFS, BOARD_TOP } from '../core/raisestats.js';
+import { contract, startSalary, won } from '../core/raisepay.js';
 import { face, badge } from './hub.js';
 
 const ME = USER_TEAM_ID;
@@ -43,6 +44,9 @@ function seasonLine(slot, st) {
   return `평균자책 ${era(st.pit)} · ${ip(st.pit)}이닝 · ${st.w || 0}승 ${st.l || 0}패${slot.role === 'CL' ? ` ${st.sv || 0}세이브` : ''} · 탈삼진 ${st.pit.so}`;
 }
 
+// 연봉·자산(예전 저장은 연봉 표에서)
+const salaryOf = s => s.salary ?? startSalary(s.playerId);
+const moneyHtml = s => `<div class="rz-money"><span>💰 연봉 <b>${won(salaryOf(s))}</b></span><span>🏦 자산 <b>${won(s.assets || 0)}</b></span></div>`;
 // 우승 반지
 const ringHtml = s => (rings(s) ? ` <span class="rz-ring" title="한국시리즈 우승 ${rings(s)}회">💍${rings(s) > 1 ? '×' + rings(s) : ''}</span>` : '');
 // 가을야구 소식(경기 결과 화면): 정규시즌이 끝난 날의 진출 여부, 시리즈를 이기거나 진 날
@@ -58,6 +62,17 @@ function postNews(rep) {
   if (sr.won) return `<section class="card rz-post win"><div class="card-h">🎉 ${esc(sr.name)} 승리!</div><p class="hint">${sr.w}승 ${sr.l}패 · 다음 시리즈로 올라가요</p></section>`;
   return `<section class="card"><div class="card-h">😢 ${esc(sr.name)} 탈락</div><p class="hint">${sr.w}승 ${sr.l}패 · 올해 가을야구는 여기까지예요</p></section>`;
 }
+// 시즌 결산: 올해 연봉이 자산으로, 내년 연봉 협상
+function payCard(s) {
+  const c = contract(s), after = (s.assets || 0) + c.from + c.bonus;
+  const tone = c.pct > 0 ? 'up' : c.pct < 0 ? 'down' : '';
+  return `<section class="card rz-pay"><div class="card-h">💰 연봉 협상 ${tip('시즌 성적(타자: OPS·타석 / 선발: 평균자책점·이닝 / 마무리: 평균자책점·세이브)으로 내년 연봉이 정해져요. 한 번에 최대 3배까지 오르고, 최대 40%까지 깎여요. 한국시리즈 우승하면 보너스와 연봉 프리미엄이 붙어요.', '연봉 협상')}</div>
+    <div class="rz-payrow"><span>${s.year} 연봉</span><b>${won(c.from)}</b></div>
+    ${c.bonus ? `<div class="rz-payrow"><span>🏆 우승 보너스</span><b>+${won(c.bonus)}</b></div>` : ''}
+    <div class="rz-payrow"><span>🏦 자산</span><b>${won(s.assets || 0)} → ${won(after)}</b></div>
+    <div class="rz-payrow big ${tone}"><span>${s.year + 1} 연봉</span><b>${won(c.to)} <em>${c.pct > 0 ? '▲' : c.pct < 0 ? '▼' : ''}${Math.abs(c.pct)}%</em></b></div></section>`;
+}
+
 // 삼성의 가을야구 길: 시리즈마다 상대와 승패
 function postPath(s) {
   const post = s.season.post;
@@ -169,7 +184,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
       <p class="hint">삼성 선수 한 명을 골라 끝없이 키워요. 경기와 경기 사이에 훈련이나 휴식을 하나 고르고, 경기에서는 내 선수 장면만 직접 해요.</p>${broken}
       ${data.slots.map((s, i) => s ? `<section class="card rz-slot">
         <div class="rz-who">${face(slotPlayer(s), s.kind === 'bat' ? 'b' : 'p')}<div><b>${esc(slotPlayer(s).name)}${ringHtml(s)}</b><small>${roleOf(s)} · ${dayInfo(s).label}</small></div>${condHtml(s.condition)}</div>
-        <p class="hint">${seasonLine(s, s.stats)}</p>
+        <p class="hint">${seasonLine(s, s.stats)}</p>${moneyHtml(s)}
         <div class="actions"><button class="primary" data-act="open" data-i="${i}">▶ 이어서 키우기</button><button class="ghost small" data-act="del" data-i="${i}">지우기</button></div>
       </section>` : `<section class="card rz-slot empty"><div class="card-h">${i + 1}번 슬롯 · 비어 있음</div>
         <div class="actions"><button class="ghost" data-act="new" data-i="${i}">＋ 새로 키우기</button></div></section>`).join('')}`);
@@ -226,7 +241,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
         <div class="rz-stats">${STATS[s.kind].map(k => `<span class="ms"><span>${STAT_ICON[k]} ${STAT_KO[k]}</span><i><u style="width:${barPct(k, p[k])}%"></u></i><em>${p[k]}${k === 'velo' ? 'km' : ''}</em></span>`).join('')}</div>
         <div class="rz-fat"><span>😮‍💨 피로</span><i><u class="${s.fatigue >= RAISE.tiredAt ? 'hi' : ''}" style="width:${s.fatigue}%"></u></i><em>${Math.round(s.fatigue)}</em></div>
         ${s.traits.length ? `<div class="rz-traits">${s.traits.map(t => `<span class="rz-trait" title="${esc(traitOf(t).desc)}">✨ ${esc(traitOf(t).name)}</span>`).join('')}</div>` : '<p class="hint">특성은 특훈을 4번 하거나 경기에서 활약하면 생겨요</p>'}
-        <p class="hint">${seasonLine(s, s.stats)}</p>
+        <p class="hint">${seasonLine(s, s.stats)}</p>${moneyHtml(s)}
       </section>
       <section class="card"><div class="card-h">🗓️ 오늘의 선택</div>${choiceHtml}</section>
       <section class="card next">
@@ -345,6 +360,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
         : `<div class="re">🏁</div><h1 class="res">${esc(p.name)}</h1><p class="hint center rz-postres">${s.season.post && s.season.post.seeds.includes(ME) ? '🍂' : '🍃'} ${esc(result)}</p>`}
       ${s.postStats ? `<section class="card"><div class="card-h">🍂 가을야구 기록</div><p class="rz-line">${seasonLine(s, s.postStats)}</p></section>` : ''}
       ${postPath(s)}
+      ${payCard(s)}
       <section class="card"><div class="card-h">📊 시즌 성적</div><p class="rz-line">${seasonLine(s, s.stats)}</p>
         ${ups.length ? `<div class="ups">${ups.map(u => `<div><b>${STAT_ICON[u.stat]} ${STAT_KO[u.stat]}</b><span><em>+${u.n}${u.stat === 'velo' ? 'km' : ''}</em></span></div>`).join('')}</div>` : '<p class="hint">이번 시즌에 오른 능력치는 없어요</p>'}
         ${gained.length ? `<div class="rz-traits">${gained.map(t => `<span class="rz-trait">✨ ${esc(traitOf(t).name)}</span>`).join('')}</div>` : ''}</section>
@@ -370,8 +386,9 @@ export function showRaise(root, { storage, loadGame, onBack }) {
       ${seasonStatsCard(s)}
       ${boardCard(s, boardKey[s.kind])}
       ${s.history.slice().reverse().map(h => `<section class="card slim"><div class="card-h">${h.champion ? '🏆 ' : ''}${h.year} 시즌 · 팀 ${h.rank}위 (${h.w}승 ${h.l}패)${h.post ? `<span class="pill">${esc(h.post)}</span>` : ''}</div><p class="rz-line">${seasonLine(s, h.line)}</p>
+        ${h.salary != null ? `<p class="hint">💰 연봉 ${won(h.salary)}${h.bonus ? ` · 🏆 우승 보너스 ${won(h.bonus)}` : ''} → 다음 해 ${won(h.nextSalary)}</p>` : ''}
         ${(h.traitsNew || []).length ? `<p class="hint">✨ ${h.traitsNew.map(t => esc(traitOf(t).name)).join(', ')}</p>` : ''}</section>`).join('')}
-      <section class="card"><div class="card-h">🧮 통산</div><p class="rz-line">${seasonLine(s, s.total)}</p></section>
+      <section class="card"><div class="card-h">🧮 통산</div><p class="rz-line">${seasonLine(s, s.total)}</p>${moneyHtml(s)}</section>
       <section class="card"><div class="card-h">✨ 특성</div>
         ${TRAITS.filter(t => t.kind === s.kind).map(t => `<div class="ach ${s.traits.includes(t.id) ? 'on' : ''}"><i>${s.traits.includes(t.id) ? '✨' : '🔒'}</i><div><b>${esc(t.name)}</b><small>${esc(t.desc)}${s.traits.includes(t.id) ? '' : ` · ${howFar(t.id)}`}</small></div></div>`).join('')}
       </section>`);

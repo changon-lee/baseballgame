@@ -9,6 +9,7 @@ import { decisions, gameLine, raiseStep } from './raisematch.js';
 import { createMatch } from './match.js';
 import { leagueAdd, emptyLeague } from './raisestats.js';
 import { TRAITS } from './perks.js';
+import { startSalary, contract } from './raisepay.js';
 
 const ME = USER_TEAM_ID;
 const KEY = 'baseball.raise.v1';
@@ -83,6 +84,7 @@ export function newSlot(playerId, { games = RAISE.seasonGames[0], year = RAISE.f
     progress: { train: {}, feat: {} }, chosen: false,
     year, games, season: makeSeason(games, year),
     stats: {}, total: {}, history: [], league: emptyLeague(),
+    salary: startSalary(playerId), assets: 0,                 // 만원. 한 해가 끝나면 연봉이 자산으로
     seasonBase: baseOf(playerId, f.kind, createGrowth()),
   };
 }
@@ -387,10 +389,14 @@ export function nextSeason(slot, { games = slot.games } = {}) {
   const before = new Set(slot.history.flatMap(h => h.traitsNew || []));
   const entry = { year: slot.year, line: slot.stats, rank: st.rank, w: st.w, l: st.l, d: st.d, traitsNew: slot.traits.filter(t => !before.has(t)),
     post: postResult(slot), champion: slot.season.champion === ME, ...(slot.postStats ? { postLine: slot.postStats } : {}) };
+  // 한 해 끝: 올해 연봉(+우승 보너스)이 자산으로, 성적으로 정한 다음 해 연봉
+  const pay = contract(slot);
+  Object.assign(entry, { salary: pay.from, nextSalary: pay.to, bonus: pay.bonus });
   const year = slot.year + 1;
   const { postStats, ...rest } = slot;
   return {
     ...rest, year, games, season: makeSeason(games, year),
+    salary: pay.to, assets: (slot.assets || 0) + pay.from + pay.bonus,
     stats: {}, league: emptyLeague(), fatigue: 0, condition: 0, chosen: false, resting: false, history: [...slot.history, entry], seasonBase: baseOf(slot.playerId, slot.kind, slot.growth),
   };
 }
