@@ -95,5 +95,6 @@ export function contract(slot) {
 // 만원 → '20억원', '2억 3000만원', '9000만원'
 export function won(m) {
   const a = Math.abs(Math.round(m)), eok = Math.floor(a / 10000), man = a % 10000;
+  if (!a) return '0원';
   return (m < 0 ? '-' : '') + (eok ? `${eok}억${man ? ` ${man}만원` : '원'}` : `${man}만원`);
 }

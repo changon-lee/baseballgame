@@ -20,6 +20,7 @@ test('money reads the Korean way', () => {
   assert.equal(won(23000), '2억 3000만원');
   assert.equal(won(9000), '9000만원');
   assert.equal(won(-4500), '-4500만원');
+  assert.equal(won(0), '0원');
 });
 
 test('a great season raises the salary, a bad one cuts it, within the limits', () => {
