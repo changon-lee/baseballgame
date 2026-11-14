@@ -374,3 +374,19 @@ test('training still plays today; only rest sits me out of the game', () => {
   const cl = choose(newSlot('samsung-p05'), 'rest').slot;
   assert.ok(!matchSetup(cl).userTeam.pitchers.some(p => p.id === 'samsung-p05'));
 });
+
+// ── 시즌 길이 27 / 81 ──
+test('season length: 27 or 81 games, kept into the next season unless changed', () => {
+  assert.deepEqual(RAISE.seasonGames, [27, 81]);
+  const a = newSlot('samsung-b03');
+  assert.equal(a.season.schedule.length, 27); assert.equal(a.games, 27);
+  const b = newSlot('samsung-b03', { games: 81 });
+  assert.equal(b.season.schedule.length, 81); assert.equal(b.games, 81);
+  assert.equal(dayInfo(b).label, '2027 시즌 1/81경기');
+  assert.equal(nextSeason(b).season.schedule.length, 81);
+  assert.equal(nextSeason(b, { games: 27 }).season.schedule.length, 27);
+  assert.equal(nextSeason(b, { games: 27 }).games, 27);
+  assert.equal(newSlot('samsung-b03', { games: 50 }).games, 27);          // 고를 수 없는 값은 27
+  const old = { ...a }; delete old.games;                                  // 예전 저장: 27경기
+  assert.equal(nextSeason(old).season.schedule.length, 27);
+});

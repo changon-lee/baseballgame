@@ -156,19 +156,22 @@ export function showRaise(root, { storage, loadGame, onBack }) {
   }
 
   // ── 선수 고르기 ──
-  function pickView(i, kind) {
+  const gamesSeg = (games, act) => `<div class="seg rz-games">${RAISE.seasonGames.map(g => `<button data-act="${act}" data-g="${g}" class="${g === games ? 'on' : ''}">📅 ${g}경기</button>`).join('')}</div>`;
+  function pickView(i, kind, games = RAISE.seasonGames[0]) {
     const t = getTeam(ME), list = kind === 'bat' ? t.batters : t.pitchers;
     screen(`<header class="bar"><button class="ghost small" data-act="back">←</button><h2>${i + 1}번 슬롯 · 선수 고르기</h2></header>
       <div class="seg"><button data-act="kind" data-k="bat" class="${kind === 'bat' ? 'on' : ''}">🏏 타자</button><button data-act="kind" data-k="pitch" class="${kind === 'pitch' ? 'on' : ''}">⚾ 투수</button></div>
+      <p class="hint">정규시즌 경기 수 (시즌이 끝날 때마다 바꿀 수 있어요)</p>${gamesSeg(games, 'games')}
       <p class="hint">${kind === 'bat' ? '타자는 내 타석만 직접 쳐요.' : '선발은 4경기마다 선발로 나가 강판될 때까지 던지고, 마무리는 점수 차가 3점 이하인 9회에 나와요.'} 능력치는 원래 명단 값에서 시작해요.</p>
       <div class="rz-pick">${list.map(p => `<button class="chip rz-pp" data-act="pick" data-id="${p.id}">
         <span class="rz-who">${face(p, kind === 'bat' ? 'b' : 'p')}<span><b>${esc(p.name)}</b><small>${kind === 'bat' ? `${p.pos} · ${p.bats === 'L' ? '좌타' : p.bats === 'S' ? '양타' : '우타'}` : `${ROLE[p.role === 'SP' ? 'SP' : 'CL']} · ${p.throws === 'L' ? '좌투' : '우투'}`}</small></span></span>
         ${STATS[kind].map(k => `<span class="ms"><span>${STAT_ICON[k]}</span><i><u style="width:${barPct(k, p[k])}%"></u></i><em>${p[k]}</em></span>`).join('')}
       </button>`).join('')}</div>`);
     act('back', slotsView);
-    act('kind', b => pickView(i, b.dataset.k));
+    act('kind', b => pickView(i, b.dataset.k, games));
+    act('games', b => pickView(i, kind, +b.dataset.g));
     act('pick', b => {
-      data = { ...data, slots: data.slots.map((s, j) => (j === i ? newSlot(b.dataset.id) : s)) }; persist(); hubView(i);
+      data = { ...data, slots: data.slots.map((s, j) => (j === i ? newSlot(b.dataset.id, { games }) : s)) }; persist(); hubView(i);
     });
   }
 
@@ -299,7 +302,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
   }
 
   // ── 시즌 종료 ──
-  function seasonEndView(i) {
+  function seasonEndView(i, nextGames = data.slots[i].games || RAISE.seasonGames[0]) {
     const s = data.slots[i], p = slotPlayer(s), st = standings(s.season);
     const before = new Set(s.history.flatMap(h => h.traitsNew || []));
     const gained = s.traits.filter(t => !before.has(t)), ups = seasonGains(s);
@@ -311,8 +314,10 @@ export function showRaise(root, { storage, loadGame, onBack }) {
       <section class="card flush"><div class="card-h pad">🏆 최종 순위</div>
         <table class="rz-table">${st.map(x => `<tr class="${x.id === ME ? 'me' : ''}"><td>${x.rank}</td><td>${badge(x.id)} ${getTeam(x.id).short}</td><td>${x.w}승 ${x.l}패${x.d ? ' ' + x.d + '무' : ''}</td></tr>`).join('')}</table></section>
       <p class="hint center">다음 시즌에도 능력치·특성은 그대로예요. 비시즌 동안 쉬어서 피로는 0, 컨디션은 보통으로 돌아가요.</p>
+      <p class="hint center">${s.year + 1} 시즌 정규시즌 경기 수</p>${gamesSeg(nextGames, 'games')}
       <div class="actions"><button class="primary big" data-act="next">🚀 ${s.year + 1} 시즌 시작</button><button class="ghost" data-act="back">슬롯 목록</button></div>`, 'result');
-    act('next', () => { data = { ...data, slots: data.slots.map((q, j) => (j === i ? nextSeason(q) : q)) }; persist(); hubView(i); });
+    act('games', b => seasonEndView(i, +b.dataset.g));
+    act('next', () => { data = { ...data, slots: data.slots.map((q, j) => (j === i ? nextSeason(q, { games: nextGames }) : q)) }; persist(); hubView(i); });
     act('back', slotsView);
   }
 

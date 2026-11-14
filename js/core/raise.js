@@ -28,7 +28,7 @@ export const RAISE = {
   // 가벼운 훈련(헬스·유연성): 연습장 없이 바로. 피로도 덜, 효과도 덜(기준 연습의 이만큼)
   lightCost: 10, lightXp: 0.5,
   xpBase: 6, xpMin: 1.8, xpSlope: 0.12,   // 훈련 경험치: max(xpMin, xpBase - (능력치-60)×xpSlope), 12점마다 +1
-  seasonCycles: 3, startEvery: 4,         // 9개 팀 × 3 = 27경기, 선발은 4경기마다
+  seasonGames: [27, 81], startEvery: 4,   // 정규시즌 경기 수(9개 팀과 3번씩 / 9번씩), 선발은 4경기마다
   firstYear: 2027,
   // 리그 타격 환경: 컴퓨터 타자 타이밍 흔들림 배수(리그 타율을 실제 KBO 수준으로)
   bat: { k: 1.3 },
@@ -69,14 +69,19 @@ function findPlayer(id) {
   return null;
 }
 
-export function newSlot(playerId, year = RAISE.firstYear) {
+const gamesOf = g => (RAISE.seasonGames.includes(g) ? g : RAISE.seasonGames[0]);
+const makeSeason = (games, year) => createSeason({ cycles: games / 9, innings: 9, year });
+
+// games: 정규시즌 경기 수(27 또는 81)
+export function newSlot(playerId, { games = RAISE.seasonGames[0], year = RAISE.firstYear } = {}) {
   const f = findPlayer(playerId);
+  games = gamesOf(games);
   if (!f) throw new Error(`삼성 선수가 아니에요: ${playerId}`);
   return {
     playerId, kind: f.kind, role: f.kind === 'bat' ? null : f.player.role === 'SP' ? 'SP' : 'CL',
     growth: createGrowth(), condition: 0, fatigue: 0, traits: [],
     progress: { train: {}, feat: {} }, chosen: false,
-    year, season: createSeason({ cycles: RAISE.seasonCycles, innings: 9, year }),
+    year, games, season: makeSeason(games, year),
     stats: {}, total: {}, history: [], league: emptyLeague(),
     seasonBase: baseOf(playerId, f.kind, createGrowth()),
   };
@@ -334,13 +339,15 @@ export function applyDay(slot, result, rng) {
 export const seasonOver = slot => slot.season.phase !== 'regular';
 
 // 다음 시즌: 시즌 기록·순위는 새로, 능력치·특성·통산은 그대로. 비시즌에 푹 쉬어 피로 0, 컨디션 보통
-export function nextSeason(slot) {
+// games: 다음 시즌 경기 수(안 주면 이번 시즌과 같게)
+export function nextSeason(slot, { games = slot.games } = {}) {
+  games = gamesOf(games);
   const st = standings(slot.season).find(x => x.id === ME);
   const before = new Set(slot.history.flatMap(h => h.traitsNew || []));
   const entry = { year: slot.year, line: slot.stats, rank: st.rank, w: st.w, l: st.l, d: st.d, traitsNew: slot.traits.filter(t => !before.has(t)) };
   const year = slot.year + 1;
   return {
-    ...slot, year, season: createSeason({ cycles: RAISE.seasonCycles, innings: 9, year }),
+    ...slot, year, games, season: makeSeason(games, year),
     stats: {}, league: emptyLeague(), fatigue: 0, condition: 0, chosen: false, resting: false, history: [...slot.history, entry], seasonBase: baseOf(slot.playerId, slot.kind, slot.growth),
   };
 }
