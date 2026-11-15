@@ -12,6 +12,8 @@ from PIL import Image
 
 OUT = os.path.join(os.path.dirname(__file__), '..', 'assets', 'faces')
 SIZE = 192
+# 앞글자를 줘서 만드는 얼굴(여성 등)은 기존 얼굴과 머리 크기를 맞춘다: 192px 안에서 헬멧·모자 폭(기존 b_·p_ 평균)
+HEAD = {'b': 110, 'p': 94}      # (자르는 곳에서 재는 폭은 귀 덮개까지 들어가 조금 넓게 나와서, 결과가 b 116 · p 101 이 되게 맞춘 값)
 
 
 def cuts(white, n):
@@ -59,7 +61,12 @@ def run(path, kind, prefix=''):
             top = rows[0] if len(rows) else 0
             up = A[: int(H * 0.6)] > 0.5
             cx = int(np.nonzero(up.any(axis=0))[0].mean()) if up.any() else W // 2
-            s = int(H * 0.9); y0 = max(0, top - int(H * 0.08)); x0 = min(max(0, cx - s // 2), W - s)
+            s = int(H * 0.9); y0 = max(0, top - int(H * 0.08))
+            if prefix:                                       # 머리 폭이 HEAD[kind]가 되게 자르는 크기를 정한다
+                band = A[top: top + int(H * 0.15)] > 0.5
+                hw = max((np.nonzero(r)[0].ptp() if r.any() else 0) for r in band)
+                s = min(H, W, int(hw * SIZE / HEAD[kind])); y0 = max(0, top - int(s * 0.015))
+            x0 = min(max(0, cx - s // 2), W - s)
             im = Image.fromarray(np.dstack([rgb, A * 255]).round().astype(np.uint8), 'RGBA').crop((x0, y0, x0 + s, y0 + s))
             im = im.resize((SIZE, SIZE), Image.LANCZOS)
             im.save(os.path.join(OUT, f'{prefix}{kind}_{i}.webp'), 'WEBP', quality=85, method=6)
