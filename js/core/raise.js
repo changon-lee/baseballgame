@@ -12,6 +12,7 @@ import { leagueAdd, emptyLeague } from './raisestats.js';
 import { TRAITS } from './perks.js';
 import { startSalary, contract, ksMvp } from './raisepay.js';
 import { tickMarket, netWorth } from './invest.js';
+import { LIFE, has, gearBonus, trainMult, fansOf, rollInjury, rollEvent, resolveEvent } from './raiselife.js';
 
 const ME = USER_TEAM_ID;
 const KEY = 'baseball.raise.v1';
@@ -94,6 +95,7 @@ export function newSlot(playerId, { games = RAISE.seasonGames[0], year = RAISE.f
     stats: {}, total: {}, history: [], league: emptyLeague(),
     salary: startSalary(playerId), assets: 0, paid: 0,       // 만원. 연봉은 정규시즌 경기마다 나눠서 현금(assets)으로
     invest: {}, mkt: {},                                      // 재테크(core/invest.js)
+    owned: {}, fans: null, injury: null, event: null,         // 쇼핑·인기·부상·이벤트(core/raiselife.js). fans null = 연봉으로 정한 시작 인기
     seasonBase: baseOf(playerId, f.kind, createGrowth()),
   };
 }
@@ -107,7 +109,8 @@ function baseOf(playerId, kind, growth) {
 export function seasonGains(slot) {
   if (!slot.seasonBase) return [];
   const p = slotPlayer(slot);
-  return STAT_KEYS[slot.kind].map(k => ({ stat: k, n: p[k] - (slot.seasonBase[k] ?? p[k]) })).filter(x => x.n > 0);
+  const raw = applyGrowth(withSpeed(getTeam(ME)), slot.growth), q = raw.batters.find(b => b.id === slot.playerId) || raw.pitchers.find(x => x.id === slot.playerId) || p;
+  return STAT_KEYS[slot.kind].map(k => ({ stat: k, n: q[k] - (slot.seasonBase[k] ?? q[k]) })).filter(x => x.n > 0);
 }
 
 // ── 저장 ──
@@ -145,8 +148,16 @@ const SPEED = {
 };
 export const withSpeed = team => ({ ...team, batters: team.batters.map(b => ({ ...b, speed: SPEED[b.id] ?? RUN_SPEED })) });
 
+const GEAR_STATS = ['power', 'contact', 'eye', 'speed', 'control', 'stamina', 'velo'];
+function withGear(p, slot) {
+  if (!slot.owned || p.id !== slot.playerId) return p;
+  const q = { ...p };
+  for (const k of GEAR_STATS) { const n = gearBonus(slot, k); if (n && q[k] != null) q[k] = Math.min(CAP[k], q[k] + n); }
+  return q;
+}
 export const raiseTeam = (slot, { benchMe = false } = {}) => {
-  const t = applyGrowth(withSpeed(getTeam(ME)), slot.growth);
+  let t = applyGrowth(withSpeed(getTeam(ME)), slot.growth);
+  if (slot.owned) t = { ...t, batters: t.batters.map(b => withGear(b, slot)), pitchers: t.pitchers.map(p => withGear(p, slot)) };
   return benchMe ? { ...t, pitchers: t.pitchers.filter(p => p.id !== slot.playerId), batters: t.batters.filter(b => b.id !== slot.playerId) } : t;
 };
 export const slotPlayer = slot => {
@@ -176,6 +187,8 @@ const drillOf = id => DRILLS.find(d => d.id === id);
 export function canChoose(slot, id) {
   if (slot.chosen) return { ok: false, reason: 'done' };
   if (id === 'rest') return { ok: true };
+  if (id === 'rehab') return !slot.injury ? { ok: false, reason: 'healthy' } : (slot.assets || 0) < LIFE.rehabCost ? { ok: false, reason: 'cash' } : { ok: true };
+  if (slot.injury) return { ok: false, reason: 'injured' };
   const d = drillOf(id);
   if (!d || d.kind !== slot.kind) return { ok: false, reason: 'kind' };
   if (slot.fatigue + d.cost > 100) return { ok: false, reason: 'tired' };
@@ -187,16 +200,18 @@ export function canChoose(slot, id) {
 export function choose(slot, id, pts = null) {
   const c = canChoose(slot, id);
   if (!c.ok) throw new Error(`고를 수 없어요: ${id} (${c.reason})`);
-  if (id === 'rest') {
+  if (id === 'rest' || id === 'rehab') {
     const cond = slot.condition - Math.sign(slot.condition);
-    // 휴식한 날은 그날 경기에 나가지 않는다(벤치)
-    return { slot: { ...slot, chosen: true, resting: true, fatigue: clamp(slot.fatigue + RAISE.rest, 0, 100), condition: cond }, ups: [], trait: null };
+    const rest = RAISE.rest - (has(slot, 'bed') ? LIFE.bedRest : 0);
+    // 휴식한 날은 그날 경기에 나가지 않는다(벤치). 프리미엄 재활은 부상이 하루 더 낫는다
+    const extra = id === 'rehab' ? { assets: slot.assets - LIFE.rehabCost, injury: { ...slot.injury, left: Math.max(1, slot.injury.left - 1) } } : {};
+    return { slot: { ...slot, ...extra, chosen: true, resting: true, fatigue: clamp(slot.fatigue + rest, 0, 100), condition: cond }, ups: [], trait: null };
   }
   const d = drillOf(id), now = slotPlayer(slot)[d.stat];
   let growth = slot.growth, ups = [];
   if (now < CAP[d.stat]) {
     const k = pts == null ? 1 : clamp(pts / RAISE.practiceRef[slot.kind], RAISE.practiceMin, RAISE.practiceMax);
-    const r = gainXp(growth, slot.playerId, d.stat, xpPerTraining(d.stat, now) * k * (d.drill ? RAISE.drillXp : d.light ? RAISE.lightXp : d.quick ? RAISE.runXp : 1));
+    const r = gainXp(growth, slot.playerId, d.stat, xpPerTraining(d.stat, now) * k * trainMult(slot) * (d.drill ? RAISE.drillXp : d.light ? RAISE.lightXp : d.quick ? RAISE.runXp : 1));
     growth = r.growth; ups = r.ups.map(u => ({ stat: u.stat, n: u.n }));
   }
   let progress = slot.progress, traits = slot.traits, trait = null;
@@ -206,6 +221,18 @@ export function choose(slot, id, pts = null) {
     if (n >= RAISE.drillNeed && !traits.includes(d.trait)) { traits = [...traits, d.trait]; trait = d.trait; }
   }
   return { slot: { ...slot, growth, progress, traits, chosen: true, fatigue: clamp(slot.fatigue + d.cost, 0, 100) }, ups, trait };
+}
+
+// 오늘의 이벤트 선택지 고르기: { slot, say, fx, ups } | null
+export function pickEvent(slot, k) {
+  const r = resolveEvent(slot, k);
+  if (!r) return null;
+  let s = r.slot, ups = [];
+  if (r.fx.xp) {
+    const now = slotPlayer(s)[r.stat];
+    if (now < CAP[r.stat]) { const g = gainXp(s.growth, s.playerId, r.stat, r.fx.xp); s = { ...s, growth: g.growth }; ups = g.ups.map(u => ({ stat: u.stat, n: u.n })); }
+  }
+  return { slot: s, say: r.say, fx: r.fx, ups };
 }
 
 // ── 하루 · 경기 ──
@@ -228,7 +255,7 @@ export function dayInfo(slot) {
   const g = !post && round < total ? s.schedule[round].find(x => x.includes(ME)) : null;
   const pg = post ? nextPostGame(s) : null, ser = post ? seriesOf(s) : null;
   const n = round + myPostGames(s);                                       // 삼성이 치른 경기 수(선발 로테이션)
-  const resting = !!slot.resting;
+  const resting = !!slot.resting || !!slot.injury;
   const myStart = slot.role === 'SP' && n % RAISE.startEvery === 0 && !resting;
   const k = (RAISE.startEvery - (n % RAISE.startEvery)) % RAISE.startEvery;
   const label = post ? `${pg.label}${ser ? ` · ${ser.w}승 ${ser.l}패` : ''}`
@@ -241,7 +268,7 @@ export function dayInfo(slot) {
 }
 
 // 오늘 삼성 팀: 휴식한 날, 선발 투수가 쉬는 날에는 내 선수를 빼 둔다(다른 선발이 돌고, 불펜으로도 안 나온다)
-const todayTeam = slot => raiseTeam(slot, { benchMe: !!slot.resting || (slot.role === 'SP' && !dayInfo(slot).myStart) });
+const todayTeam = slot => raiseTeam(slot, { benchMe: !!slot.resting || !!slot.injury || (slot.role === 'SP' && !dayInfo(slot).myStart) });
 const getterFor = slot => { const mine = todayTeam(slot); return id => (id === ME ? mine : getTeam(id)); };
 
 export function starterFor(slot) {
@@ -368,15 +395,21 @@ export function applyDay(slot, result, rng) {
   const condition = clamp(slot.condition + d, -2, 2);
   // 피로: 아무것도 안 고른 날은 조금 회복, 출전하면 쌓인다
   const pitches = myLog.filter(e => e.pitcherId === id).reduce((a, e) => a + (e.pitches || []).length, 0);
-  const load = slot.kind === 'bat' ? (appeared ? RAISE.batGame : 0) : pitches * RAISE.perPitch;
-  const fatigue = clamp(slot.fatigue + (slot.chosen ? 0 : RAISE.idle) + load, 0, 100);
+  const load = (slot.kind === 'bat' ? (appeared ? RAISE.batGame : 0) : pitches * RAISE.perPitch) * (has(slot, 'nutri') ? LIFE.nutriLoad : 1);
+  const fatigue = clamp(slot.fatigue + (slot.chosen ? 0 : RAISE.idle) + load - (has(slot, 'house') ? LIFE.houseRecover : 0), 0, 100);
+  // 부상: 다친 상태면 하루씩 낫고, 아니면 경기에 나간 날 피로에 따라 다칠 수 있다
+  let injury = slot.injury || null, hurt = null, healed = false;
+  if (injury) { injury = injury.left > 1 ? { ...injury, left: injury.left - 1 } : null; healed = !injury; }
+  else if (appeared) { hurt = rollInjury(slot); injury = hurt; }
+  // 인기: 활약하면 +1, 부상이면 -2
+  const fans = clamp(fansOf(slot) + (d > 0 ? 1 : 0) - (hurt ? 2 : 0), 0, 100);
   // 활약 특성
   const inc = featsOf(slot, log, line, dec), feat = { ...slot.progress.feat };
   for (const [k, n] of Object.entries(inc)) feat[k] = (feat[k] || 0) + n;
   const traitsNew = Object.entries(RAISE.feat)
     .filter(([t, [k, need]]) => traitKind(t) === slot.kind && (feat[k] || 0) >= need && !slot.traits.includes(t)).map(([t]) => t);
   const next = {
-    ...slot, season: r.season, growth, condition, fatigue, chosen: false, resting: false,
+    ...slot, season: r.season, growth, condition: hurt ? Math.min(condition, 0) : condition, fatigue, chosen: false, resting: false, injury, fans, event: null,
     traits: [...slot.traits, ...traitsNew], progress: { ...slot.progress, feat },
     // 포스트시즌 기록은 따로(정규시즌 기록·통산·리그 순위에 안 들어간다)
     ...(ks ? { ksStats: addStats(slot.ksStats || {}, id, myLog, dec, appeared, run) } : {}),     // 한국시리즈만(MVP)
@@ -404,11 +437,13 @@ export function applyDay(slot, result, rng) {
     Object.assign(next, { assets: (slot.assets || 0) + pay, paid: (slot.paid || 0) + pay, invest: m.invest, mkt: m.mkt });
     money = { pay, change: Math.round(m.change) };
   }
+  // 다음 날 이벤트(다치면 없음)
+  if (!injury && r.season.phase !== 'done') next.event = rollEvent(next);
   const st = standings(r.season).find(x => x.id === ME);
   return {
     slot: next,
     report: {
-      money,
+      money, hurt, healed, injuryLeft: injury ? injury.left : 0, fansFrom: fansOf(slot), fansTo: fans,
       line, dec, appeared, rested: !!slot.resting, run, ups: ups.map(u => ({ stat: u.stat, n: u.n })), condFrom: slot.condition, condTo: condition, traitsNew,
       game: game ? { home: game.home, away: game.away, hs: game.hs, as: game.as } : null,
       team: { w: st.w, l: st.l, d: st.d, rank: st.rank }, seasonOver: seasonOver(next), post, series, postStart,
@@ -429,13 +464,16 @@ export function nextSeason(slot, { games = slot.games } = {}) {
     ...(slot.ksStats ? { ksLine: slot.ksStats } : {}), ...(ksMvp(slot) ? { mvp: true } : {}) };
   // 한 해 끝: 올해 연봉 중 아직 안 들어온 몫(+우승 보너스)이 현금으로, 성적으로 정한 다음 해 연봉
   const pay = contract(slot);
-  const assets = (slot.assets || 0) + Math.max(0, pay.from - (slot.paid || 0)) + pay.bonus;
-  Object.assign(entry, { salary: pay.from, nextSalary: pay.to, bonus: pay.bonus, worth: Math.round(netWorth({ ...slot, assets })) });
+  const assets = (slot.assets || 0) + Math.max(0, pay.from - (slot.paid || 0)) + pay.bonus + pay.prize + pay.ads;
+  Object.assign(entry, { salary: pay.from, nextSalary: pay.to, bonus: pay.bonus, worth: Math.round(netWorth({ ...slot, assets })),
+    ...(pay.awards.length ? { awards: pay.awards.map(a => a.id) } : {}), prize: pay.prize, ads: pay.ads });
+  // 인기: 상·우승만큼 오른다
+  const fans = Math.min(100, fansOf(slot) + pay.awards.reduce((a, x) => a + x.fans, 0) + (slot.season.champion === ME ? 10 : 0));
   const year = slot.year + 1;
   const { postStats, ksStats, ...rest } = slot;
   return {
     ...rest, year, games, season: makeSeason(games, year),
-    salary: pay.to, assets, paid: 0, mkt: {},
+    salary: pay.to, assets, paid: 0, mkt: {}, fans, injury: null, event: null,
     stats: {}, league: emptyLeague(), fatigue: 0, condition: 0, chosen: false, resting: false, history: [...slot.history, entry], seasonBase: baseOf(slot.playerId, slot.kind, slot.growth),
   };
 }

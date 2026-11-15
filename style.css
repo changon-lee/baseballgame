@@ -695,3 +695,25 @@ button.primary{background:linear-gradient(180deg,#4c97ff,#1f6fe5 52%,#0a4fb8);bo
 .rz-trade .chip{flex:1 1 0;align-items:center;padding:7px 4px;font-size:12.5px;min-height:0;white-space:nowrap}
 .rz-trade .hint{margin:0}
 .rz-today-money .up,.rz-today-money .down{font-weight:700}
+/* 쇼핑·이벤트·부상·시상식 */
+.rz-moneybtns{display:flex;gap:6px;margin-top:8px}
+.rz-moneybtns button{flex:1}
+.rz-hurt{margin:6px 0 0;padding:6px 10px;border-radius:10px;background:rgba(255,120,90,.14);color:#ffb39e;font-size:13px;font-weight:700}
+.rz-hurt.warn{background:rgba(255,210,63,.12);color:var(--accent);font-weight:600}
+.rz-hurtcard{box-shadow:inset 0 0 0 1px rgba(255,120,90,.5)}
+.rz-event{box-shadow:inset 0 0 0 1px var(--accent);animation:cerIn .35s ease-out}
+.rz-event.done{box-shadow:inset 0 0 0 1px var(--line)}
+.rz-evtext{margin:4px 0 10px;font-size:14px;line-height:1.5}
+.rz-evopts{display:flex;flex-wrap:wrap;gap:6px}
+.rz-evopts .chip{flex:1 1 40%}
+.rz-evopts .chip small{color:var(--dim)}
+.rz-item{display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid var(--line)}
+.rz-item .primary.small{flex:none;padding:7px 10px;font-size:12.5px;min-width:84px}
+.rz-item .pill{flex:none}
+.rz-trait.gold,.rz-trophy.mvp{box-shadow:inset 0 0 0 1px var(--accent)}
+.rz-trophies{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-top:6px}
+.rz-trophy{display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 6px;border-radius:12px;background:rgba(255,210,63,.07);text-align:center}
+.rz-trophy i{font-style:normal;font-size:30px;animation:cerRise .6s ease-out both}
+.rz-trophy b{font-size:14px}.rz-trophy small{color:var(--dim);font-size:11.5px}
+.rz-trophy.mvp b{color:var(--accent)}
+@media (prefers-reduced-motion:reduce){.rz-event,.rz-trophy i{animation:none}}

@@ -60,8 +60,8 @@ test('the salary comes in game by game and adds up to exactly one year by the se
   assert.equal(got, 22000); assert.equal(s.paid, 22000);
   assert.ok(s.invest.deposit.v > 5000);
   while (s.season.phase !== 'done') s = applyDay(s, null, rng).slot;
-  const cash = s.assets, n = nextSeason(s), bonus = contract(s).bonus;
-  assert.equal(n.assets, cash + bonus);                                   // 이미 다 받았으니 연말엔 보너스만
+  const cash = s.assets, n = nextSeason(s), c = contract(s);
+  assert.equal(n.assets, cash + c.bonus + c.prize + c.ads);                                   // 이미 다 받았으니 연말엔 보너스만
   assert.equal(n.paid, 0); assert.deepEqual(n.mkt, {}); assert.ok(n.invest.deposit);
   assert.equal(n.history[n.history.length - 1].worth, Math.round(netWorth(n)));
 });

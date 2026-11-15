@@ -55,6 +55,8 @@ export const PAY = {
 };
 
 export const startSalary = id => START[id] ?? PAY.min;
+import { awardsOf } from './raiseawards.js';
+import { adsOf } from './raiselife.js';
 
 function curve(points, x) {
   if (x <= points[0][0]) return points[0][1];
@@ -120,11 +122,13 @@ function target(slot) {
 // 1억 이상은 500만, 그 아래는 100만 단위(f: Math.round / ceil / floor — 한도를 넘지 않게)
 const roundPay = (m, f = Math.round) => { const u = m >= 10000 ? 500 : 100; return f(m / u) * u; };
 
-// 다음 해 연봉 협상: { from, to, pct(%), bonus(우승 보너스 + 한국시리즈 MVP 상금), mvp }
+// 다음 해 연봉 협상: { from, to, pct(%), bonus(우승 보너스 + 한국시리즈 MVP 상금), mvp,
+//   awards(시상식에서 받은 상), prize(상금 합), ads(인기에 따른 광고 수입) }. 상을 받으면 다음 연봉 기준도 오른다
 export function contract(slot) {
   const from = slot.salary ?? startSalary(slot.playerId);
   const champ = slot.season.champion === 'samsung';
-  const prem = champ ? PAY.champPremium : 1;
+  const awards = awardsOf(slot);
+  const prem = (champ ? PAY.champPremium : 1) * (1 + awards.reduce((a, x) => a + x.prem, 0));
   const goal = target(slot) * prem;
   let to = Math.max(from * perfMult(slot) * prem, from + (goal - from) * PAY.toward);
   const lo = from * (1 - PAY.cutMax), hi = from * PAY.raiseMax * prem;
@@ -133,7 +137,8 @@ export function contract(slot) {
   if (to > hi) to = roundPay(hi, Math.floor);
   to = Math.max(PAY.min, to);
   const mvp = ksMvp(slot);
-  return { from, to, pct: Math.round(((to - from) / from) * 100), bonus: champ ? PAY.champBonus + (mvp ? PAY.mvpBonus : 0) : 0, mvp };
+  return { from, to, pct: Math.round(((to - from) / from) * 100), bonus: champ ? PAY.champBonus + (mvp ? PAY.mvpBonus : 0) : 0, mvp,
+    awards, prize: awards.reduce((a, x) => a + x.prize, 0), ads: adsOf(slot) };
 }
 
 // 만원 → '20억원', '2억 3000만원', '9000만원'

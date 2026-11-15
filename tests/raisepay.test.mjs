@@ -61,14 +61,14 @@ test('when the year ends the salary goes into assets and the new salary applies'
   const s = done({ ...newSlot('samsung-b06'), salary: 22000, assets: 5000 }, { bat: bat(115, 100, 30, 6, 12, 6) }, 'samsung');
   const c = contract(s);
   const n = nextSeason(s);
-  assert.equal(n.assets, 5000 + 22000 + PAY.champBonus);
+  assert.equal(n.assets, 5000 + 22000 + PAY.champBonus + c.ads); assert.equal(c.prize, 0);
   assert.equal(n.salary, c.to);
   const h = n.history[n.history.length - 1];
   assert.equal(h.salary, 22000); assert.equal(h.nextSalary, c.to); assert.equal(h.bonus, PAY.champBonus);
   // 예전 저장(연봉·자산 없음)도 표에서 시작한다
   const old = done(newSlot('samsung-b06'), {}); delete old.salary; delete old.assets;
   const o = nextSeason(old);
-  assert.equal(o.assets, startSalary('samsung-b06'));
+  assert.equal(o.assets, startSalary('samsung-b06') + contract(old).ads);
 });
 
 test('Korean Series MVP: only for a champion with a big series; pays a prize into assets', async () => {
@@ -84,7 +84,7 @@ test('Korean Series MVP: only for a champion with a big series; pays a prize int
   assert.equal(c.bonus, PAY.champBonus + PAY.mvpBonus); assert.equal(c.mvp, true);
   const n = nextSeason(champ), h = n.history[n.history.length - 1];
   assert.equal(h.mvp, true); assert.deepEqual(h.ksLine, hot); assert.equal(n.ksStats, undefined);
-  assert.equal(n.assets, 22000 + PAY.champBonus + PAY.mvpBonus);
+  assert.equal(n.assets, 22000 + PAY.champBonus + PAY.mvpBonus + c.ads);
   const sp = { ...newSlot('samsung-p01'), salary: 100000 };
   assert.equal(ksMvp({ ...done(sp, {}, 'samsung'), ksStats: { pit: { bf: 50, outs: 39, h: 6, hr: 0, bb: 3, so: 12, r: 2 }, w: 1 } }), true);
 });
