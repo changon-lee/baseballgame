@@ -23,7 +23,11 @@ const STAT_ICON = { power: '💪', contact: '⚾', eye: '👀', speed: '🏃', c
 const STATS = { bat: ['power', 'contact', 'eye', 'speed'], pitch: ['velo', 'control', 'stamina'] };
 const COND = [['⬇⬇', '최악', 'c-2'], ['⬇', '나쁨', 'c-1'], ['➖', '보통', 'c0'], ['⬆', '좋음', 'c1'], ['⬆⬆', '최상', 'c2']];
 const ROLE = { SP: '선발', CL: '마무리' };
-const NOTE = { pinch: '대타로 교체됐어요', pulled: '강판됐어요', noshow: '오늘은 등판이 없었어요' };
+const NOTE = { pinch: '대타로 교체됐어요', pulled: '강판됐어요', noshow: '오늘은 등판이 없었어요', bench: '오늘은 벤치에서 경기를 지켜봤어요' };
+// 후보 선수: 감독 신뢰도 막대
+const trustHtml = s => (s.kind === 'bat' && s.bench ? `<div class="rz-trust"><span>🧢 후보 · 감독 신뢰도</span><i><u style="width:${Math.min(100, ((s.trust || 0) / RAISE.bench.need) * 100)}%"></u></i><em>${Math.round(s.trust || 0)}/${RAISE.bench.need}</em></div>
+  <p class="hint">잘 치면 신뢰도가 올라요. 다 차면 주전 지명타자로 매일 나가요.</p>` : '');
+const PLAN = { start: '🔥 오늘은 선발 출전 기회! (지명타자)', pinch: '🪖 대타 대기 · 7회부터 지명타자 차례에 나가요', none: '🪑 오늘은 출전 계획이 없어요 (벤치)' };
 const traitOf = id => TRAITS.find(t => t.id === id);
 
 const condHtml = c => { const [i, n, k] = COND[c + 2]; return `<span class="rz-cond ${k}">${i} ${n}</span>`; };
@@ -418,6 +422,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
       <section class="card rz-card">
         <div class="rz-who">${face(p, s.kind === 'bat' ? 'b' : 'p', 'lg')}<div><b class="rz-name">${esc(p.name)}${ringHtml(s)}</b><small>삼성 · ${roleOf(s)} · ${s.year} 시즌</small></div>${condHtml(s.condition)}</div>
         <div class="rz-stats">${STATS[s.kind].map(k => `<span class="ms"><span>${STAT_ICON[k]} ${STAT_KO[k]}</span><i><u style="width:${barPct(k, p[k])}%"></u></i><em>${p[k]}${k === 'velo' ? 'km' : ''}</em></span>`).join('')}</div>
+        ${trustHtml(s)}
         <div class="rz-fat"><span>😮‍💨 피로</span><i><u class="${s.fatigue >= RAISE.tiredAt ? 'hi' : ''}" style="width:${s.fatigue}%"></u></i><em>${Math.round(s.fatigue)}</em></div>
         ${s.traits.length ? `<div class="rz-traits">${s.traits.map(t => `<span class="rz-trait" title="${esc(traitOf(t).desc)}">✨ ${esc(traitOf(t).name)}</span>`).join('')}</div>` : '<p class="hint">특성은 특훈을 4번 하거나 경기에서 활약하면 생겨요</p>'}
         ${s.injury ? `<p class="rz-hurt">🤕 ${esc(s.injury.name)} · ${s.injury.left}경기 더 쉬어야 해요</p>` : s.fatigue >= LIFE.injury.safe ? `<p class="rz-hurt warn">⚠️ 피로가 높아 경기에 나가면 다칠 수 있어요</p>` : ''}
@@ -433,8 +438,8 @@ export function showRaise(root, { storage, loadGame, onBack }) {
         <div class="vs-row"><div class="side" style="--c:${opp.colors.main}">${badge(opp.id, 'lg')}<b>${opp.short}</b><small>✈️ 원정</small></div><span class="vs">VS</span><div class="side" style="--c:${getTeam(ME).colors.main}">${badge(ME, 'lg')}<b>삼성</b><small>🏠 홈</small></div></div>
         ${s.role === 'SP' ? `<p class="hint center">${d.myStart ? '🔥 오늘 선발 등판이에요' : `오늘은 등판이 없어요 · ${d.nextStartIn == null ? '이번 시즌 남은 선발이 없어요' : `다음 선발까지 ${d.nextStartIn}경기`}`}</p>` : ''}
         ${!s.chosen ? '<p class="hint center">선택 없이 경기에 나가면 피로가 조금만 풀려요</p>' : ''}
-        ${s.injury ? '<p class="hint center">🤕 부상으로 오늘 경기에 나가지 않아요</p>' : d.resting ? '<p class="hint center">😴 오늘은 휴식이라 경기에 나가지 않아요</p>' : ''}
-        <div class="actions">${d.needsScreen ? '<button class="primary big" data-act="play">▶ 경기 시작</button>' : `<button class="primary big" data-act="play">⏩ 경기 진행 (${s.injury ? '부상 · 결장' : d.resting ? '휴식 · 결장' : '등판 없음'})</button>`}</div>
+        ${s.injury ? '<p class="hint center">🤕 부상으로 오늘 경기에 나가지 않아요</p>' : d.resting ? '<p class="hint center">😴 오늘은 휴식이라 경기에 나가지 않아요</p>' : d.plan ? `<p class="hint center rz-plan">${PLAN[d.plan]}</p>` : ''}
+        <div class="actions">${d.needsScreen ? '<button class="primary big" data-act="play">▶ 경기 시작</button>' : `<button class="primary big" data-act="play">⏩ 경기 진행 (${s.injury ? '부상 · 결장' : d.resting ? '휴식 · 결장' : d.plan === 'none' ? '벤치' : '등판 없음'})</button>`}</div>
       </section>`);
     act('back', () => { flash = null; slotsView(); });
     act('records', () => recordsView(i));
@@ -527,12 +532,14 @@ export function showRaise(root, { storage, loadGame, onBack }) {
       ${rep.post ? `<p class="hint center">${esc(rep.series.name)} ${rep.series.w}승 ${rep.series.l}패</p>` : `<p class="hint center">팀 ${rep.team.w}승 ${rep.team.l}패${rep.team.d ? ' ' + rep.team.d + '무' : ''} · ${rep.team.rank}위</p>`}
       ${postNews(rep)}
       ${rep.hurt ? `<section class="card rz-hurtcard"><div class="card-h">🤕 부상! ${esc(rep.hurt.name)}</div><p class="hint">${rep.hurt.major ? '꽤 큰 부상이에요. ' : ''}${rep.hurt.left}경기 동안 쉬어야 해요. 피로가 높을 때 무리하면 다치기 쉬워요.</p></section>` : ''}
+      ${rep.promoted ? '<section class="card rz-post win rz-promo"><div class="card-h">🎉 주전 승격!</div><p class="hint">감독이 실력을 인정했어요. 이제 매일 지명타자로 선발 출전해요!</p></section>' : ''}
       ${rep.healed ? '<section class="card rz-post win"><div class="card-h">💪 부상 회복!</div><p class="hint">다음 경기부터 다시 뛸 수 있어요</p></section>' : ''}
       ${rep.traitsNew.length ? `<section class="card rz-newtrait">${rep.traitsNew.map(t => `<div class="card-h">✨ 새 특성 · ${esc(traitOf(t).name)}</div><p class="hint">${esc(traitOf(t).desc)}</p>`).join('')}</section>` : ''}
       <section class="card"><div class="card-h">📋 오늘 ${esc(p.name)}</div>
         <p class="rz-line">${line || '-'}</p>${why ? `<p class="hint">${why}</p>` : ''}
         <p class="hint">컨디션 ${condHtml(rep.condFrom)} → ${condHtml(rep.condTo)} · 피로 ${Math.round(s.fatigue)}</p>
         ${rep.fansTo != null && rep.fansTo !== rep.fansFrom ? `<p class="hint">⭐ 인기 ${rep.fansFrom} → ${rep.fansTo}</p>` : ''}
+        ${rep.trustTo != null && !rep.promoted && rep.trustTo !== rep.trustFrom ? `<p class="hint">🧢 감독 신뢰도 ${Math.round(rep.trustFrom)} → ${Math.round(rep.trustTo)} / ${RAISE.bench.need}</p>` : ''}
         ${rep.money ? `<p class="hint rz-today-money">💵 연봉 +${won(rep.money.pay)}${rep.money.change ? ` · 📈 투자 <span class="${tone(rep.money.change)}">${rep.money.change > 0 ? '+' : ''}${won(rep.money.change)}</span>` : ''}</p>` : ''}
         ${rep.ups.length ? `<div class="ups">${rep.ups.map(u => `<div><b>${STAT_ICON[u.stat]} ${STAT_KO[u.stat]}</b><span><em>+${u.n}${u.stat === 'velo' ? 'km' : ''}</em></span></div>`).join('')}</div>` : ''}
       </section>

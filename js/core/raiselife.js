@@ -72,7 +72,7 @@ export function fansOf(slot) {
 export const adsOf = slot => Math.round(fansOf(slot) ** 2 * LIFE.adsPer);
 
 // ── 날마다 다른 난수 ──
-function dayRng(slot, salt) {
+export function dayRng(slot, salt) {
   const s = slot.season || {}, post = s.post ? s.post.series.reduce((a, x) => a + x.games.length, 0) : 0;
   let h = 2166136261;
   for (const ch of `${slot.playerId}|${slot.year}|${s.round}|${post}|${salt}`) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);

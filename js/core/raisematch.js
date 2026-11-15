@@ -61,8 +61,23 @@ export function raiseSteal(m, id, go, rng) {
 }
 
 // ── 타자 ──
-function batStep(m0, { playerId: id, cond }, rng) {
-  if (!m0.lineups.home.order.includes(id)) return finish(m0, rng, 'pinch', m0);
+// 후보 선수 대타: 7회부터 지명타자(없으면 9번 타자) 차례가 오면 그 자리에 들어간다
+export const PINCH_IN = 7;
+function pinchIn(m0, id, rng) {
+  const t = m0.teams.home, order = m0.lineups.home.order;
+  const target = order.find(x => (t.batters.find(b => b.id === x) || {}).pos === 'DH') || order[order.length - 1];
+  const spot = x => battingSide(x.game) === 'home' && x.game.inning >= PINCH_IN && !(x.pa && x.pa.length) && matchup(x).batter.id === target;
+  const m = simulateUntil(m0, rng, spot);
+  if (m.game.over) return out(m, 'bench', m0);
+  const swapped = { ...m, lineups: { ...m.lineups, home: { ...m.lineups.home, order: order.map(x => (x === target ? id : x)) } } };
+  return { match: swapped, phase: 'me', note: null, skipped: true, pinchIn: true };
+}
+
+function batStep(m0, { playerId: id, cond, pinch }, rng) {
+  if (!m0.lineups.home.order.includes(id)) {
+    if (m0.log.some(e => e.batterId === id)) return finish(m0, rng, 'pinch', m0);   // 뛰다가 대타로 바뀌었다
+    return pinch ? pinchIn(m0, id, rng) : finish(m0, rng, 'bench', m0);
+  }
   const spot = stealSpot(m0, id);
   if (spot) return { match: m0, phase: 'steal', spot, note: null, skipped: false };
   const isMe = x => battingSide(x.game) === 'home' && matchup(x).batter.id === id;

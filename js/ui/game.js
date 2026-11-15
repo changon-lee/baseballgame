@@ -52,7 +52,7 @@ const PITCH_E = { BALL: '볼', HBP: '사구', WILD: '폭투', STRIKE: '스트', 
 // 구종 칩 색(빠른 공은 따뜻한 색, 떨어지는 공은 차가운 색)
 const PITCH_COLORS = { FB: '#ff6b5e', SI: '#ffa94d', CT: '#ffd43b', SL: '#69db7c', CU: '#4dabf7', CH: '#b197fc', FO: '#f783ac' };
 const COND_ICON = ['⬇⬇', '⬇', '➖', '⬆', '⬆⬆'];
-const RAISE_NOTE = { end: '남은 경기를 진행했어요', pinch: '대타로 교체됐어요', pulled: '강판됐어요', noshow: '오늘은 등판이 없었어요' };
+const RAISE_NOTE = { end: '남은 경기를 진행했어요', pinch: '대타로 교체됐어요', pulled: '강판됐어요', noshow: '오늘은 등판이 없었어요', bench: '오늘은 벤치에서 경기를 지켜봤어요' };
 const basesText = b => { const on = [1, 2, 3].filter((n, i) => b[i]); return on.length === 3 ? '만루' : on.length ? on.join('·') + '루' : '주자 없음'; };
 
 // 두 폰(과 서버)이 같은 경기를 보고 있는지 확인용 요약(server.mjs와 같게)
@@ -216,7 +216,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     if (!r.skipped && !raiseFirst) return false;
     raiseFirst = false;
     mode = 'msg'; setControls('');
-    const where = `${g.inning}회${g.half === 'top' ? '초' : '말'}`, mine = raise.kind === 'bat' ? '내 타석' : '내 투구';
+    const where = `${g.inning}회${g.half === 'top' ? '초' : '말'}`, mine = r.pinchIn ? '🔥 대타 출전!' : raise.kind === 'bat' ? '내 타석' : '내 투구';
     showMsg(`${where} · ${mine}`, '#9fb3cc', 1300, `${sc} · ${g.outs}아웃 ${basesText(g.bases)}`, nextPlay);
     return true;
   }

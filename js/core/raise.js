@@ -12,7 +12,7 @@ import { leagueAdd, emptyLeague } from './raisestats.js';
 import { TRAITS } from './perks.js';
 import { startSalary, contract, ksMvp } from './raisepay.js';
 import { tickMarket, netWorth } from './invest.js';
-import { LIFE, has, gearBonus, trainMult, fansOf, rollInjury, rollEvent, resolveEvent } from './raiselife.js';
+import { LIFE, has, gearBonus, trainMult, fansOf, rollInjury, rollEvent, resolveEvent, dayRng } from './raiselife.js';
 import { CUSTOM_ID, validCustom, withCustom } from './raisecustom.js';
 import { PAY } from './raisepay.js';
 
@@ -39,6 +39,10 @@ export const RAISE = {
   xpBase: 6, xpMin: 1.8, xpSlope: 0.12,   // 훈련 경험치: max(xpMin, xpBase - (능력치-60)×xpSlope), 12점마다 +1
   seasonGames: [27, 81], startEvery: 4,   // 정규시즌 경기 수(9개 팀과 3번씩 / 9번씩), 선발은 4경기마다
   firstYear: 2027,
+  // 후보 선수(직접 만든 신인 타자): 날마다 선발 출전 start / 대타 대기 pinch / 출전 없음.
+  // 감독 신뢰도가 need가 되면 주전 지명타자. 타석 결과마다 신뢰도(타점은 하나에 rbi씩 더)
+  bench: { start: 0.2, pinch: 0.5, need: 100, rbi: 5,
+    trust: { SINGLE: 10, DOUBLE: 15, TRIPLE: 18, HR: 25, WALK: 5, HBP: 5, SAC_FLY: 3, SAC_BUNT: 2, STRIKEOUT: -4 }, out: -2 },
   // 리그 타격 환경: 컴퓨터 타자 타이밍 흔들림 배수(리그 타율을 실제 KBO 수준으로)
   bat: { k: 1.3 },
   // 경기 뒤 컨디션: 점수가 up 이상이면 한 칸 ↑, down 이하면 ↓
@@ -99,6 +103,7 @@ export function newSlot(playerId, { games = RAISE.seasonGames[0], year = RAISE.f
   return {
     playerId, kind: f.kind, role: f.kind === 'bat' ? null : f.player.role === 'SP' ? 'SP' : 'CL',
     ...(custom ? { custom } : {}),
+    ...(custom && custom.kind === 'bat' ? { bench: true, trust: 0 } : {}),   // 신인 타자는 후보에서 시작
     growth: createGrowth(), condition: 0, fatigue: 0, traits: [],
     progress: { train: {}, feat: {} }, chosen: false,
     year, games, season: makeSeason(games, year),
@@ -178,6 +183,7 @@ export const slotPlayer = slot => {
 // 기본 타순. 내 타자가 9명 밖(벤치)이면 지명타자 자리에 들어간다
 export function raiseLineup(slot, team) {
   const l = defaultLineup(team);
+  if (slot.kind === 'bat' && slot.bench && benchPlan(slot) !== 'start') return l;   // 후보: 선발 출전하는 날만 타순에
   if (slot.kind !== 'bat' || l.order.includes(slot.playerId) || !team.batters.some(b => b.id === slot.playerId)) return l;   // 벤치(휴식)면 그대로
   const dh = l.order.findIndex(id => team.batters.find(b => b.id === id).pos === 'DH');
   const order = [...l.order];
@@ -260,6 +266,13 @@ function seriesOf(s, idx = s.post && s.post.current) {
   return { name: ser.name, w: ser.wins[mi], l: ser.wins[1 - mi], need: ser.need };
 }
 
+// 후보 선수의 오늘: 'start'(선발 출전) / 'pinch'(대타 대기) / 'none'(출전 없음). 주전이면 null
+export function benchPlan(slot) {
+  if (slot.kind !== 'bat' || !slot.bench) return null;
+  const r = dayRng(slot, 'bench')(), B = RAISE.bench;
+  return r < B.start ? 'start' : r < B.start + B.pinch ? 'pinch' : 'none';
+}
+
 export function dayInfo(slot) {
   const s = slot.season, round = s.round, total = s.schedule.length, post = s.phase === 'post';
   const g = !post && round < total ? s.schedule[round].find(x => x.includes(ME)) : null;
@@ -273,7 +286,8 @@ export function dayInfo(slot) {
   return {
     nextStartIn: slot.role === 'SP' && (post || round + k < total) ? k : null,   // 다음 선발까지 남은 경기(이번 시즌에 없으면 null)
     round, total, post, series: ser, opponentId: post ? pg.opponentId : g ? g.find(x => x !== ME) : null,
-    label, myStart, resting, needsScreen: !resting && (slot.kind === 'bat' || slot.role === 'CL' || myStart),
+    label, myStart, resting, plan: benchPlan(slot),
+    needsScreen: !resting && (slot.kind === 'bat' ? benchPlan(slot) !== 'none' : slot.role === 'CL' || myStart),
   };
 }
 
@@ -294,7 +308,7 @@ export function matchSetup(slot) {
     lineup: { ...raiseLineup(slot, team), starterId: starterFor(slot) },
     cpuStarterId: nextStarter(slot.season, d.opponentId),
     perks: { id: slot.playerId, cond, traits: [...slot.traits] },
-    raise: { kind: slot.kind, role: slot.role, playerId: slot.playerId, cond },
+    raise: { kind: slot.kind, role: slot.role, playerId: slot.playerId, cond, ...(d.plan === 'pinch' ? { pinch: true } : {}) },
   };
 }
 
@@ -413,6 +427,14 @@ export function applyDay(slot, result, rng) {
   else if (appeared) { hurt = rollInjury(slot); injury = hurt; }
   // 인기: 활약하면 +1, 부상이면 -2
   const fans = clamp(fansOf(slot) + (d > 0 ? 1 : 0) - (hurt ? 2 : 0), 0, 100);
+  // 후보 선수: 타석 결과로 감독 신뢰도가 쌓이고, 다 차면 주전 지명타자
+  let bench = slot.bench, trust = slot.trust, promoted = false;
+  if (slot.kind === 'bat' && slot.bench) {
+    const B = RAISE.bench;
+    const add = myLog.filter(e => e.batterId === id).reduce((a, e) => a + (B.trust[e.event] ?? B.out) + (e.rbi || 0) * B.rbi, 0);
+    trust = clamp((slot.trust || 0) + add, 0, B.need);
+    if (trust >= B.need) { bench = false; promoted = true; }
+  }
   // 활약 특성
   const inc = featsOf(slot, log, line, dec), feat = { ...slot.progress.feat };
   for (const [k, n] of Object.entries(inc)) feat[k] = (feat[k] || 0) + n;
@@ -420,6 +442,7 @@ export function applyDay(slot, result, rng) {
     .filter(([t, [k, need]]) => traitKind(t) === slot.kind && (feat[k] || 0) >= need && !slot.traits.includes(t)).map(([t]) => t);
   const next = {
     ...slot, season: r.season, growth, condition: hurt ? Math.min(condition, 0) : condition, fatigue, chosen: false, resting: false, injury, fans, event: null,
+    ...(slot.bench ? { bench, trust } : {}),
     traits: [...slot.traits, ...traitsNew], progress: { ...slot.progress, feat },
     // 포스트시즌 기록은 따로(정규시즌 기록·통산·리그 순위에 안 들어간다)
     ...(ks ? { ksStats: addStats(slot.ksStats || {}, id, myLog, dec, appeared, run) } : {}),     // 한국시리즈만(MVP)
@@ -454,6 +477,7 @@ export function applyDay(slot, result, rng) {
     slot: next,
     report: {
       money, hurt, healed, injuryLeft: injury ? injury.left : 0, fansFrom: fansOf(slot), fansTo: fans,
+      ...(slot.bench ? { trustFrom: slot.trust || 0, trustTo: trust, promoted } : {}),
       line, dec, appeared, rested: !!slot.resting, run, ups: ups.map(u => ({ stat: u.stat, n: u.n })), condFrom: slot.condition, condTo: condition, traitsNew,
       game: game ? { home: game.home, away: game.away, hs: game.hs, as: game.as } : null,
       team: { w: st.w, l: st.l, d: st.d, rank: st.rank }, seasonOver: seasonOver(next), post, series, postStart,

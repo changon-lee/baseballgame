@@ -1,7 +1,9 @@
 // 육성모드 커스텀 선수(core/raisecustom.js): 직접 만든 선수가 삼성에 들어와 똑같이 훈련·경기·저장된다
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { newSlot, slotPlayer, raiseLineup, raiseTeam, applyDay, choose, dayInfo, matchSetup, loadRaise, saveRaise, nextSeason } from '../js/core/raise.js';
+import { newSlot, slotPlayer, raiseLineup, raiseTeam, applyDay, choose, dayInfo, matchSetup, loadRaise, saveRaise, nextSeason, benchPlan, RAISE } from '../js/core/raise.js';
+import { createMatch, simulateUntil } from '../js/core/match.js';
+import { raiseStep, raiseSteal, PINCH_IN } from '../js/core/raisematch.js';
 import { CUSTOM, CUSTOM_ID, defaultCustom, validCustom, usedPoints, customPlayer } from '../js/core/raisecustom.js';
 import { leaderboard } from '../js/core/raisestats.js';
 import { PAY } from '../js/core/raisepay.js';
@@ -31,8 +33,12 @@ test('a custom batter joins Samsung, bats in the lineup, starts at the minimum s
   assert.equal(s.salary, PAY.min);
   const p = slotPlayer(s);
   assert.equal(p.name, '홍길동'); assert.equal(p.power, 85); assert.equal(p.speed, 45); assert.equal(p.pos, 'SS'); assert.equal(p.face, 3);
-  assert.ok(raiseLineup(s, raiseTeam(s)).order.includes(s.playerId));
   assert.ok(matchSetup(s).userTeam.batters.some(b => b.id === s.playerId));
+  // 신인이라 후보에서 시작: 선발 출전하는 날만 타순에 있다
+  assert.equal(s.bench, true); assert.equal(s.trust, 0);
+  const inLineup = raiseLineup(s, raiseTeam(s)).order.includes(s.playerId);
+  assert.equal(inLineup, benchPlan(s) === 'start');
+  assert.equal(raiseLineup({ ...s, bench: false }, raiseTeam(s)).order.includes(s.playerId), true);   // 주전이면 늘
   assert.throws(() => newSlot(null, { custom: { ...myBat, power: 99 } }));
 });
 
@@ -41,9 +47,9 @@ test('custom players train, play a whole season and survive a save', () => {
   let s = newSlot(null, { custom: myBat });
   s = choose(s, 'contact').slot;
   assert.ok(slotPlayer(s).contact >= 70);
-  let pa = 0;
+  s = { ...s, bench: false };                                             // 주전으로 한 시즌
   while (s.season.phase === 'regular') { s = applyDay(s, null, rng).slot; }
-  pa = s.stats.bat.pa;
+  const pa = s.stats.bat.pa;
   assert.ok(pa > 50, `pa ${pa}`);
   const lb = leaderboard(s, 'avg');
   assert.equal(lb.rows.find(r => r.me).name, '홍길동');
@@ -69,4 +75,51 @@ test('a custom starter takes his turn in the rotation; a custom closer is a reli
   assert.ok(s.stats.pit && s.stats.pit.outs > 0, 'pitched in his start');
   const c = newSlot(null, { custom: myCl });
   assert.equal(c.role, 'CL'); assert.equal(slotPlayer(c).role, 'RP');
+});
+
+test('a rookie bench player: some starts, pinch-hit chances, and no appearance on other days', () => {
+  let s = newSlot(null, { custom: myBat });
+  const seen = { start: 0, pinch: 0, none: 0 };
+  for (let r = 0; r < s.season.schedule.length; r++) {
+    const x = { ...s, season: { ...s.season, round: r } }, d = dayInfo(x);
+    seen[d.plan]++;
+    assert.equal(d.needsScreen, d.plan !== 'none');
+    assert.equal(!!matchSetup(x).raise.pinch, d.plan === 'pinch');
+  }
+  assert.ok(seen.start >= 1 && seen.pinch >= 5 && seen.none >= 3, JSON.stringify(seen));
+});
+
+test('pinch-hitting: from the 7th the rookie bats in the DH spot, then plays on', () => {
+  let s = newSlot(null, { custom: myBat }), r0 = 0;
+  while (benchPlan({ ...s, season: { ...s.season, round: r0 } }) !== 'pinch') r0++;
+  s = { ...s, season: { ...s.season, round: r0 } };
+  const ms = matchSetup(s), id = s.playerId;
+  let pinched = 0, bench = 0;
+  for (let seed = 1; seed <= 10; seed++) {
+    const rng = createRng(seed);
+    let m = createMatch({ userTeam: ms.userTeam, cpuTeam: ms.cpuTeam, userLineup: ms.lineup, innings: 9, rng, cpuStarterId: ms.cpuStarterId }), r, first = true;
+    assert.ok(!m.lineups.home.order.includes(id));
+    for (let k = 0; k < 50; k++) {
+      r = raiseStep(m, ms.raise, rng);
+      if (r.phase === 'steal') { m = raiseSteal(r.match, id, false, rng).match; continue; }
+      if (r.phase === 'done') break;
+      if (first) { assert.equal(r.pinchIn, true); assert.ok(r.match.game.inning >= PINCH_IN); assert.ok(r.match.lineups.home.order.includes(id)); pinched++; first = false; }
+      m = simulateUntil(r.match, rng, x => x.log.length > r.match.log.length);
+    }
+    if (first) { assert.equal(r.note, 'bench'); bench++; }
+    else assert.ok(r.match.log.some(e => e.batterId === id));
+  }
+  assert.ok(pinched >= 6, `pinched ${pinched}, no chance ${bench}`);
+});
+
+test('hitting builds the manager trust; a full meter promotes him to everyday DH', () => {
+  const rng = createRng(2);
+  let s = { ...newSlot(null, { custom: { ...myBat, contact: 85, power: 85, eye: 45, speed: 35 } }), trust: RAISE.bench.need - 10 }, promoted = null;
+  while (s.season.phase === 'regular' && !promoted) { const r = applyDay(s, null, rng); if (r.report.promoted) promoted = r; s = r.slot; }
+  assert.ok(promoted, 'promoted within a season');
+  assert.equal(s.bench, false); assert.equal(s.trust, RAISE.bench.need);
+  assert.equal(dayInfo(s).plan, null);
+  assert.ok(raiseLineup(s, raiseTeam(s)).order.includes(s.playerId));
+  // 기존 선수는 후보가 아니다
+  assert.equal(newSlot('samsung-b06').bench, undefined); assert.equal(dayInfo(newSlot('samsung-b06')).plan, null);
 });
