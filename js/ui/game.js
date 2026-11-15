@@ -745,7 +745,9 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     const cut = !practice && !auto ? cutinFor(r, prev, userPitched) : null;
     const far = hrM ? ` · ${hrM}m` : '';
     if (cut) cutins.play(cut, { sub: cut === 'homerun' ? (HR_NAME[r.runs] || '홈런!!') + far : cut === 'homerun_bad' ? (HR_NAME[r.runs] || '피홈런') + far : '' });
-    showMsg(label, color, cut ? CUT_MS[cut] : r.event === 'HR' ? 2000 : 1300, sub, () => {
+    // 내가 타자일 때는 공 하나하나 결과(볼·스트라이크·파울·타구 결과)를 절반만 보여 줘서 빨리 다음 공으로(홈런·컷인은 그대로)
+    const msgMs = cut ? CUT_MS[cut] : r.event === 'HR' ? 2000 : userPitched ? 1300 : 650;
+    showMsg(label, color, msgMs, sub, () => {
       if (practice && practice.n >= practice.goal) return finishPractice();
       if (match.game.over) return showEnd();
       if (halfOver) {
