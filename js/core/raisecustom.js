@@ -4,7 +4,8 @@
 
 export const CUSTOM_ID = { bat: 'samsung-b99', pitch: 'samsung-p99' };
 export const NAME_MAX = 8;
-export const FACES = 9;                                   // assets/faces 의 b_0~8 / p_0~8
+export const FACES = 18;                                  // 0~8: assets/faces 의 b_·p_0~8(남성), 9~17: wb_·wp_0~8(여성)
+export const FACE_GROUPS = [['남성', 0], ['여성', 9]];
 export const POSITIONS = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'];
 export const POS_KO = { C: '포수', '1B': '1루수', '2B': '2루수', '3B': '3루수', SS: '유격수', LF: '좌익수', CF: '중견수', RF: '우익수', DH: '지명타자' };
 

@@ -23,6 +23,8 @@ test('the defaults leave points to spend and are valid; anything over budget or 
   assert.equal(validCustom({ ...myBat, name: '  ' }), false);
   assert.equal(validCustom({ ...myBat, name: '아주아주긴이름입니다' }), false);
   assert.equal(validCustom({ ...myBat, pos: 'P' }), false);
+  assert.equal(validCustom({ ...myBat, face: 17 }), true);                  // 여성 얼굴(9~17)
+  assert.equal(validCustom({ ...myBat, face: 18 }), false);
   assert.equal(validCustom({ ...mySp, velo: 170 }), false);
   assert.equal(validCustom({ ...myCl, stamina: 80 }), false);              // 마무리는 체력 상한이 낮다
 });

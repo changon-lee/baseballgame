@@ -9,7 +9,7 @@ import { defaultLineup } from '../core/team.js';
 import { RAISE, DRILLS, newSlot, loadRaise, saveRaise, slotPlayer, raiseTeam, canChoose, choose, dayInfo, applyDay, seasonOver, nextSeason, seasonGains, prelude , postResult, rings , withSpeed, instant, pickEvent } from '../core/raise.js';
 import { LIFE, SHOP, SHOP_GROUPS, canBuy, buyItem, has, fansOf, adsOf, eventOf, canPick } from '../core/raiselife.js';
 import { AWARDS } from '../core/raiseawards.js';
-import { CUSTOM, CUSTOM_ID, NAME_MAX, FACES, POSITIONS, POS_KO, defaultCustom, validCustom, groupOf, pointsOf, usedPoints, customPlayer } from '../core/raisecustom.js';
+import { CUSTOM, CUSTOM_ID, NAME_MAX, FACES, FACE_GROUPS, POSITIONS, POS_KO, defaultCustom, validCustom, groupOf, pointsOf, usedPoints, customPlayer } from '../core/raisecustom.js';
 import { seasonCard, leaderboard, STAT_DEFS, BOARD_TOP } from '../core/raisestats.js';
 import { contract, startSalary, won, ksMvp, PAY } from '../core/raisepay.js';
 import { PRODUCTS, RISK, buy, sell, netWorth, investedValue } from '../core/invest.js';
@@ -338,7 +338,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
         <div class="rz-make-top">${face(customPlayer({ ...c, name: c.name || '선수' }), kindKey, 'lg')}
           <label class="rz-namebox"><span>이름</span><input type="text" data-k="name" maxlength="${NAME_MAX}" placeholder="최대 ${NAME_MAX}글자" value="${esc(c.name)}" autocomplete="off"></label></div>
         <div class="card-h">얼굴</div>
-        <div class="rz-faces">${Array.from({ length: FACES }, (_, k) => `<button class="${k === c.face ? 'on' : ''}" data-act="mface" data-v="${k}" aria-label="얼굴 ${k + 1}">${face({ id: 'x', name: '선수', face: k }, kindKey)}</button>`).join('')}</div>
+        ${FACE_GROUPS.map(([label, from]) => `<div class="rz-facelabel">${label}</div><div class="rz-faces">${Array.from({ length: 9 }, (_, j) => from + j).filter(k => k < FACES).map(k => `<button class="${k === c.face ? 'on' : ''}" data-act="mface" data-v="${k}" aria-label="${label} 얼굴 ${k - from + 1}">${face({ id: 'x', name: '선수', face: k }, kindKey)}</button>`).join('')}</div>`).join('')}
         ${c.kind === 'bat'
           ? `<div class="card-h">포지션</div><div class="rz-poss">${POSITIONS.map(p => `<button class="chip ${p === c.pos ? 'on' : ''}" data-act="mpos" data-v="${p}"><b>${p}</b><small>${POS_KO[p]}</small></button>`).join('')}</div>
              <div class="card-h">타석</div>${seg('mbats', [['R', '우타'], ['L', '좌타'], ['S', '양타']], c.bats)}`

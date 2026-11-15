@@ -30,7 +30,9 @@ const faceNo = pl => {
 };
 // 동그라미 배경은 그 선수 팀 색(id 앞부분 = 팀 id)
 const faceBg = pl => { const t = getTeam(String(pl.id).replace(/-[bp]\d+$/, '')); return t ? `background-color:${t.colors.main};` : ''; };
-export const face = (pl, kind, cls = '') => `<i class="av ph ${cls}" style="${faceBg(pl)}background-image:url('${asset(`faces/${kind === 'p' ? 'p' : 'b'}_${faceNo(pl)}.webp`)}')"></i>`;
+// 9번부터는 여성 얼굴(faces/wb_·wp_, 육성모드 커스텀 선수가 고를 때만)
+const faceFile = (pl, kind) => { const n = faceNo(pl), k = kind === 'p' ? 'p' : 'b'; return n >= 9 ? `faces/w${k}_${n - 9}.webp` : `faces/${k}_${n}.webp`; };
+export const face = (pl, kind, cls = '') => `<i class="av ph ${cls}" style="${faceBg(pl)}background-image:url('${asset(faceFile(pl, kind))}')"></i>`;
 
 export const badge = (id, size = '') => {
   const t = getTeam(id);
