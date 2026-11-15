@@ -24,6 +24,7 @@ const FACE_FOREIGN = [4, 6], FACE_KOREAN = [0, 1, 2, 3, 5, 7, 8];
 const SURNAMES = new Set('김이박최정강조윤장임한오서신권황안송류전홍고문양손배백허유남심노하곽성차주우구민진나지엄채원천방공현함변염여추도소석선설마길연위표명기반왕금옥육인맹제모탁국어은편용예봉경사부');
 export const isForeign = name => { const n = String(name || ''); return n.length >= 4 || (n.length > 0 && !SURNAMES.has(n[0])); };
 const faceNo = pl => {
+  if (Number.isInteger(pl.face)) return pl.face;           // 직접 고른 얼굴(육성모드 커스텀 선수)
   const pool = isForeign(pl.name) ? FACE_FOREIGN : FACE_KOREAN, m = /^(.*)-[bp](\d+)$/.exec(String(pl.id));
   return pool[(m ? hashId(m[1]) + +m[2] - 1 : hashId(pl.id)) % pool.length];
 };

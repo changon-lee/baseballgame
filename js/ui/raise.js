@@ -9,6 +9,7 @@ import { defaultLineup } from '../core/team.js';
 import { RAISE, DRILLS, newSlot, loadRaise, saveRaise, slotPlayer, raiseTeam, canChoose, choose, dayInfo, applyDay, seasonOver, nextSeason, seasonGains, prelude , postResult, rings , withSpeed, instant, pickEvent } from '../core/raise.js';
 import { LIFE, SHOP, SHOP_GROUPS, canBuy, buyItem, has, fansOf, adsOf, eventOf, canPick } from '../core/raiselife.js';
 import { AWARDS } from '../core/raiseawards.js';
+import { CUSTOM, CUSTOM_ID, NAME_MAX, FACES, POSITIONS, POS_KO, defaultCustom, validCustom, groupOf, pointsOf, usedPoints, customPlayer } from '../core/raisecustom.js';
 import { seasonCard, leaderboard, STAT_DEFS, BOARD_TOP } from '../core/raisestats.js';
 import { contract, startSalary, won, ksMvp, PAY } from '../core/raisepay.js';
 import { PRODUCTS, RISK, buy, sell, netWorth, investedValue } from '../core/invest.js';
@@ -27,7 +28,7 @@ const traitOf = id => TRAITS.find(t => t.id === id);
 
 const condHtml = c => { const [i, n, k] = COND[c + 2]; return `<span class="rz-cond ${k}">${i} ${n}</span>`; };
 const barPct = (stat, v) => (stat === 'velo' ? Math.max(4, Math.min(100, (v - 125) / 37 * 100)) : Math.min(100, v));
-const roleOf = slot => (slot.kind === 'bat' ? slotPlayer(slot).pos : ROLE[slot.role]);
+const roleOf = slot => (slot.kind === 'bat' ? slotPlayer(slot).pos : ROLE[slot.role]) + (slot.custom ? ' · ✨ 나만의 선수' : '');
 
 // 기록 한 줄
 function batLine(b) {
@@ -293,6 +294,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
       <div class="seg"><button data-act="kind" data-k="bat" class="${kind === 'bat' ? 'on' : ''}">🏏 타자</button><button data-act="kind" data-k="pitch" class="${kind === 'pitch' ? 'on' : ''}">⚾ 투수</button></div>
       <p class="hint">정규시즌 경기 수 (시즌이 끝날 때마다 바꿀 수 있어요)</p>${gamesSeg(games, 'games')}
       <p class="hint">${kind === 'bat' ? '타자는 내 타석만 직접 쳐요.' : '선발은 4경기마다 선발로 나가 강판될 때까지 던지고, 마무리는 점수 차가 3점 이하인 9회에 나와요.'} 능력치는 원래 명단 값에서 시작해요.</p>
+      <button class="chip rz-make" data-act="make"><b>✨ 나만의 선수 만들기</b><small>이름·얼굴·포지션·능력치를 직접 정해서 삼성에 입단해요</small></button>
       <div class="rz-pick">${list.map(p => `<button class="chip rz-pp" data-act="pick" data-id="${p.id}">
         <span class="rz-who">${face(p, kind === 'bat' ? 'b' : 'p')}<span><b>${esc(p.name)}</b><small>${kind === 'bat' ? `${p.pos} · ${p.bats === 'L' ? '좌타' : p.bats === 'S' ? '양타' : '우타'}` : `${ROLE[p.role === 'SP' ? 'SP' : 'CL']} · ${p.throws === 'L' ? '좌투' : '우투'}`}</small></span></span>
         ${STATS[kind].map(k => `<span class="ms"><span>${STAT_ICON[k]}</span><i><u style="width:${barPct(k, p[k])}%"></u></i><em>${p[k]}</em></span>`).join('')}
@@ -300,6 +302,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
     act('back', slotsView);
     act('kind', b => pickView(i, b.dataset.k, games));
     act('games', b => pickView(i, kind, +b.dataset.g));
+    act('make', () => { draft = defaultCustom(kind); makeView(i, games); });
     act('pick', b => {
       data = { ...data, slots: data.slots.map((s, j) => (j === i ? newSlot(b.dataset.id, { games }) : s)) }; persist(); hubView(i);
     });
@@ -316,6 +319,77 @@ export function showRaise(root, { storage, loadGame, onBack }) {
     }
     if (evtDone) { const d = evtDone; evtDone = null; return `<section class="card rz-event done"><div class="card-h">${esc(d.title || '이벤트')}</div><p class="rz-evtext">${esc(d.say)}</p>${d.fx ? `<p class="hint">${esc(d.fx)}</p>` : ''}</section>`; }
     return '';
+  }
+
+  // ── 나만의 선수 만들기 ──
+  let draft = null;
+  const VELO_KM = k => (k === 'velo' ? 'km' : '');
+  function makeView(i, games) {
+    const c = draft, g = CUSTOM[groupOf(c)], kindKey = c.kind === 'bat' ? 'b' : 'p';
+    const left = () => g.budget - usedPoints(draft);
+    const seg = (act, opts, cur) => `<div class="seg">${opts.map(([v, t]) => `<button data-act="${act}" data-v="${v}" class="${v === cur ? 'on' : ''}">${t}</button>`).join('')}</div>`;
+    screen(`<header class="bar"><button class="ghost small" data-act="back">←</button><h2>✨ 나만의 선수</h2></header>
+      ${seg('mkind', [['bat', '🏏 타자'], ['pitch', '⚾ 투수']], c.kind)}
+      <section class="card rz-make-card">
+        <div class="rz-make-top">${face(customPlayer({ ...c, name: c.name || '선수' }), kindKey, 'lg')}
+          <label class="rz-namebox"><span>이름</span><input type="text" data-k="name" maxlength="${NAME_MAX}" placeholder="최대 ${NAME_MAX}글자" value="${esc(c.name)}" autocomplete="off"></label></div>
+        <div class="card-h">얼굴</div>
+        <div class="rz-faces">${Array.from({ length: FACES }, (_, k) => `<button class="${k === c.face ? 'on' : ''}" data-act="mface" data-v="${k}" aria-label="얼굴 ${k + 1}">${face({ id: 'x', name: '선수', face: k }, kindKey)}</button>`).join('')}</div>
+        ${c.kind === 'bat'
+          ? `<div class="card-h">포지션</div><div class="rz-poss">${POSITIONS.map(p => `<button class="chip ${p === c.pos ? 'on' : ''}" data-act="mpos" data-v="${p}"><b>${p}</b><small>${POS_KO[p]}</small></button>`).join('')}</div>
+             <div class="card-h">타석</div>${seg('mbats', [['R', '우타'], ['L', '좌타'], ['S', '양타']], c.bats)}`
+          : `<div class="card-h">역할</div>${seg('mrole', [['SP', '🔥 선발'], ['CL', '🔒 마무리']], c.role)}
+             <div class="card-h">던지는 손</div>${seg('mthrows', [['R', '우투'], ['L', '좌투']], c.throws)}`}
+      </section>
+      <section class="card"><div class="card-h">능력치 <span class="pill rz-left">남은 포인트 <b>${left()}</b></span></div>
+        <p class="hint">${g.budget}포인트를 나눠요${c.kind === 'pitch' ? ' (구속은 1km에 3포인트)' : ''}. 다 쓰면 삼성 주전급이고, 그다음은 훈련으로 키워요. 다른 능력치를 내리면 포인트가 다시 생겨요.</p>
+        <div class="rz-sliders">${Object.entries(g.stats).map(([k, [lo, hi]]) => `<label class="rz-slider"><span>${STAT_ICON[k]} ${STAT_KO[k]}</span>
+          <input type="range" min="${lo}" max="${hi}" step="1" value="${c[k]}" data-k="${k}"><em data-v="${k}">${c[k]}${VELO_KM(k)}</em></label>`).join('')}</div>
+        <div class="actions"><button class="ghost small" data-act="mrand">🎲 무작위로 나누기</button></div></section>
+      <p class="hint center">정규시즌 경기 수</p>${gamesSeg(games, 'mgames')}
+      <p class="hint center">연봉은 최저 연봉 ${won(PAY.min)}에서 시작해요</p>
+      <div class="actions"><button class="primary big" data-act="mgo" ${validCustom(c) ? '' : 'disabled'}>⚾ 이 선수로 입단</button></div>`);
+    const refresh = () => {
+      const l = root.querySelector('.rz-left b'); if (l) l.textContent = left();
+      const go = root.querySelector('[data-act=mgo]'); if (go) go.disabled = !validCustom(draft);
+    };
+    act('back', () => pickView(i, draft.kind, games));
+    act('mkind', b => { if (b.dataset.v !== draft.kind) { draft = { ...defaultCustom(b.dataset.v), name: draft.name, face: draft.face }; makeView(i, games); } });
+    act('mrole', b => { if (b.dataset.v !== draft.role) { draft = { ...defaultCustom('pitch', b.dataset.v), name: draft.name, face: draft.face, throws: draft.throws }; makeView(i, games); } });
+    act('mface', b => { draft = { ...draft, face: +b.dataset.v }; makeView(i, games); });
+    act('mpos', b => { draft = { ...draft, pos: b.dataset.v }; makeView(i, games); });
+    act('mbats', b => { draft = { ...draft, bats: b.dataset.v }; makeView(i, games); });
+    act('mthrows', b => { draft = { ...draft, throws: b.dataset.v }; makeView(i, games); });
+    act('mgames', b => makeView(i, +b.dataset.g));
+    const nameIn = root.querySelector('input[data-k=name]');
+    nameIn.oninput = () => { draft = { ...draft, name: nameIn.value }; refresh(); };
+    // 슬라이더: 남은 포인트를 넘기면 넘지 않는 데까지만 움직인다
+    root.querySelectorAll('input[type=range]').forEach(r => {
+      r.oninput = () => {
+        const k = r.dataset.k, others = usedPoints(draft) - pointsOf(k, draft[k]);
+        let v = +r.value;
+        while (v > +r.min && others + pointsOf(k, v) > g.budget) v--;
+        r.value = v; draft = { ...draft, [k]: v };
+        root.querySelector(`em[data-v=${k}]`).textContent = v + VELO_KM(k);
+        refresh();
+      };
+    });
+    act('mrand', () => {
+      const keys = Object.keys(g.stats), d = { ...draft };
+      for (const k of keys) d[k] = g.stats[k][0];
+      for (let guard = 0; guard < 2000; guard++) {
+        const k = keys[Math.floor(rng() * keys.length)];
+        if (d[k] >= g.stats[k][1] || usedPoints({ ...d, [k]: d[k] + 1 }) > g.budget) { if (keys.every(q => d[q] >= g.stats[q][1] || usedPoints({ ...d, [q]: d[q] + 1 }) > g.budget)) break; continue; }
+        d[k]++;
+      }
+      draft = d; makeView(i, games);
+    });
+    act('mgo', () => {
+      if (!validCustom(draft)) return;
+      data = { ...data, slots: data.slots.map((s, j) => (j === i ? newSlot(null, { games, custom: draft }) : s)) }; persist();
+      playSound('cheer', { gain: 0.5 });
+      hubView(i);
+    });
   }
 
   // ── 육성 허브 ──

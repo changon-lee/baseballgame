@@ -13,6 +13,8 @@ import { TRAITS } from './perks.js';
 import { startSalary, contract, ksMvp } from './raisepay.js';
 import { tickMarket, netWorth } from './invest.js';
 import { LIFE, has, gearBonus, trainMult, fansOf, rollInjury, rollEvent, resolveEvent } from './raiselife.js';
+import { CUSTOM_ID, validCustom, withCustom } from './raisecustom.js';
+import { PAY } from './raisepay.js';
 
 const ME = USER_TEAM_ID;
 const KEY = 'baseball.raise.v1';
@@ -70,8 +72,10 @@ export const instant = d => !!(d && (d.light || d.quick));
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
-function findPlayer(id) {
-  const t = getTeam(ME);
+// 삼성 명단(커스텀 선수가 있으면 넣어서)
+const samsung = custom => withCustom(getTeam(ME), custom);
+function findPlayer(id, custom = null) {
+  const t = samsung(custom);
   const b = t.batters.find(x => x.id === id);
   if (b) return { player: b, kind: 'bat' };
   const p = t.pitchers.find(x => x.id === id);
@@ -82,39 +86,45 @@ function findPlayer(id) {
 const gamesOf = g => (RAISE.seasonGames.includes(g) ? g : RAISE.seasonGames[0]);
 const makeSeason = (games, year) => createSeason({ cycles: games / 9, innings: 9, year });
 
-// games: 정규시즌 경기 수(27 또는 81)
-export function newSlot(playerId, { games = RAISE.seasonGames[0], year = RAISE.firstYear } = {}) {
-  const f = findPlayer(playerId);
+// games: 정규시즌 경기 수(27 또는 81). custom: 직접 만든 선수(core/raisecustom.js) — 주면 playerId는 무시
+export function newSlot(playerId, { games = RAISE.seasonGames[0], year = RAISE.firstYear, custom = null } = {}) {
+  if (custom) {
+    if (!validCustom(custom)) throw new Error('커스텀 선수 설정이 올바르지 않아요');
+    custom = { ...custom, name: custom.name.trim() };
+    playerId = CUSTOM_ID[custom.kind];
+  }
+  const f = findPlayer(playerId, custom);
   games = gamesOf(games);
   if (!f) throw new Error(`삼성 선수가 아니에요: ${playerId}`);
   return {
     playerId, kind: f.kind, role: f.kind === 'bat' ? null : f.player.role === 'SP' ? 'SP' : 'CL',
+    ...(custom ? { custom } : {}),
     growth: createGrowth(), condition: 0, fatigue: 0, traits: [],
     progress: { train: {}, feat: {} }, chosen: false,
     year, games, season: makeSeason(games, year),
     stats: {}, total: {}, history: [], league: emptyLeague(),
-    salary: startSalary(playerId), assets: 0, paid: 0,       // 만원. 연봉은 정규시즌 경기마다 나눠서 현금(assets)으로
+    salary: custom ? PAY.min : startSalary(playerId), assets: 0, paid: 0,       // 만원. 연봉은 정규시즌 경기마다 나눠서 현금(assets)으로
     invest: {}, mkt: {},                                      // 재테크(core/invest.js)
     owned: {}, fans: null, injury: null, event: null,         // 쇼핑·인기·부상·이벤트(core/raiselife.js). fans null = 연봉으로 정한 시작 인기
-    seasonBase: baseOf(playerId, f.kind, createGrowth()),
+    seasonBase: baseOf(playerId, f.kind, createGrowth(), custom),
   };
 }
 
 // 시즌 시작 때 능력치(시즌 결산에서 '이번 시즌에 오른 능력치'를 보여 준다)
 const STAT_KEYS = { bat: ['power', 'contact', 'eye', 'speed'], pitch: ['velo', 'control', 'stamina'] };
-function baseOf(playerId, kind, growth) {
-  const t = applyGrowth(withSpeed(getTeam(ME)), growth), p = t.batters.find(b => b.id === playerId) || t.pitchers.find(q => q.id === playerId);
+function baseOf(playerId, kind, growth, custom = null) {
+  const t = applyGrowth(withSpeed(samsung(custom)), growth), p = t.batters.find(b => b.id === playerId) || t.pitchers.find(q => q.id === playerId);
   return Object.fromEntries(STAT_KEYS[kind].map(k => [k, p[k]]));
 }
 export function seasonGains(slot) {
   if (!slot.seasonBase) return [];
   const p = slotPlayer(slot);
-  const raw = applyGrowth(withSpeed(getTeam(ME)), slot.growth), q = raw.batters.find(b => b.id === slot.playerId) || raw.pitchers.find(x => x.id === slot.playerId) || p;
+  const raw = applyGrowth(withSpeed(samsung(slot.custom)), slot.growth), q = raw.batters.find(b => b.id === slot.playerId) || raw.pitchers.find(x => x.id === slot.playerId) || p;
   return STAT_KEYS[slot.kind].map(k => ({ stat: k, n: q[k] - (slot.seasonBase[k] ?? q[k]) })).filter(x => x.n > 0);
 }
 
 // ── 저장 ──
-const validSlot = s => !!(s && typeof s === 'object' && typeof s.playerId === 'string' && findPlayer(s.playerId)
+const validSlot = s => !!(s && typeof s === 'object' && typeof s.playerId === 'string' && (s.custom == null || validCustom(s.custom)) && findPlayer(s.playerId, s.custom)
   && (s.kind === 'bat' || s.kind === 'pitch') && s.season && Array.isArray(s.season.schedule)
   && s.growth && s.growth.delta && Array.isArray(s.traits) && s.progress && Number.isFinite(s.fatigue) && Number.isFinite(s.condition));
 
@@ -146,7 +156,7 @@ const SPEED = {
   'samsung-b01': 90, 'samsung-b02': 85, 'samsung-b03': 68, 'samsung-b04': 30, 'samsung-b05': 28, 'samsung-b06': 55,
   'samsung-b07': 22, 'samsung-b08': 58, 'samsung-b09': 66, 'samsung-b10': 50, 'samsung-b11': 40, 'samsung-b12': 60,
 };
-export const withSpeed = team => ({ ...team, batters: team.batters.map(b => ({ ...b, speed: SPEED[b.id] ?? RUN_SPEED })) });
+export const withSpeed = team => ({ ...team, batters: team.batters.map(b => ({ ...b, speed: b.speed ?? SPEED[b.id] ?? RUN_SPEED })) });
 
 const GEAR_STATS = ['power', 'contact', 'eye', 'speed', 'control', 'stamina', 'velo'];
 function withGear(p, slot) {
@@ -156,7 +166,7 @@ function withGear(p, slot) {
   return q;
 }
 export const raiseTeam = (slot, { benchMe = false } = {}) => {
-  let t = applyGrowth(withSpeed(getTeam(ME)), slot.growth);
+  let t = applyGrowth(withSpeed(samsung(slot.custom)), slot.growth);
   if (slot.owned) t = { ...t, batters: t.batters.map(b => withGear(b, slot)), pitchers: t.pitchers.map(p => withGear(p, slot)) };
   return benchMe ? { ...t, pitchers: t.pitchers.filter(p => p.id !== slot.playerId), batters: t.batters.filter(b => b.id !== slot.playerId) } : t;
 };
@@ -474,6 +484,6 @@ export function nextSeason(slot, { games = slot.games } = {}) {
   return {
     ...rest, year, games, season: makeSeason(games, year),
     salary: pay.to, assets, paid: 0, mkt: {}, fans, injury: null, event: null,
-    stats: {}, league: emptyLeague(), fatigue: 0, condition: 0, chosen: false, resting: false, history: [...slot.history, entry], seasonBase: baseOf(slot.playerId, slot.kind, slot.growth),
+    stats: {}, league: emptyLeague(), fatigue: 0, condition: 0, chosen: false, resting: false, history: [...slot.history, entry], seasonBase: baseOf(slot.playerId, slot.kind, slot.growth, slot.custom),
   };
 }

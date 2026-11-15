@@ -25,7 +25,7 @@ function goldenBat(slot) {
   const me = (slot.stats || {}).bat, games = slot.season.round || slot.season.schedule.length;
   const need = QUALIFY.bat * games;
   if (!me || me.pa < need || Object.keys((slot.league || {}).bat || {}).length < MIN_POOL) return false;
-  const pos = (getTeam(USER_TEAM_ID).batters.find(b => b.id === slot.playerId) || {}).pos;
+  const pos = slot.custom ? slot.custom.pos : (getTeam(USER_TEAM_ID).batters.find(b => b.id === slot.playerId) || {}).pos;
   const mine = opsOf(me);
   return !Object.entries((slot.league || {}).bat || {}).some(([id, l]) => id !== slot.playerId && POS.get(id) === pos && l.pa >= need && opsOf(l) > mine);
 }

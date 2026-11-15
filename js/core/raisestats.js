@@ -88,7 +88,7 @@ export function leaderboard(slot, key, top = BOARD_TOP) {
   const list = g.others.map(o => ({ id: o.id, v: d.val(o.line), me: false }));
   if (g.qualified) list.push({ id: g.id, v: d.val(g.mine), me: true });
   const ranked = list.filter(x => x.v != null).sort((a, b) => (a.v === b.v ? a.me - b.me : beats(d, a.v, b.v) ? -1 : 1));
-  const who = id => WHO.get(id) || { name: id, team: '' };
+  const who = id => (id === g.id && slot.custom ? { name: slot.custom.name, team: '삼성' } : WHO.get(id) || { name: id, team: '' });
   const row = (x, rank, tie) => ({ rank, tie, id: x.id, name: who(x.id).name, team: who(x.id).team, text: x.v == null ? '-' : d.fmt(x.v), me: x.me });
   const all = ranked.map(x => {
     const better = ranked.filter(y => beats(d, y.v, x.v)).length, same = ranked.filter(y => y.v === x.v).length;
