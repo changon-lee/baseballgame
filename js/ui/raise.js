@@ -419,6 +419,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
         <button class="chip rest" data-act="choose" data-id="rest"><b>😴 휴식</b><small>피로 ${RAISE.rest} · 컨디션이 보통 쪽으로</small><small>오늘 경기는 결장</small></button></div>
       <p class="hint">훈련을 고르면 연습장에서 직접 ${s.kind === 'bat' ? '쳐요' : '던져요'}. 잘할수록 많이 오르고, 중간에 나가면 훈련은 없던 일이 돼요. 훈련한 날도 경기에는 나가요. 휴식한 날만 쉬어요.</p>`;
     screen(`<header class="bar"><button class="ghost small" data-act="back">←</button><h2>🌱 육성모드</h2><button class="ghost small rz-rec" data-act="records">📜 기록</button></header>
+      ${lastGameHtml(i)}
       <section class="card rz-card">
         <div class="rz-who">${face(p, s.kind === 'bat' ? 'b' : 'p', 'lg')}<div><b class="rz-name">${esc(p.name)}${ringHtml(s)}</b><small>삼성 · ${roleOf(s)} · ${s.year} 시즌</small></div>${condHtml(s.condition)}</div>
         <div class="rz-stats">${STATS[s.kind].map(k => `<span class="ms"><span>${STAT_ICON[k]} ${STAT_KO[k]}</span><i><u style="width:${barPct(k, p[k])}%"></u></i><em>${p[k]}${k === 'velo' ? 'km' : ''}</em></span>`).join('')}</div>
@@ -502,10 +503,10 @@ export function showRaise(root, { storage, loadGame, onBack }) {
   async function play(i) {
     const s = data.slots[i], d = dayInfo(s);
     flash = null;
-    if (!d.needsScreen) return finishDay(i, null);
+    if (!d.needsScreen) return finishDay(i, null, true);
     // 내 첫 장면까지 미리 돌려 보고, 오늘 내 장면이 없으면(마무리 등판 없음) 경기 화면 없이 바로 결과로
     const pre = prelude(s, rng);
-    if (pre.result) return finishDay(i, pre.result);
+    if (pre.result) return finishDay(i, pre.result, true);
     const mod = await loadGame();
     if (!mod) return hubView(i);
     const set = pre.set;
@@ -513,10 +514,24 @@ export function showRaise(root, { storage, loadGame, onBack }) {
       result => (result ? finishDay(i, result) : hubView(i)));      // 중간에 나가면 그 경기는 없던 것
   }
 
-  function finishDay(i, result) {
-    const out = applyDay(data.slots[i], result, rng);
+  // quick: 내가 안 나간 날(휴식·부상·벤치·등판 없음)은 결과 화면 없이 바로 다음 날로. 볼 게 있는 날(시즌 끝·시리즈·특성·회복·승격)만 결과 화면
+  let lastGame = null;
+  function finishDay(i, result, quick = false) {
+    const out = applyDay(data.slots[i], result, rng), rep = out.report;
     data = { ...data, slots: data.slots.map((q, j) => (j === i ? out.slot : q)) }; persist();
-    resultView(i, out.report, result && result.raise ? result.raise.note : null);
+    const notable = rep.seasonOver || rep.postStart || (rep.series && rep.series.won != null) || rep.traitsNew.length || rep.healed || rep.promoted || rep.hurt || rep.ups.length;
+    if (quick && !rep.appeared && !notable) { lastGame = { i, rep }; return hubView(i); }
+    resultView(i, rep, result && result.raise ? result.raise.note : null);
+  }
+  // 허브 맨 위: 방금 넘긴 경기 한 줄
+  function lastGameHtml(i) {
+    if (!lastGame || lastGame.i !== i) return '';
+    const { rep } = lastGame, g = rep.game; lastGame = null;
+    if (!g) return '';
+    const res = g.hs > g.as ? '<b class="win">승리</b>' : g.hs < g.as ? '<b class="lose">패배</b>' : '<b>무승부</b>';
+    const team = rep.post ? `${esc(rep.series.name)} ${rep.series.w}승 ${rep.series.l}패` : `${rep.team.w}승 ${rep.team.l}패${rep.team.d ? ' ' + rep.team.d + '무' : ''} · ${rep.team.rank}위`;
+    const money = rep.money ? ` · 💵 +${won(rep.money.pay)}${rep.money.change ? ` · 📈 ${rep.money.change > 0 ? '+' : ''}${won(rep.money.change)}` : ''}` : '';
+    return `<section class="card rz-last"><span>⏩ 지난 경기</span><span class="rz-lastscore">${badge(g.away)} ${g.as} : ${g.hs} ${badge(g.home)} ${res}</span><small>${team}${money}</small></section>`;
   }
 
   // ── 경기 결과 ──
