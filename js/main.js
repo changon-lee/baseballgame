@@ -71,7 +71,7 @@ function title() {
   }
   const n = loadRaise(storage).slots.filter(Boolean).length;
   showTitle(app, {
-    info: { season, raise: n ? `키우는 선수 ${n}명` : null },
+    info: { season, seasonOn: !!s && s.phase !== 'done', raise: n ? `키우는 선수 ${n}명` : null },
     on: { season: () => { hubCtx.tab = 'home'; hub(); scrollTop(); }, raise: () => raiseMenu(), versus: () => versusMenu() },
   });
 }

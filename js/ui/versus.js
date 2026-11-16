@@ -4,6 +4,7 @@ import { TEAMS, USER_TEAM_ID, getTeam } from '../data/rosters.js';
 import { loadLineup } from '../core/team.js';
 import { LEVELS, LEVEL_NAME } from './prefs.js';
 import { connect } from './net.js';
+import { icon } from './icons.js';
 
 const KEY = 'bb.versus';
 const load = () => { try { return JSON.parse(window.localStorage.getItem(KEY) || '{}'); } catch (e) { return {}; } };
@@ -45,7 +46,7 @@ export function showVersus(root, { storage, loadGame, onBack }) {
     const offline = state === 'offline';
     root.innerHTML = `
     <div class="screen menu versus">
-      <header class="bar"><button class="ghost small" id="back">←</button><h2>1:1 대결</h2></header>
+      <header class="bar"><button class="ghost small" id="back" aria-label="뒤로">${icon('back')}</button><h2>1:1 대결</h2></header>
       <p class="hint">같은 와이파이의 폰 두 대로 겨뤄요. 기록·성장에는 반영되지 않아요.</p>
       ${offline ? `<section class="card slim">
         <div class="card-h">서버에 연결되지 않았어요</div>

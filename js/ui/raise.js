@@ -15,24 +15,24 @@ import { contract, startSalary, won, ksMvp, PAY } from '../core/raisepay.js';
 import { PRODUCTS, RISK, buy, sell, netWorth, investedValue } from '../core/invest.js';
 import { playSound, vibrate } from './feedback.js';
 import { face, badge } from './hub.js';
+import { icon } from './icons.js';
 
 const ME = USER_TEAM_ID;
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const STAT_KO = { power: '파워', contact: '컨택', eye: '선구안', speed: '주력', control: '제구', stamina: '체력', velo: '구속' };
-const STAT_ICON = { power: '💪', contact: '⚾', eye: '👀', speed: '🏃', control: '🎯', stamina: '💚', velo: '🔥' };
 const STATS = { bat: ['power', 'contact', 'eye', 'speed'], pitch: ['velo', 'control', 'stamina'] };
-const COND = [['⬇⬇', '최악', 'c-2'], ['⬇', '나쁨', 'c-1'], ['➖', '보통', 'c0'], ['⬆', '좋음', 'c1'], ['⬆⬆', '최상', 'c2']];
+const COND = [['▼▼', '최악', 'c-2'], ['▼', '나쁨', 'c-1'], ['–', '보통', 'c0'], ['▲', '좋음', 'c1'], ['▲▲', '최상', 'c2']];
 const ROLE = { SP: '선발', CL: '마무리' };
 const NOTE = { pinch: '대타로 교체됐어요', pulled: '강판됐어요', noshow: '오늘은 등판이 없었어요', bench: '오늘은 벤치에서 경기를 지켜봤어요' };
 // 후보 선수: 감독 신뢰도 막대
-const trustHtml = s => (s.kind === 'bat' && s.bench ? `<div class="rz-trust"><span>🧢 후보 · 감독 신뢰도</span><i><u style="width:${Math.min(100, ((s.trust || 0) / RAISE.bench.need) * 100)}%"></u></i><em>${Math.round(s.trust || 0)}/${RAISE.bench.need}</em></div>
+const trustHtml = s => (s.kind === 'bat' && s.bench ? `<div class="rz-trust"><span>후보 · 감독 신뢰도</span><i><u style="width:${Math.min(100, ((s.trust || 0) / RAISE.bench.need) * 100)}%"></u></i><em>${Math.round(s.trust || 0)}/${RAISE.bench.need}</em></div>
   <p class="hint">잘 치면 신뢰도가 올라요. 다 차면 주전 지명타자로 매일 나가요.</p>` : '');
-const PLAN = { start: '🔥 오늘은 선발 출전 기회! (지명타자)', pinch: '🪖 대타 대기 · 7회부터 지명타자 차례에 나가요', none: '🪑 오늘은 출전 계획이 없어요 (벤치)' };
+const PLAN = { start: '오늘은 선발 출전 기회! (지명타자)', pinch: '대타 대기 · 7회부터 지명타자 차례에 나가요', none: '오늘은 출전 계획이 없어요 (벤치)' };
 const traitOf = id => TRAITS.find(t => t.id === id);
 
 const condHtml = c => { const [i, n, k] = COND[c + 2]; return `<span class="rz-cond ${k}">${i} ${n}</span>`; };
 const barPct = (stat, v) => (stat === 'velo' ? Math.max(4, Math.min(100, (v - 125) / 37 * 100)) : Math.min(100, v));
-const roleOf = slot => (slot.kind === 'bat' ? slotPlayer(slot).pos : ROLE[slot.role]) + (slot.custom ? ' · ✨ 나만의 선수' : '');
+const roleOf = slot => (slot.kind === 'bat' ? slotPlayer(slot).pos : ROLE[slot.role]) + (slot.custom ? ' · 나만의 선수' : '');
 
 // 기록 한 줄
 function batLine(b) {
@@ -55,10 +55,10 @@ function seasonLine(slot, st) {
 
 // 연봉·자산(예전 저장은 연봉 표에서)
 const salaryOf = s => s.salary ?? startSalary(s.playerId);
-const moneyHtml = s => `<div class="rz-money"><span>💰 연봉 <b>${won(salaryOf(s))}</b></span><span>🏦 자산 <b>${won(netWorth(s))}</b></span><span>⭐ 인기 <b>${fansOf(s)}</b></span></div>`;
+const moneyHtml = s => `<div class="rz-money"><span>연봉 <b>${won(salaryOf(s))}</b></span><span>자산 <b>${won(netWorth(s))}</b></span><span>인기 <b>${fansOf(s)}</b></span></div>`;
 // 이벤트 효과 한 줄
 const fxText = (fx, ups = []) => [fx.cond ? `컨디션 ${fx.cond > 0 ? '+' : ''}${fx.cond}` : '', fx.fat ? `피로 ${fx.fat > 0 ? '+' : ''}${fx.fat}` : '', fx.fans ? `인기 ${fx.fans > 0 ? '+' : ''}${fx.fans}` : '',
-  fx.cash ? `현금 ${fx.cash > 0 ? '+' : ''}${won(fx.cash)}` : '', ...ups.map(u => `${STAT_ICON[u.stat]} ${STAT_KO[u.stat]} +${u.n}`)].filter(Boolean).join(' · ');
+  fx.cash ? `현금 ${fx.cash > 0 ? '+' : ''}${won(fx.cash)}` : '', ...ups.map(u => `${STAT_KO[u.stat]} +${u.n}`)].filter(Boolean).join(' · ');
 const optHint = o => { const f = o.fx; if (f.gamble) return '운에 맡기기'; const t = []; if (f.cond) t.push(`컨디션 ${f.cond > 0 ? '↑' : '↓'}`); if (f.fat) t.push(`피로 ${f.fat > 0 ? '+' : ''}${f.fat}`); if (f.fans) t.push(`인기 ${f.fans > 0 ? '+' : ''}${f.fans}`); if (f.cash) t.push(`${f.cash > 0 ? '+' : ''}${won(f.cash)}`); if (f.cashFans) t.push('광고료'); if (f.xp) t.push('경험치'); return t.join(' · ') || '별일 없음'; };
 const pctTxt = x => `${x > 0 ? '▲' : x < 0 ? '▼' : ''}${Math.abs(x).toFixed(1)}%`;
 const tone = x => (x > 0.05 ? 'up' : x < -0.05 ? 'down' : '');
@@ -68,20 +68,20 @@ const ringHtml = s => (rings(s) ? ` <span class="rz-ring" title="한국시리즈
 function postNews(rep) {
   if (rep.postStart) {
     const ps = rep.postStart;
-    return ps.inPost ? `<section class="card rz-post"><div class="card-h">🍂 가을야구 진출!</div><p class="hint">정규시즌 ${ps.seed}위 · ${ps.seed === 1 ? '한국시리즈에 바로 올라가요' : `${esc(ps.series)}부터 시작해요`}</p></section>`
-      : `<section class="card"><div class="card-h">🍃 가을야구 실패</div><p class="hint">정규시즌 ${rep.team.rank}위로 시즌을 마쳤어요</p></section>`;
+    return ps.inPost ? `<section class="card rz-post"><div class="card-h">가을야구 진출!</div><p class="hint">정규시즌 ${ps.seed}위 · ${ps.seed === 1 ? '한국시리즈에 바로 올라가요' : `${esc(ps.series)}부터 시작해요`}</p></section>`
+      : `<section class="card"><div class="card-h">가을야구 실패</div><p class="hint">정규시즌 ${rep.team.rank}위로 시즌을 마쳤어요</p></section>`;
   }
   const sr = rep.series;
   if (!sr || sr.won == null) return '';
-  if (sr.won && sr.champion) return `<section class="card rz-post win"><div class="card-h">🏆 한국시리즈 우승!</div><p class="hint">${sr.w}승 ${sr.l}패로 정상에 올랐어요</p></section>`;
-  if (sr.won) return `<section class="card rz-post win"><div class="card-h">🎉 ${esc(sr.name)} 승리!</div><p class="hint">${sr.w}승 ${sr.l}패 · 다음 시리즈로 올라가요</p></section>`;
-  return `<section class="card"><div class="card-h">😢 ${esc(sr.name)} 탈락</div><p class="hint">${sr.w}승 ${sr.l}패 · 올해 가을야구는 여기까지예요</p></section>`;
+  if (sr.won && sr.champion) return `<section class="card rz-post win"><div class="card-h">한국시리즈 우승!</div><p class="hint">${sr.w}승 ${sr.l}패로 정상에 올랐어요</p></section>`;
+  if (sr.won) return `<section class="card rz-post win"><div class="card-h">${esc(sr.name)} 승리!</div><p class="hint">${sr.w}승 ${sr.l}패 · 다음 시리즈로 올라가요</p></section>`;
+  return `<section class="card"><div class="card-h">${esc(sr.name)} 탈락</div><p class="hint">${sr.w}승 ${sr.l}패 · 올해 가을야구는 여기까지예요</p></section>`;
 }
 // 시즌 시상식
 function awardsCard(s) {
   const c = contract(s);
-  if (!c.awards.length) return `<section class="card"><div class="card-h">🏅 시즌 시상식</div><p class="hint">이번 시즌은 상을 받지 못했어요. 리그 1위 기록을 내면 타이틀과 상금을 받아요.</p></section>`;
-  return `<section class="card rz-awards"><div class="card-h">🏅 시즌 시상식 ${tip('정규시즌 리그 기록 1위면 타이틀(타격왕·홈런왕·타점왕 / 평균자책점왕·탈삼진왕 / 구원왕), OPS 1위 타자나 평균자책 1위·탈삼진 3위 이내 선발은 MVP, 같은 포지션 OPS 1위 타자나 평균자책 2위 이내 선발은 골든글러브를 받아요. 상마다 상금과 인기, 다음 연봉 프리미엄이 붙어요.', '시즌 시상식')}</div>
+  if (!c.awards.length) return `<section class="card"><div class="card-h">시즌 시상식</div><p class="hint">이번 시즌은 상을 받지 못했어요. 리그 1위 기록을 내면 타이틀과 상금을 받아요.</p></section>`;
+  return `<section class="card rz-awards"><div class="card-h">시즌 시상식 ${tip('정규시즌 리그 기록 1위면 타이틀(타격왕·홈런왕·타점왕 / 평균자책점왕·탈삼진왕 / 구원왕), OPS 1위 타자나 평균자책 1위·탈삼진 3위 이내 선발은 MVP, 같은 포지션 OPS 1위 타자나 평균자책 2위 이내 선발은 골든글러브를 받아요. 상마다 상금과 인기, 다음 연봉 프리미엄이 붙어요.', '시즌 시상식')}</div>
     <div class="rz-trophies">${c.awards.map(a => `<div class="rz-trophy ${a.id === 'mvp' ? 'mvp' : ''}"><i>${a.icon}</i><b>${esc(a.name)}</b><small>+${won(a.prize)} · 연봉 +${Math.round(a.prem * 100)}%</small></div>`).join('')}</div></section>`;
 }
 
@@ -89,13 +89,13 @@ function awardsCard(s) {
 function payCard(s) {
   const c = contract(s), left = Math.max(0, c.from - (s.paid || 0)), now = netWorth(s), after = now + left + c.bonus + c.prize + c.ads;
   const tn = c.pct > 0 ? 'up' : c.pct < 0 ? 'down' : '';
-  return `<section class="card rz-pay"><div class="card-h">💰 연봉 협상 ${tip('시즌 성적(타자: 타율·OPS·타석 / 선발: 평균자책점·이닝 / 마무리: 평균자책점·세이브)으로 내년 연봉이 정해져요. 지금 연봉에서 성적만큼 몇 배로 오르거나(미친 성적이면 3배) 실제 KBO 시세 쪽으로 뛰는 것 중 큰 쪽이에요. 최대 40%까지 깎여요. 한국시리즈 우승이나 시즌 시상식 수상은 연봉 프리미엄이 붙어서 3배를 넘을 수도 있어요. 인기가 높을수록 광고 수입도 커요.', '연봉 협상')}</div>
+  return `<section class="card rz-pay"><div class="card-h">연봉 협상 ${tip('시즌 성적(타자: 타율·OPS·타석 / 선발: 평균자책점·이닝 / 마무리: 평균자책점·세이브)으로 내년 연봉이 정해져요. 지금 연봉에서 성적만큼 몇 배로 오르거나(미친 성적이면 3배) 실제 KBO 시세 쪽으로 뛰는 것 중 큰 쪽이에요. 최대 40%까지 깎여요. 한국시리즈 우승이나 시즌 시상식 수상은 연봉 프리미엄이 붙어서 3배를 넘을 수도 있어요. 정규시즌 MVP나 구원왕(리그 1등)이면 3배 한도 없이 바로 리그 최고 수준 시세를 받아요. 인기가 높을수록 광고 수입도 커요.', '연봉 협상')}</div>
     <div class="rz-payrow"><span>${s.year} 연봉</span><b>${won(c.from)}</b></div>
-    ${left ? `<div class="rz-payrow"><span>💵 아직 안 받은 연봉</span><b>+${won(left)}</b></div>` : ''}
-    ${c.prize ? `<div class="rz-payrow"><span>🏅 시상식 상금</span><b>+${won(c.prize)}</b></div>` : ''}
-    ${c.ads ? `<div class="rz-payrow"><span>📺 광고 수입 (인기 ${fansOf(s)})</span><b>+${won(c.ads)}</b></div>` : ''}
-    ${c.bonus ? `<div class="rz-payrow"><span>🏆 우승 보너스${c.mvp ? ' + 🏅 MVP 상금' : ''}</span><b>+${won(c.bonus)}</b></div>` : ''}
-    <div class="rz-payrow"><span>🏦 자산</span><b>${won(now)} → ${won(after)}</b></div>
+    ${left ? `<div class="rz-payrow"><span>아직 안 받은 연봉</span><b>+${won(left)}</b></div>` : ''}
+    ${c.prize ? `<div class="rz-payrow"><span>시상식 상금</span><b>+${won(c.prize)}</b></div>` : ''}
+    ${c.ads ? `<div class="rz-payrow"><span>광고 수입 (인기 ${fansOf(s)})</span><b>+${won(c.ads)}</b></div>` : ''}
+    ${c.bonus ? `<div class="rz-payrow"><span>우승 보너스${c.mvp ? ' + MVP 상금' : ''}</span><b>+${won(c.bonus)}</b></div>` : ''}
+    <div class="rz-payrow"><span>자산</span><b>${won(now)} → ${won(after)}</b></div>
     <div class="rz-payrow big ${tn}"><span>${s.year + 1} 연봉</span><b>${won(c.to)} <em>${c.pct > 0 ? '▲' : c.pct < 0 ? '▼' : ''}${Math.abs(c.pct)}%</em></b></div></section>`;
 }
 
@@ -113,7 +113,7 @@ function ceremonyHtml(s, team) {
   const prev = champs.length ? champs[champs.length - 1] : LAST_REAL_TITLE;
   let streak = 1;
   while (champs.includes(s.year - streak)) streak++;
-  const when = streak > 1 ? `🔥 ${streak}년 연속 우승!` : `${s.year - prev}년 만의 정상`;
+  const when = streak > 1 ? `${streak}년 연속 우승!` : `${s.year - prev}년 만의 정상`;
   const mvp = ksMvp(s), pay = contract(s);
   const rng = createRng(s.year * 7 + ring);
   const mates = [...team.batters.map(x => [x, 'b']), ...team.pitchers.map(x => [x, 'p'])].filter(([x]) => x.id !== s.playerId)
@@ -129,7 +129,7 @@ function ceremonyHtml(s, team) {
      <div class="cer-trophy">🏆</div>
      <h1 class="cer-title">${unified ? '통합 우승!' : '한국시리즈 우승!'}</h1>
      <p>시리즈 <b>${ks.wins[mi]}승 ${ks.wins[1 - mi]}패</b> · ${esc(getTeam(opp).name)}${josa(getTeam(opp).name, '을', '를')} 꺾고 정상에 올랐어요</p>
-     <p class="cer-tag">${unified ? '👑 정규시즌 1위 + 한국시리즈 우승' : `✨ 정규시즌 ${rank}위에서 시작한 기적의 가을`}</p>`,
+     <p class="cer-tag">${unified ? '정규시즌 1위 + 한국시리즈 우승' : `정규시즌 ${rank}위에서 시작한 기적의 가을`}</p>`,
     // 2. 헹가래
     `<div class="cer-kicker">그라운드 위 세리머니</div>
      <div class="cer-toss"><div class="cer-flyer">${face(p, kind, 'lg')}</div>
@@ -149,15 +149,15 @@ function ceremonyHtml(s, team) {
     `<div class="cer-kicker">챔피언의 증표</div>
      <div class="cer-ringwrap"><div class="cer-ring"><i>💎</i></div></div>
      <div class="cer-engrave">${s.year} CHAMPIONS · ${name} · #${ring}</div>
-     <h2 class="cer-h">💍 우승 반지 ${ring}개째</h2>
+     <h2 class="cer-h">우승 반지 ${ring}개째</h2>
      <p>삼성 라이온즈 통산 <b>${REAL_TITLES + ring}번째 우승</b> · ${when}</p>
-     <div class="cer-gifts"><span>🏆 우승 보너스 <b>+${won(PAY.champBonus)}</b></span>${mvp ? `<span>🏅 MVP 상금 <b>+${won(PAY.mvpBonus)}</b></span>` : ''}<span>📈 내년 연봉 <b>${won(pay.to)}</b></span></div>`,
+     <div class="cer-gifts"><span>우승 보너스 <b>+${won(PAY.champBonus)}</b></span>${mvp ? `<span>MVP 상금 <b>+${won(PAY.mvpBonus)}</b></span>` : ''}<span>내년 연봉 <b>${won(pay.to)}</b></span></div>`,
     // 5. 기념 사진
     `<div class="cer-photo"><div class="cer-banner">🏆 ${s.year} CHAMPIONS 🏆</div>
        <div class="cer-row back">${mates.slice(0, 8).map(m => mface(m)).join('')}</div>
        <div class="cer-row front">${mates.slice(8, 11).map(m => mface(m)).join('')}<span class="cer-me"><em>👑</em>${face(p, kind, 'lg')}</span>${mates.slice(11, 14).map(m => mface(m)).join('')}</div>
        <div class="cer-cap">삼성 라이온즈 · ${s.year} ${unified ? '통합 우승' : '한국시리즈 우승'}<small>${name}${mvp ? ' · 한국시리즈 MVP' : ''} · 우승 반지 ${ring}개</small></div></div>
-     <p class="hint">찰칵! 📸 우승 기념 사진이에요</p>`,
+     <p class="hint">찰칵! 우승 기념 사진이에요</p>`,
   ];
   return { n: stages.length, html: `<div class="cer-confetti" aria-hidden="true">${confetti}</div>
     <div class="cer">${stages.map((h, k) => `<section class="card cer-stage ${k ? '' : 'on'}" data-n="${k}">${h}</section>`).join('')}
@@ -172,9 +172,9 @@ function postPath(s) {
   const rows = post.series.filter(x => x.teams.includes(ME)).map(x => {
     const mi = x.teams.indexOf(ME), opp = x.teams[1 - mi];
     const won = x.wins[mi] >= x.need;
-    return `<tr class="${won ? 'me' : ''}"><td>${esc(x.name)}</td><td>${opp ? `${badge(opp)} ${getTeam(opp).short}` : '-'}</td><td>${x.wins[mi]}승 ${x.wins[1 - mi]}패 ${won ? '✅' : '❌'}</td></tr>`;
+    return `<tr class="${won ? 'me' : ''}"><td>${esc(x.name)}</td><td>${opp ? `${badge(opp)} ${getTeam(opp).short}` : '-'}</td><td>${x.wins[mi]}승 ${x.wins[1 - mi]}패 ${won ? '' : ''}</td></tr>`;
   }).join('');
-  return `<section class="card flush"><div class="card-h pad">🍂 ${s.year} 가을야구</div><table class="rz-table">${rows}</table>
+  return `<section class="card flush"><div class="card-h pad">${s.year} 가을야구</div><table class="rz-table">${rows}</table>
     ${s.season.champion && s.season.champion !== ME ? `<p class="hint pad">우승: ${getTeam(s.season.champion).name}</p>` : ''}</section>`;
 }
 
@@ -187,7 +187,7 @@ function seasonStatsCard(slot) {
   const c = seasonCard(slot);
   const group = c.kind === 'bat' ? '타자' : slot.role === 'SP' ? '선발 투수' : '불펜 투수';
   const head = `상위 N%: 이번 시즌 규정(${c.need})을 채운 리그 ${group} ${c.pool}명 중 내 순위예요. 1%에 가까울수록 리그 최고예요.`;
-  return `<section class="card rz-season"><div class="card-h">📊 ${slot.year} 시즌 기록 ${tip(head, '상위 퍼센트')}</div>
+  return `<section class="card rz-season"><div class="card-h">${slot.year} 시즌 기록 ${tip(head, '상위 퍼센트')}</div>
       <div class="rz-sgrid">${c.rows.map(r => `<div class="rz-st ${tier(r.pct)}">
         <span class="k">${esc(r.name)}${tip(r.info, r.name)}</span><b>${esc(r.text)}</b><em>${r.pct ? `${r.rank}위 · 상위 ${r.pct}%` : '&nbsp;'}</em></div>`).join('')}</div>
       <p class="hint">${esc(c.extra)}</p>
@@ -209,7 +209,7 @@ function boardTable(slot, key) {
 }
 function boardCard(slot, key) {
   const defs = STAT_DEFS[slot.kind === 'pitch' ? 'pit' : 'bat'];
-  return `<section class="card rz-boardc"><div class="card-h">🏅 리그 ${groupName(slot)} 순위표 ${tip(`이번 시즌 규정을 채운 리그 ${groupName(slot)}끼리 매긴 순위예요. 기록이 같으면 공동 순위예요.`, '순위표')}</div>
+  return `<section class="card rz-boardc"><div class="card-h">리그 ${groupName(slot)} 순위표 ${tip(`이번 시즌 규정을 채운 리그 ${groupName(slot)}끼리 매긴 순위예요. 기록이 같으면 공동 순위예요.`, '순위표')}</div>
       <div class="rz-tabs">${defs.map(d => `<button type="button" class="rz-tab ${d.key === key ? 'on' : ''}" data-act="board" data-k="${d.key}">${esc(d.name)}</button>`).join('')}</div>
       <div class="rz-bbody">${boardTable(slot, key)}</div></section>`;
 }
@@ -272,7 +272,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
   function slotsView() {
     const broken = !brokenShown && data.broken.length ? `<p class="note">저장된 육성 슬롯 ${data.broken.map(i => i + 1).join(', ')}번이 손상돼서 비웠어요.</p>` : '';
     brokenShown = true;
-    screen(`<header class="bar"><button class="ghost small" data-act="back">←</button><h2>🌱 육성모드</h2></header>
+    screen(`<header class="bar"><button class="ghost small" data-act="back" aria-label="뒤로">${icon('back')}</button><h2>육성모드</h2></header>
       <p class="hint">삼성 선수 한 명을 골라 끝없이 키워요. 경기와 경기 사이에 훈련이나 휴식을 하나 고르고, 경기에서는 내 선수 장면만 직접 해요.</p>${broken}
       ${data.slots.map((s, i) => s ? `<section class="card rz-slot">
         <div class="rz-who">${face(slotPlayer(s), s.kind === 'bat' ? 'b' : 'p')}<div><b>${esc(slotPlayer(s).name)}${ringHtml(s)}</b><small>${roleOf(s)} · ${dayInfo(s).label}</small></div>${condHtml(s.condition)}</div>
@@ -291,17 +291,17 @@ export function showRaise(root, { storage, loadGame, onBack }) {
   }
 
   // ── 선수 고르기 ──
-  const gamesSeg = (games, act) => `<div class="seg rz-games">${RAISE.seasonGames.map(g => `<button data-act="${act}" data-g="${g}" class="${g === games ? 'on' : ''}">📅 ${g}경기</button>`).join('')}</div>`;
+  const gamesSeg = (games, act) => `<div class="seg rz-games">${RAISE.seasonGames.map(g => `<button data-act="${act}" data-g="${g}" class="${g === games ? 'on' : ''}">${g}경기</button>`).join('')}</div>`;
   function pickView(i, kind, games = RAISE.seasonGames[0]) {
     const t = withSpeed(getTeam(ME)), list = kind === 'bat' ? t.batters : t.pitchers;
-    screen(`<header class="bar"><button class="ghost small" data-act="back">←</button><h2>${i + 1}번 슬롯 · 선수 고르기</h2></header>
-      <div class="seg"><button data-act="kind" data-k="bat" class="${kind === 'bat' ? 'on' : ''}">🏏 타자</button><button data-act="kind" data-k="pitch" class="${kind === 'pitch' ? 'on' : ''}">⚾ 투수</button></div>
+    screen(`<header class="bar"><button class="ghost small" data-act="back" aria-label="뒤로">${icon('back')}</button><h2>${i + 1}번 슬롯 · 선수 고르기</h2></header>
+      <div class="seg"><button data-act="kind" data-k="bat" class="${kind === 'bat' ? 'on' : ''}">타자</button><button data-act="kind" data-k="pitch" class="${kind === 'pitch' ? 'on' : ''}">투수</button></div>
       <p class="hint">정규시즌 경기 수 (시즌이 끝날 때마다 바꿀 수 있어요)</p>${gamesSeg(games, 'games')}
       <p class="hint">${kind === 'bat' ? '타자는 내 타석만 직접 쳐요.' : '선발은 4경기마다 선발로 나가 강판될 때까지 던지고, 마무리는 점수 차가 3점 이하인 9회에 나와요.'} 능력치는 원래 명단 값에서 시작해요.</p>
-      <button class="chip rz-make" data-act="make"><b>✨ 나만의 선수 만들기</b><small>이름·얼굴·포지션·능력치를 직접 정해서 삼성에 입단해요</small></button>
+      <button class="chip rz-make" data-act="make"><b>나만의 선수 만들기</b><small>이름·얼굴·포지션·능력치를 직접 정해서 삼성에 입단해요</small></button>
       <div class="rz-pick">${list.map(p => `<button class="chip rz-pp" data-act="pick" data-id="${p.id}">
         <span class="rz-who">${face(p, kind === 'bat' ? 'b' : 'p')}<span><b>${esc(p.name)}</b><small>${kind === 'bat' ? `${p.pos} · ${p.bats === 'L' ? '좌타' : p.bats === 'S' ? '양타' : '우타'}` : `${ROLE[p.role === 'SP' ? 'SP' : 'CL']} · ${p.throws === 'L' ? '좌투' : '우투'}`}</small></span></span>
-        ${STATS[kind].map(k => `<span class="ms"><span>${STAT_ICON[k]}</span><i><u style="width:${barPct(k, p[k])}%"></u></i><em>${p[k]}</em></span>`).join('')}
+        ${STATS[kind].map(k => `<span class="ms"><span>${STAT_KO[k]}</span><i><u style="width:${barPct(k, p[k])}%"></u></i><em>${p[k]}</em></span>`).join('')}
       </button>`).join('')}</div>`);
     act('back', slotsView);
     act('kind', b => pickView(i, b.dataset.k, games));
@@ -332,8 +332,8 @@ export function showRaise(root, { storage, loadGame, onBack }) {
     const c = draft, g = CUSTOM[groupOf(c)], kindKey = c.kind === 'bat' ? 'b' : 'p';
     const left = () => g.budget - usedPoints(draft);
     const seg = (act, opts, cur) => `<div class="seg">${opts.map(([v, t]) => `<button data-act="${act}" data-v="${v}" class="${v === cur ? 'on' : ''}">${t}</button>`).join('')}</div>`;
-    screen(`<header class="bar"><button class="ghost small" data-act="back">←</button><h2>✨ 나만의 선수</h2></header>
-      ${seg('mkind', [['bat', '🏏 타자'], ['pitch', '⚾ 투수']], c.kind)}
+    screen(`<header class="bar"><button class="ghost small" data-act="back" aria-label="뒤로">${icon('back')}</button><h2>나만의 선수</h2></header>
+      ${seg('mkind', [['bat', '타자'], ['pitch', '투수']], c.kind)}
       <section class="card rz-make-card">
         <div class="rz-make-top">${face(customPlayer({ ...c, name: c.name || '선수' }), kindKey, 'lg')}
           <label class="rz-namebox"><span>이름</span><input type="text" data-k="name" maxlength="${NAME_MAX}" placeholder="최대 ${NAME_MAX}글자" value="${esc(c.name)}" autocomplete="off"></label></div>
@@ -342,17 +342,17 @@ export function showRaise(root, { storage, loadGame, onBack }) {
         ${c.kind === 'bat'
           ? `<div class="card-h">포지션</div><div class="rz-poss">${POSITIONS.map(p => `<button class="chip ${p === c.pos ? 'on' : ''}" data-act="mpos" data-v="${p}"><b>${p}</b><small>${POS_KO[p]}</small></button>`).join('')}</div>
              <div class="card-h">타석</div>${seg('mbats', [['R', '우타'], ['L', '좌타'], ['S', '양타']], c.bats)}`
-          : `<div class="card-h">역할</div>${seg('mrole', [['SP', '🔥 선발'], ['CL', '🔒 마무리']], c.role)}
+          : `<div class="card-h">역할</div>${seg('mrole', [['SP', '선발'], ['CL', '마무리']], c.role)}
              <div class="card-h">던지는 손</div>${seg('mthrows', [['R', '우투'], ['L', '좌투']], c.throws)}`}
       </section>
       <section class="card"><div class="card-h">능력치 <span class="pill rz-left">남은 포인트 <b>${left()}</b></span></div>
         <p class="hint">${g.budget}포인트를 나눠요${c.kind === 'pitch' ? ' (구속은 1km에 3포인트)' : ''}. 다 쓰면 삼성 주전급이고, 그다음은 훈련으로 키워요. 다른 능력치를 내리면 포인트가 다시 생겨요.</p>
-        <div class="rz-sliders">${Object.entries(g.stats).map(([k, [lo, hi]]) => `<label class="rz-slider"><span>${STAT_ICON[k]} ${STAT_KO[k]}</span>
+        <div class="rz-sliders">${Object.entries(g.stats).map(([k, [lo, hi]]) => `<label class="rz-slider"><span>${STAT_KO[k]}</span>
           <input type="range" min="${lo}" max="${hi}" step="1" value="${c[k]}" data-k="${k}"><em data-v="${k}">${c[k]}${VELO_KM(k)}</em></label>`).join('')}</div>
-        <div class="actions"><button class="ghost small" data-act="mrand">🎲 무작위로 나누기</button></div></section>
+        <div class="actions"><button class="ghost small" data-act="mrand">무작위로 나누기</button></div></section>
       <p class="hint center">정규시즌 경기 수</p>${gamesSeg(games, 'mgames')}
       <p class="hint center">연봉은 최저 연봉 ${won(PAY.min)}에서 시작해요</p>
-      <div class="actions"><button class="primary big" data-act="mgo" ${validCustom(c) ? '' : 'disabled'}>⚾ 이 선수로 입단</button></div>`);
+      <div class="actions"><button class="primary big" data-act="mgo" ${validCustom(c) ? '' : 'disabled'}>이 선수로 입단</button></div>`);
     const refresh = () => {
       const l = root.querySelector('.rz-left b'); if (l) l.textContent = left();
       const go = root.querySelector('[data-act=mgo]'); if (go) go.disabled = !validCustom(draft);
@@ -405,43 +405,51 @@ export function showRaise(root, { storage, loadGame, onBack }) {
     const p = slotPlayer(s), d = dayInfo(s), opp = getTeam(d.opponentId), st = standings(s.season).find(x => x.id === ME);
     const drills = DRILLS.filter(x => x.kind === s.kind);
     const rehabOk = canChoose(s, 'rehab').ok;
-    const choiceHtml = s.chosen ? `<p class="rz-done">✅ ${flash ? esc(flash) : '오늘 선택을 마쳤어요'}</p>`
+    const choiceHtml = s.chosen ? `<p class="rz-done">${flash ? esc(flash) : '오늘 선택을 마쳤어요'}</p>`
       : s.injury ? `<div class="rz-drills">
-        <button class="chip rest" data-act="choose" data-id="rest"><b>🛌 재활 휴식</b><small>피로 ${RAISE.rest - (has(s, 'bed') ? LIFE.bedRest : 0)} · 하루씩 나아요</small></button>
-        <button class="chip light" data-act="choose" data-id="rehab" ${rehabOk ? '' : 'disabled'}><b>🏥 프리미엄 재활</b><small>${won(LIFE.rehabCost)} · 하루 더 빨리 나아요</small><small class="${rehabOk ? '' : 'tired'}">${rehabOk ? '전문 재활 센터' : '현금이 모자라요'}</small></button></div>
+        <button class="chip rest" data-act="choose" data-id="rest"><b>재활 휴식</b><small>피로 ${RAISE.rest - (has(s, 'bed') ? LIFE.bedRest : 0)} · 하루씩 나아요</small></button>
+        <button class="chip light" data-act="choose" data-id="rehab" ${rehabOk ? '' : 'disabled'}><b>프리미엄 재활</b><small>${won(LIFE.rehabCost)} · 하루 더 빨리 나아요</small><small class="${rehabOk ? '' : 'tired'}">${rehabOk ? '전문 재활 센터' : '현금이 모자라요'}</small></button></div>
         <p class="hint">다친 동안은 훈련도 경기도 못 해요. 피로가 높은 채로 경기에 나가면 다치기 쉬워요.</p>`
       : `<div class="rz-drills">${drills.map(x => {
         const c = canChoose(s, x.id), n = s.progress.train[x.id] || 0, tr = x.trait && traitOf(x.trait);
-        const sub = x.drill ? (s.traits.includes(x.trait) ? `${tr.name} 보유` : `→ ${tr.name} ${Math.min(n, RAISE.drillNeed)}/${RAISE.drillNeed}`) : `${STAT_ICON[x.stat]} ${STAT_KO[x.stat]} ${p[x.stat]}`;
+        const sub = x.drill ? (s.traits.includes(x.trait) ? `${tr.name} 보유` : `→ ${tr.name} ${Math.min(n, RAISE.drillNeed)}/${RAISE.drillNeed}`) : `${STAT_KO[x.stat]} ${p[x.stat]}`;
         const how = x.quick ? '달리기 트랙 · 바로 끝' : x.light ? '바로 끝 · 효과 조금' : s.kind === 'bat' ? `타격 ${RAISE.practiceGoal.bat}번` : `투구 ${RAISE.practiceGoal.pitch}구`;
-        return `<button class="chip ${x.drill ? 'drill' : instant(x) ? 'light' : ''}" data-act="choose" data-id="${x.id}" ${c.ok ? '' : 'disabled'}><b>${x.quick ? '🏃 ' : x.light ? (x.stat === 'power' ? '🏋️ ' : '🧘 ') : ''}${x.name}</b><small>${sub}</small><small class="${c.ok ? '' : 'tired'}">${c.ok ? `피로 +${x.cost} · ${how}` : '너무 지쳤어요'}</small></button>`;
+        return `<button class="chip ${x.drill ? 'drill' : instant(x) ? 'light' : ''}" data-act="choose" data-id="${x.id}" ${c.ok ? '' : 'disabled'}><b>${x.name}</b><small>${sub}</small><small class="${c.ok ? '' : 'tired'}">${c.ok ? `피로 +${x.cost} · ${how}` : '너무 지쳤어요'}</small></button>`;
       }).join('')}
-        <button class="chip rest" data-act="choose" data-id="rest"><b>😴 휴식</b><small>피로 ${RAISE.rest} · 컨디션이 보통 쪽으로</small><small>오늘 경기는 결장</small></button></div>
+        <button class="chip rest" data-act="choose" data-id="rest"><b>휴식</b><small>피로 ${RAISE.rest} · 컨디션이 보통 쪽으로</small><small>오늘 경기는 결장</small></button></div>
       <p class="hint">훈련을 고르면 연습장에서 직접 ${s.kind === 'bat' ? '쳐요' : '던져요'}. 잘할수록 많이 오르고, 중간에 나가면 훈련은 없던 일이 돼요. 훈련한 날도 경기에는 나가요. 휴식한 날만 쉬어요.</p>`;
-    screen(`<header class="bar"><button class="ghost small" data-act="back">←</button><h2>🌱 육성모드</h2><button class="ghost small rz-rec" data-act="records">📜 기록</button></header>
-      ${lastGameHtml(i)}
-      <section class="card rz-card">
-        <div class="rz-who">${face(p, s.kind === 'bat' ? 'b' : 'p', 'lg')}<div><b class="rz-name">${esc(p.name)}${ringHtml(s)}</b><small>삼성 · ${roleOf(s)} · ${s.year} 시즌</small></div>${condHtml(s.condition)}</div>
-        <div class="rz-stats">${STATS[s.kind].map(k => `<span class="ms"><span>${STAT_ICON[k]} ${STAT_KO[k]}</span><i><u style="width:${barPct(k, p[k])}%"></u></i><em>${p[k]}${k === 'velo' ? 'km' : ''}</em></span>`).join('')}</div>
-        ${trustHtml(s)}
-        <div class="rz-fat"><span>😮‍💨 피로</span><i><u class="${s.fatigue >= RAISE.tiredAt ? 'hi' : ''}" style="width:${s.fatigue}%"></u></i><em>${Math.round(s.fatigue)}</em></div>
-        ${s.traits.length ? `<div class="rz-traits">${s.traits.map(t => `<span class="rz-trait" title="${esc(traitOf(t).desc)}">✨ ${esc(traitOf(t).name)}</span>`).join('')}</div>` : '<p class="hint">특성은 특훈을 4번 하거나 경기에서 활약하면 생겨요</p>'}
-        ${s.injury ? `<p class="rz-hurt">🤕 ${esc(s.injury.name)} · ${s.injury.left}경기 더 쉬어야 해요</p>` : s.fatigue >= LIFE.injury.safe ? `<p class="rz-hurt warn">⚠️ 피로가 높아 경기에 나가면 다칠 수 있어요</p>` : ''}
-        <p class="hint">${seasonLine(s, s.stats)}</p>
-        ${moneyHtml(s)}
-        <div class="rz-moneybtns"><button class="ghost small" data-act="invest">📈 재테크</button><button class="ghost small" data-act="shop">🛍️ 쇼핑</button></div>
+    // 나이트 스타디움: 밤 구장 사진 위에 선수 그림과 이름, 능력치 타일, 아래에 붙어 있는 경기 시작 줄
+    const man = new URL('../../assets/' + (s.kind === 'bat' ? 'ui/title_man.webp' : 'sprites/pitcher_front_16.webp'), import.meta.url).href;
+    const why = s.injury ? '부상 · 결장' : d.resting ? '휴식 · 결장' : d.plan === 'none' ? '벤치' : '등판 없음';
+    screen(`<img class="ns-man ${s.kind}" alt="" src="${man}">
+      <header class="bar"><button class="ghost small" data-act="back" aria-label="뒤로">${icon('back')}</button><h2>육성모드</h2><button class="ghost small rz-rec" data-act="records">기록</button></header>
+      <section class="ns-who">
+        <small>SAMSUNG · ${roleOf(s)}</small>
+        <h1>${esc(p.name)}${ringHtml(s)}</h1>
+        <p>${s.year} 시즌 · ${seasonLine(s, s.stats)}</p>
+        ${condHtml(s.condition)}
       </section>
+      <div class="ns-stats n${STATS[s.kind].length}">${STATS[s.kind].map(k => `<div><small>${STAT_KO[k]}</small><b>${p[k]}${k === 'velo' ? '<em>km</em>' : ''}</b><i><u style="width:${barPct(k, p[k])}%"></u></i></div>`).join('')}</div>
+      <section class="card ns-body">
+        <div class="rz-fat"><span>피로</span><i><u class="${s.fatigue >= RAISE.tiredAt ? 'hi' : ''}" style="width:${s.fatigue}%"></u></i><em>${Math.round(s.fatigue)}</em></div>
+        ${trustHtml(s)}
+        ${s.traits.length ? `<div class="rz-traits">${s.traits.map(t => `<span class="rz-trait" title="${esc(traitOf(t).desc)}">${esc(traitOf(t).name)}</span>`).join('')}</div>` : '<p class="hint">특성은 특훈을 4번 하거나 경기에서 활약하면 생겨요</p>'}
+        ${s.injury ? `<p class="rz-hurt">${esc(s.injury.name)} · ${s.injury.left}경기 더 쉬어야 해요</p>` : s.fatigue >= LIFE.injury.safe ? `<p class="rz-hurt warn">피로가 높아 경기에 나가면 다칠 수 있어요</p>` : ''}
+        <div class="ns-meta"><span>연봉<b>${won(salaryOf(s))}</b></span><span>자산<b>${won(netWorth(s))}</b></span><span>인기<b>${fansOf(s)}</b></span></div>
+        <div class="rz-moneybtns"><button class="ghost small" data-act="invest">재테크</button><button class="ghost small" data-act="shop">쇼핑</button></div>
+      </section>
+      ${lastGameHtml(i)}
       ${eventHtml(s)}
-      <section class="card"><div class="card-h">🗓️ 오늘의 선택</div>${choiceHtml}</section>
+      <section class="card ns-choice"><div class="card-h">오늘의 선택</div>${choiceHtml}</section>
       <section class="card next">
-        <div class="card-h">${d.post ? '🍂' : '⚾'} ${d.label}<span class="pill">${d.post ? `정규시즌 ${st.rank}위` : `${st.w}승 ${st.l}패${st.d ? ' ' + st.d + '무' : ''} · ${st.rank}위`}</span></div>
-        ${d.post ? `<p class="hint center">🍂 가을야구 · ${esc(d.series.name)} ${d.series.need}승 하면 다음 단계로${d.series.name === '한국시리즈' ? ' (우승!)' : ''}</p>` : ''}
-        <div class="vs-row"><div class="side" style="--c:${opp.colors.main}">${badge(opp.id, 'lg')}<b>${opp.short}</b><small>✈️ 원정</small></div><span class="vs">VS</span><div class="side" style="--c:${getTeam(ME).colors.main}">${badge(ME, 'lg')}<b>삼성</b><small>🏠 홈</small></div></div>
-        ${s.role === 'SP' ? `<p class="hint center">${d.myStart ? '🔥 오늘 선발 등판이에요' : `오늘은 등판이 없어요 · ${d.nextStartIn == null ? '이번 시즌 남은 선발이 없어요' : `다음 선발까지 ${d.nextStartIn}경기`}`}</p>` : ''}
+        <div class="card-h">${d.label}<span class="pill">${d.post ? `정규시즌 ${st.rank}위` : `${st.w}승 ${st.l}패${st.d ? ' ' + st.d + '무' : ''} · ${st.rank}위`}</span></div>
+        ${d.post ? `<p class="hint center">가을야구 · ${esc(d.series.name)} ${d.series.need}승 하면 다음 단계로${d.series.name === '한국시리즈' ? ' (우승!)' : ''}</p>` : ''}
+        <div class="vs-row"><div class="side" style="--c:${opp.colors.main}">${badge(opp.id, 'lg')}<b>${opp.short}</b><small>원정</small></div><span class="vs">VS</span><div class="side" style="--c:${getTeam(ME).colors.main}">${badge(ME, 'lg')}<b>삼성</b><small>홈</small></div></div>
+        ${s.role === 'SP' ? `<p class="hint center">${d.myStart ? '오늘 선발 등판이에요' : `오늘은 등판이 없어요 · ${d.nextStartIn == null ? '이번 시즌 남은 선발이 없어요' : `다음 선발까지 ${d.nextStartIn}경기`}`}</p>` : ''}
         ${!s.chosen ? '<p class="hint center">선택 없이 경기에 나가면 피로가 조금만 풀려요</p>' : ''}
-        ${s.injury ? '<p class="hint center">🤕 부상으로 오늘 경기에 나가지 않아요</p>' : d.resting ? '<p class="hint center">😴 오늘은 휴식이라 경기에 나가지 않아요</p>' : d.plan ? `<p class="hint center rz-plan">${PLAN[d.plan]}</p>` : ''}
-        <div class="actions">${d.needsScreen ? '<button class="primary big" data-act="play">▶ 경기 시작</button>' : `<button class="primary big" data-act="play">⏩ 경기 진행 (${s.injury ? '부상 · 결장' : d.resting ? '휴식 · 결장' : d.plan === 'none' ? '벤치' : '등판 없음'})</button>`}</div>
-      </section>`);
+        ${s.injury ? '<p class="hint center">부상으로 오늘 경기에 나가지 않아요</p>' : d.resting ? '<p class="hint center">오늘은 휴식이라 경기에 나가지 않아요</p>' : d.plan ? `<p class="hint center rz-plan">${PLAN[d.plan]}</p>` : ''}
+      </section>
+      <div class="ns-dock"><div><small>${d.label}${d.needsScreen ? '' : ' · ' + why}</small><b>${opp.short} vs 삼성</b></div><button class="primary big" data-act="play">${d.needsScreen ? '경기 시작' : '경기 진행'}${icon('play')}</button></div>`, 'ns');
     act('back', () => { flash = null; slotsView(); });
     act('records', () => recordsView(i));
     act('invest', () => investView(i));
@@ -473,7 +481,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
     const r = choose(data.slots[i], x.id);
     data = { ...data, slots: data.slots.map((q, j) => (j === i ? r.slot : q)) }; persist();
     const ups = r.ups.map(u => `${STAT_KO[u.stat]} +${u.n}`).join(', ');
-    flash = `${x.quick ? '🏃 트랙을 힘껏 달렸어요 · ' : ''}${x.name} 완료${ups ? ` · ${ups}` : ` · ${STAT_KO[x.stat]} 경험치가 ${x.quick ? '' : '조금 '}쌓였어요`}`;
+    flash = `${x.quick ? '트랙을 힘껏 달렸어요 · ' : ''}${x.name} 완료${ups ? ` · ${ups}` : ` · ${STAT_KO[x.stat]} 경험치가 ${x.quick ? '' : '조금 '}쌓였어요`}`;
     hubView(i);
   }
 
@@ -495,7 +503,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
       data = { ...data, slots: data.slots.map((q, j) => (j === i ? r.slot : q)) }; persist();
       const k = pr.pts / RAISE.practiceRef[kind], grade = k >= 1.3 ? '훌륭해요!' : k >= 0.9 ? '좋아요' : '아쉬워요';
       const ups = r.ups.map(u => `${STAT_KO[u.stat]} +${u.n}`).join(', ');
-      flash = `${x.name} 완료 · 연습 점수 ${pr.pts.toFixed(1)} ${grade}${ups ? ` · ${ups}` : ' · 경험치가 쌓였어요'}${r.trait ? ` · ✨ 특성 '${traitOf(r.trait).name}'을 얻었어요!` : ''}`;
+      flash = `${x.name} 완료 · 연습 점수 ${pr.pts.toFixed(1)} ${grade}${ups ? ` · ${ups}` : ' · 경험치가 쌓였어요'}${r.trait ? ` · 특성 '${traitOf(r.trait).name}'을 얻었어요!` : ''}`;
       hubView(i);
     });
   }
@@ -530,8 +538,8 @@ export function showRaise(root, { storage, loadGame, onBack }) {
     if (!g) return '';
     const res = g.hs > g.as ? '<b class="win">승리</b>' : g.hs < g.as ? '<b class="lose">패배</b>' : '<b>무승부</b>';
     const team = rep.post ? `${esc(rep.series.name)} ${rep.series.w}승 ${rep.series.l}패` : `${rep.team.w}승 ${rep.team.l}패${rep.team.d ? ' ' + rep.team.d + '무' : ''} · ${rep.team.rank}위`;
-    const money = rep.money ? ` · 💵 +${won(rep.money.pay)}${rep.money.change ? ` · 📈 ${rep.money.change > 0 ? '+' : ''}${won(rep.money.change)}` : ''}` : '';
-    return `<section class="card rz-last"><span>⏩ 지난 경기</span><span class="rz-lastscore">${badge(g.away)} ${g.as} : ${g.hs} ${badge(g.home)} ${res}</span><small>${team}${money}</small></section>`;
+    const money = rep.money ? ` · +${won(rep.money.pay)}${rep.money.change ? ` · ${rep.money.change > 0 ? '+' : ''}${won(rep.money.change)}` : ''}` : '';
+    return `<section class="card rz-last"><span>지난 경기</span><span class="rz-lastscore">${badge(g.away)} ${g.as} : ${g.hs} ${badge(g.home)} ${res}</span><small>${team}${money}</small></section>`;
   }
 
   // ── 경기 결과 ──
@@ -539,28 +547,28 @@ export function showRaise(root, { storage, loadGame, onBack }) {
     const s = data.slots[i], p = slotPlayer(s), g = rep.game;
     const res = !g ? '경기 종료' : g.hs > g.as ? '승리' : g.hs < g.as ? '패배' : '무승부';
     const line = s.kind === 'bat' ? batLine(rep.line.bat && { ...rep.line.bat, ...(rep.run || {}) }) : pitLine(rep.line.pit, rep.dec);
-    const why = rep.rested && (rep.injuryLeft || rep.healed) ? `🤕 부상으로 쉬었어요${rep.injuryLeft ? ` · ${rep.injuryLeft}경기 더 쉬어야 해요` : ''}` : rep.rested ? '😴 오늘은 휴식하며 경기에 나가지 않았어요' : NOTE[note] || (!rep.appeared ? (s.kind === 'bat' ? '오늘은 타석에 서지 못했어요' : '오늘은 등판이 없었어요') : '');
+    const why = rep.rested && (rep.injuryLeft || rep.healed) ? `부상으로 쉬었어요${rep.injuryLeft ? ` · ${rep.injuryLeft}경기 더 쉬어야 해요` : ''}` : rep.rested ? '오늘은 휴식하며 경기에 나가지 않았어요' : NOTE[note] || (!rep.appeared ? (s.kind === 'bat' ? '오늘은 타석에 서지 못했어요' : '오늘은 등판이 없었어요') : '');
     screen(`<div class="eyebrow center">${esc(p.name)} · ${s.year} ${rep.post ? `가을야구 · ${esc(rep.series.name)}` : `시즌 ${s.season.round}/${s.season.schedule.length}경기`}</div>
       <div class="re">${res === '승리' ? '🎉' : res === '패배' ? '😢' : '⚾'}</div>
       <h1 class="res ${res === '승리' ? 'win' : res === '패배' ? 'lose' : ''}">${res}</h1>
       ${g ? `<div class="scoreline">${badge(g.away, 'lg')}<b>${g.as}</b><i>:</i><b>${g.hs}</b>${badge(g.home, 'lg')}</div>` : ''}
       ${rep.post ? `<p class="hint center">${esc(rep.series.name)} ${rep.series.w}승 ${rep.series.l}패</p>` : `<p class="hint center">팀 ${rep.team.w}승 ${rep.team.l}패${rep.team.d ? ' ' + rep.team.d + '무' : ''} · ${rep.team.rank}위</p>`}
       ${postNews(rep)}
-      ${rep.hurt ? `<section class="card rz-hurtcard"><div class="card-h">🤕 부상! ${esc(rep.hurt.name)}</div><p class="hint">${rep.hurt.major ? '꽤 큰 부상이에요. ' : ''}${rep.hurt.left}경기 동안 쉬어야 해요. 피로가 높을 때 무리하면 다치기 쉬워요.</p></section>` : ''}
-      ${rep.promoted ? '<section class="card rz-post win rz-promo"><div class="card-h">🎉 주전 승격!</div><p class="hint">감독이 실력을 인정했어요. 이제 매일 지명타자로 선발 출전해요!</p></section>' : ''}
-      ${rep.healed ? '<section class="card rz-post win"><div class="card-h">💪 부상 회복!</div><p class="hint">다음 경기부터 다시 뛸 수 있어요</p></section>' : ''}
-      ${rep.traitsNew.length ? `<section class="card rz-newtrait">${rep.traitsNew.map(t => `<div class="card-h">✨ 새 특성 · ${esc(traitOf(t).name)}</div><p class="hint">${esc(traitOf(t).desc)}</p>`).join('')}</section>` : ''}
-      <section class="card"><div class="card-h">📋 오늘 ${esc(p.name)}</div>
+      ${rep.hurt ? `<section class="card rz-hurtcard"><div class="card-h">부상! ${esc(rep.hurt.name)}</div><p class="hint">${rep.hurt.major ? '꽤 큰 부상이에요. ' : ''}${rep.hurt.left}경기 동안 쉬어야 해요. 피로가 높을 때 무리하면 다치기 쉬워요.</p></section>` : ''}
+      ${rep.promoted ? '<section class="card rz-post win rz-promo"><div class="card-h">주전 승격!</div><p class="hint">감독이 실력을 인정했어요. 이제 매일 지명타자로 선발 출전해요!</p></section>' : ''}
+      ${rep.healed ? '<section class="card rz-post win"><div class="card-h">부상 회복!</div><p class="hint">다음 경기부터 다시 뛸 수 있어요</p></section>' : ''}
+      ${rep.traitsNew.length ? `<section class="card rz-newtrait">${rep.traitsNew.map(t => `<div class="card-h">새 특성 · ${esc(traitOf(t).name)}</div><p class="hint">${esc(traitOf(t).desc)}</p>`).join('')}</section>` : ''}
+      <section class="card"><div class="card-h">오늘 ${esc(p.name)}</div>
         <p class="rz-line">${line || '-'}</p>${why ? `<p class="hint">${why}</p>` : ''}
         <p class="hint">컨디션 ${condHtml(rep.condFrom)} → ${condHtml(rep.condTo)} · 피로 ${Math.round(s.fatigue)}</p>
-        ${rep.fansTo != null && rep.fansTo !== rep.fansFrom ? `<p class="hint">⭐ 인기 ${rep.fansFrom} → ${rep.fansTo}</p>` : ''}
-        ${rep.trustTo != null && !rep.promoted && rep.trustTo !== rep.trustFrom ? `<p class="hint">🧢 감독 신뢰도 ${Math.round(rep.trustFrom)} → ${Math.round(rep.trustTo)} / ${RAISE.bench.need}</p>` : ''}
-        ${rep.money ? `<p class="hint rz-today-money">💵 연봉 +${won(rep.money.pay)}${rep.money.change ? ` · 📈 투자 <span class="${tone(rep.money.change)}">${rep.money.change > 0 ? '+' : ''}${won(rep.money.change)}</span>` : ''}</p>` : ''}
-        ${rep.ups.length ? `<div class="ups">${rep.ups.map(u => `<div><b>${STAT_ICON[u.stat]} ${STAT_KO[u.stat]}</b><span><em>+${u.n}${u.stat === 'velo' ? 'km' : ''}</em></span></div>`).join('')}</div>` : ''}
+        ${rep.fansTo != null && rep.fansTo !== rep.fansFrom ? `<p class="hint">인기 ${rep.fansFrom} → ${rep.fansTo}</p>` : ''}
+        ${rep.trustTo != null && !rep.promoted && rep.trustTo !== rep.trustFrom ? `<p class="hint">감독 신뢰도 ${Math.round(rep.trustFrom)} → ${Math.round(rep.trustTo)} / ${RAISE.bench.need}</p>` : ''}
+        ${rep.money ? `<p class="hint rz-today-money">연봉 +${won(rep.money.pay)}${rep.money.change ? ` · 투자 <span class="${tone(rep.money.change)}">${rep.money.change > 0 ? '+' : ''}${won(rep.money.change)}</span>` : ''}</p>` : ''}
+        ${rep.ups.length ? `<div class="ups">${rep.ups.map(u => `<div><b>${STAT_KO[u.stat]}</b><span><em>+${u.n}${u.stat === 'velo' ? 'km' : ''}</em></span></div>`).join('')}</div>` : ''}
       </section>
       ${seasonStatsCard(s)}
       ${boardCard(s, boardKey[s.kind])}
-      <div class="actions"><button class="primary big" data-act="ok">${rep.seasonOver ? (rep.series && rep.series.champion ? '🏆 우승 세리머니' : '시즌 결산 보기') : '확인'}</button></div>`, 'result');
+      <div class="actions"><button class="primary big" data-act="ok">${rep.seasonOver ? (rep.series && rep.series.champion ? '우승 세리머니' : '시즌 결산 보기') : '확인'}</button></div>`, 'result');
     act('ok', () => hubView(i));
     bindBoard(s);
   }
@@ -584,7 +592,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
     const show = n => {
       root.querySelectorAll('.cer-stage').forEach(el => el.classList.toggle('on', +el.dataset.n === n));
       root.querySelectorAll('.cer-dots i').forEach((el, j) => el.classList.toggle('on', j <= n));
-      const b = root.querySelector('[data-act=cnext]'); if (b) b.textContent = n === c.n - 1 ? '📜 시즌 결산 보기' : '다음 ▶';
+      const b = root.querySelector('[data-act=cnext]'); if (b) b.textContent = n === c.n - 1 ? '시즌 결산 보기' : '다음 ▶';
       const sk = root.querySelector('[data-act=cskip]'); if (sk) sk.hidden = n === c.n - 1;
       const sc = root.querySelector('.screen'); if (sc) sc.scrollTop = 0;
       cue(n);
@@ -606,20 +614,20 @@ export function showRaise(root, { storage, loadGame, onBack }) {
         <p>${s.year} 삼성 라이온즈가 한국시리즈 정상에 올랐어요</p>
         <div class="rz-ringbig">💍 우승 반지 ${rings(s) + 1}개째</div>${mvp ? '<div class="rz-ringbig mvp">🏅 한국시리즈 MVP</div>' : ''}
         <p class="hint">${esc(p.name)}의 우승 반지는 슬롯과 허브에 계속 남아요</p>
-        <button class="ghost small" data-act="cere">🎬 세리머니 다시 보기</button></section>`
+        <button class="ghost small" data-act="cere">세리머니 다시 보기</button></section>`
         : `<div class="re">🏁</div><h1 class="res">${esc(p.name)}</h1><p class="hint center rz-postres">${s.season.post && s.season.post.seeds.includes(ME) ? '🍂' : '🍃'} ${esc(result)}</p>`}
-      ${s.postStats ? `<section class="card"><div class="card-h">🍂 가을야구 기록</div><p class="rz-line">${seasonLine(s, s.postStats)}</p></section>` : ''}
+      ${s.postStats ? `<section class="card"><div class="card-h">가을야구 기록</div><p class="rz-line">${seasonLine(s, s.postStats)}</p></section>` : ''}
       ${postPath(s)}
       ${awardsCard(s)}
       ${payCard(s)}
-      <section class="card"><div class="card-h">📊 시즌 성적</div><p class="rz-line">${seasonLine(s, s.stats)}</p>
-        ${ups.length ? `<div class="ups">${ups.map(u => `<div><b>${STAT_ICON[u.stat]} ${STAT_KO[u.stat]}</b><span><em>+${u.n}${u.stat === 'velo' ? 'km' : ''}</em></span></div>`).join('')}</div>` : '<p class="hint">이번 시즌에 오른 능력치는 없어요</p>'}
-        ${gained.length ? `<div class="rz-traits">${gained.map(t => `<span class="rz-trait">✨ ${esc(traitOf(t).name)}</span>`).join('')}</div>` : ''}</section>
-      <section class="card flush"><div class="card-h pad">🏆 최종 순위</div>
+      <section class="card"><div class="card-h">시즌 성적</div><p class="rz-line">${seasonLine(s, s.stats)}</p>
+        ${ups.length ? `<div class="ups">${ups.map(u => `<div><b>${STAT_KO[u.stat]}</b><span><em>+${u.n}${u.stat === 'velo' ? 'km' : ''}</em></span></div>`).join('')}</div>` : '<p class="hint">이번 시즌에 오른 능력치는 없어요</p>'}
+        ${gained.length ? `<div class="rz-traits">${gained.map(t => `<span class="rz-trait">${esc(traitOf(t).name)}</span>`).join('')}</div>` : ''}</section>
+      <section class="card flush"><div class="card-h pad">최종 순위</div>
         <table class="rz-table">${st.map(x => `<tr class="${x.id === ME ? 'me' : ''}"><td>${x.rank}</td><td>${badge(x.id)} ${getTeam(x.id).short}</td><td>${x.w}승 ${x.l}패${x.d ? ' ' + x.d + '무' : ''}</td></tr>`).join('')}</table></section>
       <p class="hint center">다음 시즌에도 능력치·특성은 그대로예요. 비시즌 동안 쉬어서 피로는 0, 컨디션은 보통으로 돌아가요.</p>
       <p class="hint center">${s.year + 1} 시즌 정규시즌 경기 수</p>${gamesSeg(nextGames, 'games')}
-      <div class="actions"><button class="primary big" data-act="next">🚀 ${s.year + 1} 시즌 시작</button><button class="ghost" data-act="back">슬롯 목록</button></div>`, 'result');
+      <div class="actions"><button class="primary big" data-act="next">${s.year + 1} 시즌 시작</button><button class="ghost" data-act="back">슬롯 목록</button></div>`, 'result');
     act('games', b => seasonEndView(i, +b.dataset.g));
     act('cere', () => ceremonyView(i));
     act('next', () => { data = { ...data, slots: data.slots.map((q, j) => (j === i ? nextSeason(q, { games: nextGames }) : q)) }; persist(); hubView(i); });
@@ -635,10 +643,10 @@ export function showRaise(root, { storage, loadGame, onBack }) {
       if (c.reason === 'owned') return `<span class="pill gold">${x.type === 'season' ? '계약 중' : '보유'}</span>`;
       return `<button class="primary small" data-act="buyitem" data-id="${x.id}" ${c.ok ? '' : 'disabled'}>${won(x.price)}</button>`;
     };
-    screen(`<header class="bar"><button class="ghost small" data-act="back">←</button><h2>🛍️ 쇼핑</h2></header>
-      <section class="card"><div class="rz-payrow big"><span>💵 현금</span><b>${won(cash)}</b></div>
-        <div class="rz-payrow"><span>⭐ 인기</span><b>${fansOf(s)} <em>· 시즌 끝 광고 수입 약 ${won(adsOf(s))}</em></b></div>
-        <p class="hint">투자한 돈은 재테크에서 팔아야 현금이 돼요.</p>${msg ? `<p class="rz-done">✅ ${esc(msg)}</p>` : ''}</section>
+    screen(`<header class="bar"><button class="ghost small" data-act="back" aria-label="뒤로">${icon('back')}</button><h2>쇼핑</h2></header>
+      <section class="card"><div class="rz-payrow big"><span>현금</span><b>${won(cash)}</b></div>
+        <div class="rz-payrow"><span>인기</span><b>${fansOf(s)} <em>· 시즌 끝 광고 수입 약 ${won(adsOf(s))}</em></b></div>
+        <p class="hint">투자한 돈은 재테크에서 팔아야 현금이 돼요.</p>${msg ? `<p class="rz-done">${esc(msg)}</p>` : ''}</section>
       ${SHOP_GROUPS.map(([g, title, sub]) => `<section class="card flush"><div class="card-h pad">${title}${sub ? `<span class="pill">${sub}</span>` : ''}</div>
         ${items(g).map(x => `<div class="rz-item"><span class="rz-pico">${x.icon}</span><span class="rz-pname"><b>${esc(x.name)}${x.id === 'donate' && s.owned && s.owned.donate ? ` <small>· ${s.owned.donate}번</small>` : ''}</b><small>${esc(x.desc)}</small></span>${state(x)}</div>`).join('')}</section>`).join('')}`);
     act('back', () => hubView(i));
@@ -661,13 +669,13 @@ export function showRaise(root, { storage, loadGame, onBack }) {
         <div><span>사기</span>${STEPS.map(([a, t]) => `<button class="chip" data-act="buy" data-a="${a}" ${cash >= a ? '' : 'disabled'}>+${t}</button>`).join('')}<button class="chip" data-act="buy" data-a="all" ${cash >= 1 ? '' : 'disabled'}>현금 전부</button></div>
         <div><span>팔기</span>${STEPS.map(([a, t]) => `<button class="chip" data-act="sell" data-a="${a}" ${h && h.v >= a ? '' : 'disabled'}>-${t}</button>`).join('')}<button class="chip" data-act="sell" data-a="all" ${h ? '' : 'disabled'}>전부 팔기</button></div>
         ${p.fee ? `<p class="hint">살 때 ${Math.round(p.fee * 100)}%는 세금·중개비로 나가요</p>` : ''}</div>`;
-    screen(`<header class="bar"><button class="ghost small" data-act="back">←</button><h2>📈 재테크</h2></header>
+    screen(`<header class="bar"><button class="ghost small" data-act="back" aria-label="뒤로">${icon('back')}</button><h2>재테크</h2></header>
       <section class="card rz-inv">
-        <div class="rz-payrow big"><span>🏦 총자산</span><b>${won(netWorth(s))}</b></div>
-        <div class="rz-payrow"><span>💵 현금</span><b>${won(cash)}</b></div>
-        <div class="rz-payrow ${tone(val - cost)}"><span>📦 투자 평가액</span><b>${won(val)}${cost ? ` <em>${pctTxt((val / cost - 1) * 100)}</em>` : ''}</b></div>
+        <div class="rz-payrow big"><span>총자산</span><b>${won(netWorth(s))}</b></div>
+        <div class="rz-payrow"><span>현금</span><b>${won(cash)}</b></div>
+        <div class="rz-payrow ${tone(val - cost)}"><span>투자 평가액</span><b>${won(val)}${cost ? ` <em>${pctTxt((val / cost - 1) * 100)}</em>` : ''}</b></div>
         <p class="hint">연봉은 정규시즌 경기마다 나눠서 현금으로 들어와요. 시세는 정규시즌 하루마다 움직이고, 정규시즌 한 번이 1년이에요.</p>
-        ${msg ? `<p class="rz-done">✅ ${esc(msg)}</p>` : ''}
+        ${msg ? `<p class="rz-done">${esc(msg)}</p>` : ''}
       </section>
       ${PRODUCTS.map(p => {
         const h = inv[p.id], y = ((s.mkt || {})[p.id] ?? 1) - 1;
@@ -700,15 +708,15 @@ export function showRaise(root, { storage, loadGame, onBack }) {
       const f = RAISE.feat[t], d = DRILLS.find(x => x.trait === t);
       return [d && `특훈 ${Math.min(train[d.id] || 0, RAISE.drillNeed)}/${RAISE.drillNeed}`, f && `활약 ${Math.min(feat[f[0]] || 0, f[1])}/${f[1]}`].filter(Boolean).join(' · ');
     };
-    screen(`<header class="bar"><button class="ghost small" data-act="back">←</button><h2>📜 ${esc(p.name)} 기록</h2></header>
+    screen(`<header class="bar"><button class="ghost small" data-act="back" aria-label="뒤로">${icon('back')}</button><h2>${esc(p.name)} 기록</h2></header>
       ${seasonStatsCard(s)}
       ${boardCard(s, boardKey[s.kind])}
-      ${s.history.slice().reverse().map(h => `<section class="card slim"><div class="card-h">${h.champion ? '🏆 ' : ''}${h.year} 시즌 · 팀 ${h.rank}위 (${h.w}승 ${h.l}패)${h.post ? `<span class="pill">${esc(h.post)}</span>` : ''}${h.mvp ? '<span class="pill gold">🏅 KS MVP</span>' : ''}</div><p class="rz-line">${seasonLine(s, h.line)}</p>
+      ${s.history.slice().reverse().map(h => `<section class="card slim"><div class="card-h">${h.champion ? '' : ''}${h.year} 시즌 · 팀 ${h.rank}위 (${h.w}승 ${h.l}패)${h.post ? `<span class="pill">${esc(h.post)}</span>` : ''}${h.mvp ? '<span class="pill gold">KS MVP</span>' : ''}</div><p class="rz-line">${seasonLine(s, h.line)}</p>
         ${(h.awards || []).length ? `<div class="rz-traits">${h.awards.map(a => `<span class="rz-trait gold">${AWARDS[a].icon} ${esc(AWARDS[a].name)}</span>`).join('')}</div>` : ''}
-        ${h.salary != null ? `<p class="hint">💰 연봉 ${won(h.salary)}${h.bonus ? ` · 🏆 우승 보너스 ${won(h.bonus)}` : ''} → 다음 해 ${won(h.nextSalary)}${h.worth != null ? ` · 🏦 연말 자산 ${won(h.worth)}` : ''}</p>` : ''}
-        ${(h.traitsNew || []).length ? `<p class="hint">✨ ${h.traitsNew.map(t => esc(traitOf(t).name)).join(', ')}</p>` : ''}</section>`).join('')}
-      <section class="card"><div class="card-h">🧮 통산</div><p class="rz-line">${seasonLine(s, s.total)}</p>${moneyHtml(s)}</section>
-      <section class="card"><div class="card-h">✨ 특성</div>
+        ${h.salary != null ? `<p class="hint">연봉 ${won(h.salary)}${h.bonus ? ` · 우승 보너스 ${won(h.bonus)}` : ''} → 다음 해 ${won(h.nextSalary)}${h.worth != null ? ` · 연말 자산 ${won(h.worth)}` : ''}</p>` : ''}
+        ${(h.traitsNew || []).length ? `<p class="hint">${h.traitsNew.map(t => esc(traitOf(t).name)).join(', ')}</p>` : ''}</section>`).join('')}
+      <section class="card"><div class="card-h">통산</div><p class="rz-line">${seasonLine(s, s.total)}</p>${moneyHtml(s)}</section>
+      <section class="card"><div class="card-h">특성</div>
         ${TRAITS.filter(t => t.kind === s.kind).map(t => `<div class="ach ${s.traits.includes(t.id) ? 'on' : ''}"><i>${s.traits.includes(t.id) ? '✨' : '🔒'}</i><div><b>${esc(t.name)}</b><small>${esc(t.desc)}${s.traits.includes(t.id) ? '' : ` · ${howFar(t.id)}`}</small></div></div>`).join('')}
       </section>`);
     act('back', () => hubView(i));

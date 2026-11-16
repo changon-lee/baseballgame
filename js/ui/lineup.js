@@ -1,5 +1,6 @@
 // 타순 편집: 두 선수를 차례로 탭하면 자리를 바꾼다. 벤치 선수 ↔ 타순 선수면 교체.
 import { saveLineup } from '../core/team.js';
+import { icon } from './icons.js';
 
 export function showLineup(root, team, storage, lineup, onDone) {
   const order = [...lineup.order];
@@ -18,7 +19,7 @@ export function showLineup(root, team, storage, lineup, onDone) {
       </button>`;
     root.innerHTML = `
     <div class="screen lineup">
-      <header class="bar"><button class="ghost small" id="back">←</button><h2>${team.name} 타순</h2></header>
+      <header class="bar"><button class="ghost small" id="back" aria-label="뒤로">${icon('back')}</button><h2>${team.name} 타순</h2></header>
       <p class="hint">${picked ? '바꿀 선수를 한 번 더 탭하세요' : '두 선수를 차례로 탭하면 자리가 바뀌어요'}</p>
       <div class="list">${order.map((id, i) => row(byId(id), i + 1)).join('')}</div>
       <h3>벤치</h3>

@@ -1,12 +1,13 @@
 // 메뉴: 상대팀, 이닝 수, 경기 시작, 타순 편집
 import { TEAMS, USER_TEAM_ID } from '../data/rosters.js';
+import { icon } from './icons.js';
 
 export function showMenu(root, settings, { onStart, onLineup, onBack }) {
   let { cpuTeamId, innings } = settings;
   const rivals = TEAMS.filter(t => t.id !== USER_TEAM_ID);
   root.innerHTML = `
   <div class="screen menu">
-    <header class="bar"><button class="ghost small" id="back">←</button><h2>친선 경기</h2></header>
+    <header class="bar"><button class="ghost small" id="back" aria-label="뒤로">${icon('back')}</button><h2>친선 경기</h2></header>
     <p class="hint">기록·성장에 반영되지 않는 한 경기예요</p>
     <section>
       <div class="label">상대 팀</div>

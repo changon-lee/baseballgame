@@ -33,7 +33,7 @@ export const SHOP = [
   { id: 'house', group: 'life', type: 'once', name: '대구 단독주택', icon: '🏡', price: 200000, desc: '매일 피로 -3 · 연고지 팬 인기 +10', fans: 10 },
   { id: 'donate', group: 'life', type: 'repeat', name: '어린이 야구단 기부', icon: '💝', price: 10000, desc: '인기 +8 · 몇 번이든', fans: 8 },
 ];
-export const SHOP_GROUPS = [['staff', '🧑‍🏫 이번 시즌 계약', '시즌이 끝나면 계약도 끝나요'], ['gear', '🎒 장비', '한 번 사면 계속 써요'], ['life', '🏠 생활', '']];
+export const SHOP_GROUPS = [['staff', '이번 시즌 계약', '시즌이 끝나면 계약도 끝나요'], ['gear', '장비', '한 번 사면 계속 써요'], ['life', '생활', '']];
 export const itemOf = id => SHOP.find(x => x.id === id);
 
 const owned = slot => slot.owned || {};
