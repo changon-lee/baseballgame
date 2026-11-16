@@ -926,3 +926,48 @@ button.primary{background:linear-gradient(180deg,#4c97ff,#1f6fe5 52%,#0a4fb8);bo
 .tv-gap{text-align:center;color:var(--dim2);padding:2px}
 .ns-man.pitch.w{right:-6px;height:316px}
 .ns-who h1.lg{font-size:clamp(32px,10vw,42px)}.ns-who h1.xl{font-size:clamp(24px,7.4vw,31px);letter-spacing:-.05em}.ns-who h1{overflow-wrap:anywhere}
+
+
+/* ═══ 경기 화면: 방송 박스(왼쪽 위 작은 점수판) + 오른쪽 위 단추 + 엄지 부채꼴 구종 ═══ */
+.game{position:relative}
+.board{position:absolute;left:10px;top:calc(10px + env(safe-area-inset-top));z-index:3;width:152px;padding:0;background:none;border:0;pointer-events:none}
+.bug{display:block;height:auto;border-radius:8px;overflow:hidden;background:#0b111f;box-shadow:0 8px 22px rgba(0,0,0,.5)}
+.tms{display:block;border-radius:0;background:none;box-shadow:none}
+.tm{padding:5px 10px 5px 8px;font-size:15px;border-left:6px solid var(--c)}
+.tm i{display:none}.tm b{font-weight:900;letter-spacing:.01em}
+.tm .r{font-size:22px;font-style:italic;line-height:1.05}
+.tm+.tm{border-top:1px solid rgba(255,255,255,.08)}
+.bug .st{float:left;width:auto;flex-direction:row;gap:7px;padding:6px 0 6px 10px;border-radius:0;background:none;box-shadow:none;color:#0b111f}
+.bug::after{content:"";display:block;clear:both}
+.bug .st,.bug .bso{height:32px;background:#f3f6fb}
+.bug .inn{font-size:15px;color:#0b111f}.bug .inn small{color:#0b111f;font-size:11px}
+.bug .bases{width:28px;height:17px}
+.bug .bases i{border-color:rgba(11,17,31,.3);width:8.5px;height:8.5px}
+.bug .bases i.on{background:#e5202e;border-color:#e5202e}
+.bug .bso{flex-direction:row;align-items:center;justify-content:flex-end;gap:7px;padding:0 9px 0 4px;border-radius:0;box-shadow:none;color:#0b111f;font-size:12px;overflow:hidden}
+.bug .bso b{font-size:16px;font-weight:900;font-style:italic;letter-spacing:.02em}
+.bug .bso span{display:flex;align-items:center;gap:3px}
+.bug .bso em{display:none}
+.bug .bso i{width:7px;height:7px;background:rgba(11,17,31,.2)}.bug .bso i.o.on{background:#e5202e}
+.hud-r{position:absolute;right:10px;top:calc(10px + env(safe-area-inset-top));z-index:3;display:flex;flex-direction:column;align-items:flex-end;gap:6px;max-width:calc(100% - 182px);pointer-events:none}
+.hud-btns{display:flex;gap:6px;pointer-events:auto}
+.hud-btns button{display:grid;place-items:center;min-height:0;width:36px;height:36px;padding:0;border-radius:50%;font-size:14px;color:#dbe6f5;background:rgba(9,17,33,.72);box-shadow:inset 0 0 0 1px rgba(255,255,255,.2);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.hud-btns svg{width:15px;height:15px;fill:currentColor;display:block}
+.hud-r .sub{display:flex;flex-direction:column;align-items:flex-end;gap:2px;max-width:100%;padding:5px 10px;border-radius:10px;background:rgba(9,17,33,.72);color:#c3d2e8;font-size:11.5px;white-space:nowrap;overflow:hidden}
+.hud-r .sub>*{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.hud-r .mu b{color:#fff;font-weight:800}.hud-r .mu small{color:#93a4bd}.hud-r .mu .vs{font-size:10px;margin:0 3px;color:#62748e}
+.hud-r .ttl{color:var(--gold);font-size:10.5px;font-weight:800}
+.lower3{top:calc(var(--hudy,130px) + 84px)}
+/* 구종: 오른쪽 아래 엄지 부채꼴(둥근 단추가 호를 따라 놓인다). 위치는 화면에 고정 */
+.pitch-pick{left:auto;right:0;top:auto;bottom:0;width:250px;height:270px;display:block;transform:none!important;z-index:3}
+.pitch-pick.keys{width:250px}
+.pitch-pick button{--a:calc(98deg + var(--i) * 19deg);position:absolute;right:calc(20px - cos(var(--a)) * 172px);bottom:calc(44px + env(safe-area-inset-bottom) + sin(var(--a)) * 140px);
+  flex-direction:column;justify-content:center;gap:0;width:62px;height:62px;min-height:0;padding:0;border-radius:50%;text-align:center;
+  background:rgba(9,17,33,.9);box-shadow:inset 0 0 0 2px var(--c),0 8px 18px rgba(0,0,0,.45)}
+.pitch-pick button i{display:none}
+.pitch-pick button b{flex:none;font-size:12.5px;line-height:1.15;white-space:normal;word-break:keep-all;max-width:54px}
+.pitch-pick button span{font-size:10px}
+.pitch-pick kbd{position:absolute;right:-2px;top:-2px;margin:0;background:#0b111f}
+.stage:has(.pitch-pick:not(:empty):not(.out)) .controls p{text-align:left;max-width:46%}
+.pitch-pick button{--a:calc(96deg + var(--i) * 20deg);width:58px;height:58px}
+.pitch-pick kbd{right:auto;left:-1px;top:-1px;min-width:15px;height:15px;font-size:9.5px}

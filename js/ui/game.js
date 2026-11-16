@@ -128,9 +128,11 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
         </div>
         <div class="st"><div class="inn"></div><div class="bases"><i></i><i></i><i></i></div></div>
         <div class="bso"></div>
-        <button class="more" aria-label="진행 메뉴"><svg viewBox="0 0 16 16"><path d="M1 3l7 5-7 5zM8 3l7 5-7 5z"/></svg></button>
-        <button class="exit" aria-label="나가기">✕</button>
       </div>
+    </div>
+    <div class="hud-r">
+      <div class="hud-btns"><button class="more" aria-label="진행 메뉴"><svg viewBox="0 0 16 16"><path d="M1 3l7 5-7 5zM8 3l7 5-7 5z"/></svg></button>
+        <button class="exit" aria-label="나가기">✕</button></div>
       <div class="sub"><span class="mu"></span>${title ? `<span class="ttl">${title}</span>` : ''}</div>
     </div>
     <div class="stage"><canvas></canvas><div class="lower3"></div><div class="linescore"></div><div class="pitch-pick"></div><div class="side-pick"></div><div class="controls"></div><div class="overlay hidden"></div><div class="cutin-layer"></div></div>
@@ -162,7 +164,13 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   };
 
   // ── 레이아웃 ──
+  let hudYv = null;
+  function hudY() {
+    if (hudYv == null) { const b = $('.board'); hudYv = b ? Math.round(b.offsetTop + b.offsetHeight - stage.offsetTop + 8) : 10; stage.style.setProperty('--hudy', hudYv + 'px'); }
+    return hudYv;
+  }
   function resize() {
+    hudYv = null;
     DPR = Math.min(window.devicePixelRatio || 1, 2.5);
     const r = stage.getBoundingClientRect();
     W = r.width; H = r.height; cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
@@ -190,7 +198,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     $('.inn').innerHTML = `<small>${g.half === 'top' ? '▲' : '▼'}</small>${g.inning}`;
     root.querySelectorAll('.bases i').forEach((el, i) => el.classList.toggle('on', !!g.bases[i]));
     const dots = (cls, n, max) => Array.from({ length: max }, (_, i) => `<i class="${cls}${i < n ? ' on' : ''}"></i>`).join('');
-    $('.bso').innerHTML = `<div><em>B</em>${dots('b', g.balls, 3)}</div><div><em>S</em>${dots('s', g.strikes, 2)}</div><div><em>O</em>${dots('o', g.outs, 2)}</div>`;
+    $('.bso').innerHTML = `<b>${g.balls}-${g.strikes}</b><span>${dots('o', g.outs, 2)}<em>${g.outs} OUT</em></span>`;
     $('.mu').innerHTML = soloPitch ? `<b>${mu.pitcher.name}</b> <small>· 투구 연습 ${practice.n}/${practice.goal}구</small>`
       : practice ? `<b>${mu.pitcher.name}</b> <span class="vs">vs</span> <b>${mu.batter.name}</b> <small>· 연습 ${practice.n}/${practice.goal}구</small>`
       : `<b>${mu.pitcher.name}</b>${condTag(mu.pitcher.id)} <small>${match.pitchCount[mu.pitchingSide]}구</small> <span class="vs">vs</span> <small>${g.battingIndex[mu.battingSide] + 1}번</small> <b>${mu.batter.name}</b>${condTag(mu.batter.id)}${heatOn && isHot(match.log, mu.batter.id) ? ` <span class="hot">🔥${hitsToday(match.log, mu.batter.id)}안타</span>` : ''}`;
@@ -1086,12 +1094,14 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   function drawHUD() {
     const mu = shownMu(), p = mu.pitcher, pc = match.pitchCount[mu.pitchingSide];
     const left = energy(pc, p.stamina), f = fatigue(pc, p.stamina);
-    panel(10, 10, 124, 38);
+    const hy = hudY();                                   // 왼쪽 위 점수판(방송 박스) 바로 아래부터
+    panel(10, hy, 124, 38);
     ctx.font = '700 11.5px system-ui,sans-serif'; ctx.textAlign = 'left'; ctx.fillStyle = '#e4ecf6';
-    ctx.fillText(`${p.name} 체력${f > 0 ? ' · 지침' : ''}`, 18, 25);
+    ctx.fillText(`${p.name} 체력${f > 0 ? ' · 지침' : ''}`, 18, hy + 15);
     const fc = f > 0.5 ? '#ff6b6b' : f > 0 ? '#ffd43b' : '#51cf66';
-    bar(18, 33, 108, 6, left, fc);
+    bar(18, hy + 23, 108, 6, left, fc);
     if (heatOn && !userPitching() && !match.game.over) drawRally();
+    drawSpeed(); return;                                 // 주자는 점수판 박스에 있다(예전 오른쪽 위 작은 다이아몬드는 그리지 않는다)
     const cx = W - 36, cy = 30, d = 11, bases = match.game.bases;
     panel(cx - 26, cy - 21, 52, 36);
     [[cx + d, cy], [cx, cy - d], [cx - d, cy]].forEach(([x, y], i) => {
@@ -1137,7 +1147,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   // 응원 열기 게이지(우리 공격 때 왼쪽 위, 투수 체력 아래). 꽉 차면 주황으로 깜빡인다
   function drawRally() {
     const g = match.game, rl = rally(match.log, g.inning, g.half), t = performance.now();
-    const x = 10, y = 52, w = 124, h = 30;
+    const x = 10, y = hudY() + 42, w = 124, h = 30;
     panel(x, y, w, h);
     ctx.font = '700 11.5px system-ui,sans-serif'; ctx.textAlign = 'left';
     ctx.fillStyle = rl.full ? '#ffb15c' : '#e4ecf6';
@@ -1316,14 +1326,25 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     const sweet = !flash && timingOn(now);
     const col = flash ? (flash.hit ? '46,204,113' : '255,107,94') : sweet ? '61,220,132' : fire ? '255,146,43' : '255,214,64';
     const a = flash ? 1 - (now - flash.at) / 450 : batDrag ? 1 : 0.8;
-    ctx.save(); ctx.globalAlpha = sweet ? 1 : a;
-    ctx.fillStyle = `rgba(${col},${sweet ? .28 : .12})`; ctx.strokeStyle = `rgba(${col},.95)`; ctx.lineWidth = sweet ? 3.2 : 2.2;
-    if (sweet) { ctx.shadowColor = `rgba(${col},.9)`; ctx.shadowBlur = 14; }
-    ctx.beginPath(); ctx.ellipse(cx, cy, RX, RY, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    ctx.strokeStyle = `rgba(${col},.45)`; ctx.lineWidth = 1.2;
-    ctx.beginPath(); ctx.ellipse(cx, cy, RX * 0.4, RY * 0.4, 0, 0, Math.PI * 2); ctx.stroke();
-    ctx.strokeStyle = `rgba(${col},.95)`; ctx.lineCap = 'round';                    // 배트(가로 막대)
-    ctx.lineWidth = Math.max(4, RY * 0.16); ctx.beginPath(); ctx.moveTo(cx - RX * 0.62, cy); ctx.lineTo(cx + RX * 0.62, cy); ctx.stroke();
+    // 조준 고리: 어두운 테 → 은은한 바깥 빛 → 밝은 고리 → 안쪽 정타 고리 + 가운데 점과 눈금. 지금 떼면 맞는 순간엔 초록으로 커지며 빛난다
+    const rgba = k => `rgba(${col},${k})`, ring = (kx, ky = kx) => { ctx.beginPath(); ctx.ellipse(cx, cy, RX * kx, RY * ky, 0, 0, Math.PI * 2); };
+    ctx.save(); ctx.globalAlpha = sweet ? 1 : a; ctx.lineCap = 'round';
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(RX, RY));
+    g.addColorStop(0, rgba(0)); g.addColorStop(0.55, rgba(sweet ? .1 : .03)); g.addColorStop(1, rgba(sweet ? .34 : .18));
+    ctx.save(); ring(1); ctx.clip(); ctx.fillStyle = g; ctx.fillRect(cx - RX, cy - RY, RX * 2, RY * 2); ctx.restore();
+    ctx.strokeStyle = 'rgba(4,10,22,.55)'; ctx.lineWidth = sweet ? 6.5 : 5.5; ring(1); ctx.stroke();           // 잔디·흙 위에서도 또렷하게
+    const pulse = sweet ? 0.5 + 0.5 * Math.sin(now / 55) : 0;
+    ctx.strokeStyle = rgba(sweet ? .3 + .2 * pulse : .2); ctx.lineWidth = sweet ? 9 + 5 * pulse : 7;           // 바깥 빛
+    ring(1 + (sweet ? 6 + 3 * pulse : 5) / RX, 1 + (sweet ? 6 + 3 * pulse : 5) / RY); ctx.stroke();
+    ctx.shadowColor = rgba(.9); ctx.shadowBlur = sweet ? 18 : 8;
+    ctx.strokeStyle = rgba(1); ctx.lineWidth = sweet ? 3.6 : 2.8; ring(1); ctx.stroke();                      // 고리 = 이 안으로 공이 오면 맞는다
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = rgba(.6); ctx.lineWidth = 1.4; ring(0.4); ctx.stroke();                                  // 안쪽 고리 = 정타
+    ctx.strokeStyle = rgba(.95); ctx.lineWidth = 2.2;                                                          // 눈금 넷(좌우가 길다 = 배트 방향)
+    [[-1, 0, 0.3], [1, 0, 0.3], [0, -1, 0.16], [0, 1, 0.16]].forEach(([ux, uy, len]) => {
+      ctx.beginPath(); ctx.moveTo(cx + ux * RX * (1 - len), cy + uy * RY * (1 - len)); ctx.lineTo(cx + ux * RX * 0.9, cy + uy * RY * 0.9); ctx.stroke();
+    });
+    ctx.fillStyle = rgba(1); ctx.beginPath(); ctx.arc(cx, cy, Math.max(2.4, RY * 0.07), 0, Math.PI * 2); ctx.fill();
     if ((tactic.bunt || fire) && !flash) {                                          // 번트 자세·불방망이 표시
       ctx.shadowBlur = 0; ctx.fillStyle = `rgba(${col},1)`; ctx.font = '800 13px system-ui,sans-serif'; ctx.textAlign = 'center';
       ctx.fillText(tactic.bunt ? '번트' : bo.rally ? '📣 응원 폭발' : '🔥 불방망이', cx, cy - RY - 6);
@@ -1333,7 +1354,15 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   // 스트라이크존: 판정 존(ZONE_K) 크기로 그린다
   function drawZone(alpha) {
     const [x0, y0] = toS(V, (V.mirror ? 1 : -1) * ZONE_K, ZONE_K), zw = V.zw * ZONE_K, zh = V.zh * ZONE_K;
-    ctx.strokeStyle = `rgba(255,255,255,${alpha})`; ctx.lineWidth = 2; ctx.strokeRect(x0, y0, zw, zh);
+    ctx.strokeStyle = `rgba(4,10,22,${alpha * 0.45})`; ctx.lineWidth = 3.5; ctx.strokeRect(x0, y0, zw, zh);
+    ctx.strokeStyle = `rgba(255,255,255,${alpha * 0.8})`; ctx.lineWidth = 1.4; ctx.strokeRect(x0, y0, zw, zh);
+    const c = Math.min(zw, zh) * 0.16;                     // 네 귀퉁이 꺾쇠(밝고 굵게)
+    ctx.strokeStyle = `rgba(255,255,255,${Math.min(1, alpha * 1.4)})`; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    [[0, 0, 1, 1], [1, 0, -1, 1], [0, 1, 1, -1], [1, 1, -1, -1]].forEach(([px, py, sx, sy]) => {
+      const x = x0 + zw * px, y = y0 + zh * py;
+      ctx.beginPath(); ctx.moveTo(x + sx * c, y); ctx.lineTo(x, y); ctx.lineTo(x, y + sy * c); ctx.stroke();
+    });
+    ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
     ctx.lineWidth = 1; ctx.strokeStyle = `rgba(255,255,255,${alpha * 0.35})`;
     for (let i = 1; i < 3; i++) {
       ctx.beginPath(); ctx.moveTo(x0 + zw * i / 3, y0); ctx.lineTo(x0 + zw * i / 3, y0 + zh); ctx.stroke();

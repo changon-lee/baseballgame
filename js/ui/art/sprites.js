@@ -538,12 +538,16 @@ export function drawCatcherSprite(ctx, V, mitt, now = 0) {
   if (mitt) {
     const [tx, ty] = toS(V, mitt.x, mitt.y), r = V.zw * 0.16;
     ctx.save();
-    ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.arc(tx, ty, r, 0, Math.PI * 2); ctx.stroke();
-    ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 2; ctx.setLineDash([4, 3]);
-    ctx.beginPath(); ctx.arc(tx, ty, r, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
-    ctx.strokeStyle = 'rgba(241,196,15,.9)'; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.moveTo(tx - r * 0.45, ty); ctx.lineTo(tx + r * 0.45, ty); ctx.moveTo(tx, ty - r * 0.45); ctx.lineTo(tx, ty + r * 0.45); ctx.stroke();
+    // 미트 자리: 타격 조준 고리와 같은 모양(어두운 테 → 바깥 빛 → 밝은 고리 → 가운데 점과 눈금)
+    const ring = k => { ctx.beginPath(); ctx.arc(tx, ty, r * k, 0, Math.PI * 2); };
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(4,10,22,.55)'; ctx.lineWidth = 5.5; ring(1); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,214,64,.2)'; ctx.lineWidth = 7; ring(1 + 5 / r); ctx.stroke();
+    ctx.shadowColor = 'rgba(255,214,64,.9)'; ctx.shadowBlur = 8;
+    ctx.strokeStyle = 'rgb(255,214,64)'; ctx.lineWidth = 2.6; ring(1); ctx.stroke();
+    ctx.shadowBlur = 0; ctx.lineWidth = 2;
+    [[-1, 0], [1, 0], [0, -1], [0, 1]].forEach(([ux, uy]) => { ctx.beginPath(); ctx.moveTo(tx + ux * r * 0.72, ty + uy * r * 0.72); ctx.lineTo(tx + ux * r * 0.9, ty + uy * r * 0.9); ctx.stroke(); });
+    ctx.fillStyle = 'rgb(255,214,64)'; ctx.beginPath(); ctx.arc(tx, ty, Math.max(2.2, r * 0.1), 0, Math.PI * 2); ctx.fill();
     ctx.restore();
   }
   return true;
