@@ -25,6 +25,7 @@ import { makeView, toS, zoneRect, ballScreen, ballRadius, pitcherAnchor, batterA
 import { drawPitcherSprite, drawBatterSprite, drawCatcherSprite, spriteReleaseOffset, SWING_CONTACT_MS, loadSprites } from './art/sprites.js';
 import { buildBackdrop, standsReady, timeOfDay, setTimeOfDay, preloadEvening } from './art/stadium.js';
 import { uniformFor } from './art/uniforms.js';
+import { finishFrame } from './art/fx.js';
 import { pitcherPoseAt, batterPoseAt } from './art/rig.js';
 import { drawBatter, drawPitcher, drawCatcherAndUmpire, drawBall } from './art/figures.js';
 import { buildPlay, practicePlay, toMs } from './art/playscript.js';
@@ -747,7 +748,12 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     if (cut) cutins.play(cut, { sub: cut === 'homerun' ? (HR_NAME[r.runs] || '홈런!!') + far : cut === 'homerun_bad' ? (HR_NAME[r.runs] || '피홈런') + far : '' });
     // 내가 타자일 때는 공 하나하나 결과(볼·스트라이크·파울·타구 결과)를 절반만 보여 줘서 빨리 다음 공으로(홈런·컷인은 그대로)
     const msgMs = cut ? CUT_MS[cut] : r.event === 'HR' ? 2000 : userPitched ? 1300 : 650;
+    const replay = cut === 'homerun' && !net && play && play.landT != null;   // 내가 친 홈런은 결과 뒤에 느린 화면으로 한 번 더
     showMsg(label, color, msgMs, sub, () => {
+      if (replay && play && !play.replay) return startReplay(afterMsg);
+      afterMsg();
+    }, !!cut);
+    function afterMsg() {
       if (practice && practice.n >= practice.goal) return finishPractice();
       if (match.game.over) return showEnd();
       if (halfOver) {
@@ -758,7 +764,32 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
         return showMsg('공수교대', '#9fb3cc', 2300, `${g.inning}회${g.half === 'top' ? '초' : '말'}${note}`, nextPlay);
       }
       nextPlay();
-    }, !!cut);
+    }
+  }
+
+  // ── 홈런 리플레이: 공이 담장을 넘어가는 순간을 느리게, 공만 당겨서 다시 보여 준다. 화면을 터치하면 건너뛴다 ──
+  const REPLAY = { before: 2.0, after: 0.35, rate: 0.4 };   // 넘어가기 몇 초(장면 시간) 전부터 · 뒤까지 · 재생 속도
+  function startReplay(then) {
+    play.replay = { at: performance.now(), r0: toMs(Math.max(0.2, play.landT - REPLAY.before)), r1: toMs(play.landT + REPLAY.after), then };
+  }
+  function endReplay() {
+    const rp = play && play.replay;
+    if (!rp) return;
+    play.replay = null; rp.then();
+  }
+  function drawReplay(now) {                             // 그렸으면 true(끝났으면 false: 평소 화면으로)
+    const rp = play.replay, ms = rp.r0 + (now - rp.at) * REPLAY.rate;
+    if (ms >= rp.r1) { endReplay(); return false; }
+    const mu = shownMu(), bar = Math.round(H * 0.07);
+    drawPlay3D(ctx, W, H, play, ms, { field: uni[mu.pitchingSide], bat: uni[mu.battingSide] }, { tele: true });
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, bar); ctx.fillRect(0, H - bar, W, bar);   // 위아래 검은 띠(영화 화면)
+    ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.font = '800 13px system-ui,sans-serif';
+    if (Math.floor(now / 500) % 2) { ctx.fillStyle = '#ff4d4d'; ctx.beginPath(); ctx.arc(16, bar / 2, 4.5, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = '#fff'; ctx.fillText('REPLAY', 27, bar / 2 + 0.5);
+    ctx.font = '600 12px system-ui,sans-serif'; ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(255,255,255,.8)';
+    ctx.fillText('터치하면 건너뛰기', W - 12, H - bar / 2);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    return true;
   }
 
   // 홈 관중(우리 팀 팬)의 반응. 홈런은 친 순간·넘어가는 순간에 따로 낸다
@@ -963,6 +994,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     unlockAudio();
     if (e.target.closest('button') || overlayOpen()) return;
     if (mode === 'bflight' && auto) return;
+    if (play && play.replay) return endReplay();        // 리플레이 건너뛰기
     if (mode === 'gauge') throwUserPitch(e.timeStamp);
     else if ((mode === 'bwait' || mode === 'bflight') && !auto) startBatDrag(e);
     else if (play && play.fc && play.fc.state === 'wait') { if (play.fc.r0) decideField(e.timeStamp - play.fc.hitAt); }   // 수비 조작(링 전에는 무시)
@@ -1146,6 +1178,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     if (mode === 'bwait' && pitchAt && overlayOpen()) pitchAt = Math.max(pitchAt, now + CONFIG.WIND_CPU_MS + 500);
     else if (mode === 'bwait' && pitchAt && now >= pitchAt) throwCpuPitch();
 
+    if (play && play.replay && drawReplay(now)) return;
     if (play && play.fc && play.fc.state === 'wait' && now >= play.start) fieldTick(now);
     if (play && now >= play.start) {
       const mu = shownMu(), ms = now - play.start;
@@ -1206,9 +1239,12 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       if (!soloPitch) drawB();
       if (bp && bp.prog <= 1.02) { drawTrail(now); drawBall(ctx, bp.x, bp.y, bp.r, bp.spin); }
       drawP();
+      finishFrame(ctx, W, H, now);
     } else {
       drawP();
-      drawB();                                   // 타자는 카메라 가까이 옆에 크게 서 있어서 존·공은 그 위에 그린다(공이 몸에 가리지 않게)
+      drawB();
+      finishFrame(ctx, W, H, now);
+      // 타자는 카메라 가까이 옆에 크게 서 있어서 존·공은 그 위에 그린다(공이 몸에 가리지 않게)
       drawZone(0.32);
       drawGuide(now);
       if (bp && bp.prog <= 1.02) { drawTrail(now); drawBall(ctx, bp.x, bp.y, bp.r, bp.spin); }

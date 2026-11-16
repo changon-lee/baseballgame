@@ -3,6 +3,7 @@
 // 좌표: 각 프레임 그림 안의 픽셀. ax = 머리(모자) 가로 중심 — 동작 중 머리는 거의 안 움직이므로 프레임끼리 머리를 맞춘다. 아래 끝 = 발.
 // 동작은 프레임을 끊어 바꾸지 않고, 잠깐 머문 뒤 다음 프레임으로 겹쳐 넘어간다(디졸브) + 몸 위치를 조금씩 옮긴다.
 import { toS } from './view.js';
+import { drawLit, castShadow } from './fx.js';
 
 const BASE = new URL('../../../assets/sprites/', import.meta.url).href;
 const STAND = 182;                                       // 서 있는 선수 키(포즈 단위)
@@ -331,14 +332,14 @@ function tinted(f, uni) {
 export const FIELD_PX = 50;
 const rep = (n, f) => Array.from({ length: n }, () => ({ ...f }));   // 영상에서 뽑은 그림은 프레임마다 크기·기준점이 같다
 const FIELD = {
-  frun: rep(8, { w: 207, h: 290, ax: 94 }),   // 달리기(영상에서 8장, 옆모습)
-  frun_front: rep(8, { w: 129, h: 308, ax: 67 }),   // 달리기 앞모습(카메라 쪽으로)
-  frun_back: rep(8, { w: 149, h: 308, ax: 83 }),   // 달리기 뒷모습
-  runner: rep(8, { w: 183, h: 292, ax: 89 }),   // 주자 달리기(옆모습)
-  runner_front: rep(8, { w: 119, h: 305, ax: 59 }),   // 주자 달리기 앞모습
-  runner_back: rep(8, { w: 125, h: 304, ax: 57 }),   // 주자 달리기 뒷모습
+  frun: rep(8, { w: 230, h: 292, ax: 100 }),   // 달리기(영상에서 8장, 옆모습)
+  frun_front: rep(8, { w: 148, h: 308, ax: 69 }),   // 달리기 앞모습(카메라 쪽으로)
+  frun_back: rep(8, { w: 151, h: 302, ax: 73 }),   // 달리기 뒷모습
+  runner: rep(8, { w: 208, h: 287, ax: 87 }),   // 주자 달리기(옆모습)
+  runner_front: rep(8, { w: 135, h: 302, ax: 65 }),   // 주자 달리기 앞모습
+  runner_back: rep(8, { w: 138, h: 304, ax: 60 }),   // 주자 달리기 뒷모습
   runner_diagb: rep(8, { w: 171, h: 306, ax: 92 }),   // 주자 달리기 대각선 뒷모습(오른쪽 위로 멀어짐)
-  runner_diagf: rep(8, { w: 150, h: 302, ax: 73 }),   // 주자 달리기 대각선 앞모습(오른쪽 아래로 다가옴)
+  runner_diagf: rep(8, { w: 169, h: 300, ax: 71 }),   // 주자 달리기 대각선 앞모습(오른쪽 아래로 다가옴)
   fielder: [{ w: 186, h: 250, ax: 92, hx: 95 }, { w: 177, h: 194, ax: 88, hx: 88 }, { w: 113, h: 330, ax: 56, hx: 64 }, { w: 117, h: 303, ax: 55, hx: 52 }],   // 준비, 땅볼, 뜬공, 서서 보기(정면)
   fthrow: [{ w: 234, h: 256, ax: 116, hx: 153 }, { w: 243, h: 263, ax: 118, hx: 133 }, { w: 243, h: 263, ax: 105, hx: 165 }, { w: 320, h: 171, ax: 22, hx: 238 }],   // 내딛기, 던질 준비, 릴리스, 다이빙
   rbase: [{ w: 75, h: 306, ax: 44, hx: 44 }, { w: 202, h: 249, ax: 99, hx: 158 }, { w: 268, h: 204, ax: 158, hx: 73 }, { w: 340, h: 152, ax: 12, hx: 239 }],   // 서 있기, 리드, 발 슬라이딩, 머리 슬라이딩
@@ -416,7 +417,7 @@ function drawPitcherFrame(ctx, f, img, su, flip, alpha, back, player, uni, txt =
   const k = f.k || 1;
   ctx.save(); ctx.globalAlpha = alpha; ctx.scale(flip * su * k, su * k);
   const ay = f.ay ?? f.h;                              // 기준점(발) 세로 위치. 영상 그림은 발이 그림 밖에 있을 수도 있다
-  ctx.drawImage(img, -f.ax, -ay);
+  drawLit(ctx, img, f.w, f.h, -f.ax, -ay);
   if (back && player && f.num) {                       // 등 이름·번호(그림 배율과 상관없이 같은 크기)
     ctx.translate(f.num[0] - f.ax, f.num[1] - ay); ctx.scale(flip * txt / k, txt / k);
     ctx.textAlign = 'center'; ctx.lineJoin = 'round';
@@ -445,6 +446,8 @@ export function drawPitcherSprite(ctx, { x, y, scale, back, uni, player, throws,
   ctx.translate(0, dy); ctx.scale(1, breathe);
   // 영상 그림(cut)은 촘촘해서 겹치지 않고 바로 넘긴다(겹치면 몸이 두 겹으로 보인다). 마무리 → 셋 자세로 돌아갈 때만 겹친다
   const [aA, aB] = set.cut && !(st.b === 0 && st.a !== 0) ? (st.mix < 0.5 ? [1, 0] : [0, 1]) : fade(st.mix);
+  { const F = aA >= aB ? A : B, k = F.k || 1;            // 땅에 눕는 그림자(더 진한 쪽 프레임)
+    ctx.save(); ctx.scale(flip * su * k, su * k); castShadow(ctx, tinted(F, uni), F.w, F.h, -F.ax, -(F.ay ?? F.h), flip); ctx.restore(); }
   drawPitcherFrame(ctx, A, tinted(A, uni), su, flip, aA, back, player, uni, set.txt);
   drawPitcherFrame(ctx, B, tinted(B, uni), su, flip, aB, back, player, uni, set.txt);
   ctx.restore();
@@ -470,7 +473,7 @@ function batterState(now, swingAt, pitchStart, travelMs) {
 function drawBatterFrame(ctx, f, img, su, alpha, raw) {   // su: 그림 1픽셀 → 포즈 단위
   if (alpha <= 0.01) return;
   ctx.save(); ctx.globalAlpha = alpha; ctx.scale(raw ? su : -su, su);   // 옆모습은 왼쪽을 보므로 뒤집어서 +x(투수 쪽)를 보게
-  ctx.drawImage(img, -f.ax, -(f.ay ?? f.h));
+  drawLit(ctx, img, f.w, f.h, -f.ax, -(f.ay ?? f.h));
   ctx.restore();
 }
 
@@ -509,6 +512,8 @@ export function drawBatterSprite(ctx, { x, y, scale, facing, uni, now, swingAt, 
   ctx.save(); ctx.translate(x, y); ctx.scale(scale * facing, scale); ctx.translate(BAT_SHIFT, 0);
   shadowAt(ctx, 60);
   if (idle && !idleReady(iset)) ctx.scale(1, 1 + Math.sin(now / 520) * 0.004);   // 흔들기 그림이 아직 없으면 숨쉬기만
+  { const [q, k] = layers.reduce((a, b) => (b[2] > a[2] ? b : a)), f = q.frames[k], s = su / (q.res || 1);   // 땅에 눕는 그림자
+    ctx.save(); ctx.scale(q.raw ? s : -s, s); castShadow(ctx, tinted(f, uni), f.w, f.h, -f.ax, -(f.ay ?? f.h), facing * (q.raw ? 1 : -1)); ctx.restore(); }
   for (const [q, k, al] of layers) {
     const f = q.frames[k];
     drawBatterFrame(ctx, f, tinted(f, uni), su / (q.res || 1), al, q.raw);
@@ -525,11 +530,11 @@ export function drawCatcherSprite(ctx, V, mitt, now = 0) {
   // 심판은 포수 뒤(카메라에서 더 멀다)라 덜 키운다
   const k = (V.figH || V.zh * 1.35) / (V.zh * 1.35), ku = 1 + (k - 1) * 0.4;
   const um = SETS.umpire.frames[0], us = (V.zh * 1.35 * ku) / um.h;
-  ctx.drawImage(um.img, V.cx + V.zw * 0.3 * ku - um.ax * us, base - V.zh * 0.2 * ku - um.h * us, um.w * us, um.h * us);
+  drawLit(ctx, um.img, um.w, um.h, V.cx + V.zw * 0.3 * ku - um.ax * us, base - V.zh * 0.2 * ku - um.h * us, um.w * us, um.h * us);
   const c = SETS.catcher.frames[0], cs = (V.zh * 0.86 * k) / c.h;
   const breathe = Math.sin(now / 480) * V.zh * 0.004;
   ctx.save(); ctx.translate(V.cx, base); shadowAt(ctx, V.zw * 0.6); ctx.restore();
-  ctx.drawImage(c.img, V.cx - c.ax * cs, base - c.h * cs + breathe, c.w * cs, c.h * cs);
+  drawLit(ctx, c.img, c.w, c.h, V.cx - c.ax * cs, base - c.h * cs + breathe, c.w * cs, c.h * cs);
   if (mitt) {
     const [tx, ty] = toS(V, mitt.x, mitt.y), r = V.zw * 0.16;
     ctx.save();

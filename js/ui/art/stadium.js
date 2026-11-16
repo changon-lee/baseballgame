@@ -1,5 +1,6 @@
 // 구장 배경: 시점별로 오프스크린 캔버스에 한 번 그려 캐시한다.
 import { createRng } from '../../core/rng.js';
+import { fxOn, paintGrass, setFxLight } from './fx.js';
 
 function crowd(ctx, W, y0, y1, rng, palette, density = 1) {
   // 층 구분 띠와 난간
@@ -54,6 +55,7 @@ function texture(ctx, k, y0, y1, alpha, near, far) {
   ctx.restore();
 }
 function grass(ctx, W, H, top, vx, spread, rng) {
+  if (fxOn()) { paintGrass(ctx, W, H, top, vx, spread); return; }   // 사진 느낌 잔디(fx.js)
   const g = ctx.createLinearGradient(0, top, 0, H); g.addColorStop(0, '#2c7a3b'); g.addColorStop(1, '#2f8c43');
   ctx.fillStyle = g; ctx.fillRect(0, top, W, H - top);
   for (let i = -14; i < 14; i += 2) {            // 잔디 깎은 줄무늬
@@ -66,8 +68,11 @@ function grass(ctx, W, H, top, vx, spread, rng) {
 }
 function dirtEllipse(ctx, x, y, rx, ry, rng, a0 = 0, a1 = Math.PI * 2) {
   const g = ctx.createRadialGradient(x, y - ry * 0.3, ry * 0.2, x, y, Math.max(rx, ry));
-  g.addColorStop(0, '#c4936a'); g.addColorStop(1, '#a8774f');
-  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, a0, a1); ctx.fill();
+  const fx = fxOn();
+  g.addColorStop(0, fx ? '#b98d66' : '#c4936a'); g.addColorStop(1, fx ? '#9a6f4a' : '#a8774f');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, a0, a1);
+  if (fx) { ctx.save(); ctx.shadowColor = '#8f6a45'; ctx.shadowBlur = 7; ctx.fill(); ctx.restore(); }   // 잔디와 만나는 가장자리를 흐리게
+  else ctx.fill();
   ctx.save(); ctx.clip();
   speckle(ctx, x - rx, y - ry, rx * 2, ry * 2, rng, Math.floor(rx * ry / 8), ['rgba(80,45,20,.22)', 'rgba(255,230,190,.16)'], 1.2);
   texture(ctx, 'dirt_tex', y - ry, y + ry, 1, 0.5 * Math.min(1, ry / 40) + 0.1, 0.15);
@@ -123,7 +128,7 @@ export function timeOfDay(inning, innings = 9) {
 export function setTimeOfDay(tod) {
   const n = tod.phase === 'night', d = tod.phase === 'dusk' ? tod.k : 0;
   if (n === night && d === dusk) return false;
-  night = n; dusk = d; return true;
+  night = n; dusk = d; setFxLight(n, d); return true;
 }
 export const preloadEvening = () => { loadStands('_dusk'); loadStands('_night'); };
 export const isNight = () => night;
@@ -189,7 +194,9 @@ export function buildBackdrop(kind, V, W, H, dpr, homeTeam) {
     }
     // 내야
     dirtEllipse(ctx, W / 2, V.moundY + H * 0.085, W * 1.0, H * 0.075, rng, Math.PI, Math.PI * 2);
-    ctx.fillStyle = '#2d833f'; ctx.beginPath(); ctx.ellipse(W / 2, V.moundY + H * 0.125, W * 0.62, H * 0.065, 0, Math.PI, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#2d833f'; ctx.beginPath(); ctx.ellipse(W / 2, V.moundY + H * 0.125, W * 0.62, H * 0.065, 0, Math.PI, Math.PI * 2);
+    if (fxOn()) { ctx.save(); ctx.clip(); grass(ctx, W, H, wallY + 9, W / 2, W * 0.36, rng); ctx.restore(); }   // 내야 잔디도 같은 질감으로
+    else ctx.fill();
     dirtEllipse(ctx, W / 2, V.moundY, W * 0.17, H * 0.024, rng);                                   // 마운드
     ctx.fillStyle = 'rgba(255,240,215,.25)'; ctx.beginPath(); ctx.ellipse(W / 2, V.moundY - 3, W * 0.09, H * 0.01, 0, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#fafafa'; ctx.fillRect(W / 2 - 9, V.moundY - 2, 18, 2.5);                     // 투수판

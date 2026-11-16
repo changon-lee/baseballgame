@@ -29,6 +29,8 @@ const sam = getTeam('samsung'), lg = getTeam('lg');
 const uH = uniformFor(sam, 'home'), uA = uniformFor(lg, 'away');
 const scene = location.hash.slice(1) || 'pitch';
 const pitch = { throws: 'R', plate: { x: 0.4, y: -0.3 }, breakX: -0.45, breakY: -0.15, travelMs: 700 };
+const todQ = new URLSearchParams(location.search).get('tod');   // ?tod=dusk|night : play·replay 장면의 시간대
+if (todQ) { const st = await import('./js/ui/art/stadium.js'); st.preloadEvening(); st.setTimeOfDay({ phase: todQ, k: 1 }); }
 
 if (scene === 'pitch' || scene === 'windup') {
   const V = makeView('pitcher', W, H);
@@ -73,6 +75,40 @@ if (scene.startsWith('views')) {             // 투구/타격 시점 x 우타/�
     ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.strokeRect(V.cx - V.zw / 2, V.cy - V.zh / 2, V.zw, V.zh);
     if (kind === 'pitcher') { sp.drawCatcherSprite(ctx, V, null, 0); sp.drawBatterSprite(ctx, bArgs); sp.drawPitcherSprite(ctx, pArgs); }
     else { sp.drawPitcherSprite(ctx, pArgs); sp.drawBatterSprite(ctx, bArgs); }
+    ctx.restore();
+  });
+  document.title = 'sprites-ready';
+}
+if (scene.startsWith('shot')) {               // #shot-catcher / #shot-pitcher [-day|-dusk|-night] : 실제 경기 화면 한 장(사진 스프라이트 + 공)
+  const [, kind = 'catcher', tod = 'day'] = scene.split('-');
+  const sp = await import('./js/ui/art/sprites.js');
+  const st = await import('./js/ui/art/stadium.js');
+  st.preloadEvening(); st.setTimeOfDay({ phase: tod, k: 1 });
+  while (!sp.spritesReady() || !st.standsReady(kind)) await new Promise(r => setTimeout(r, 50));
+  await new Promise(r => setTimeout(r, 1500));          // 방망이 흔들기 그림까지
+  const V = makeView(kind, W, H);
+  ctx.drawImage(st.buildBackdrop(kind, V, W, H, dpr, sam), 0, 0, W, H);
+  const front = kind === 'pitcher';
+  const ba = batterAnchor(V, 'R'), pa = pitcherAnchor(V, 'R');
+  const bArgs = { ...ba, uni: front ? uA : uH, now: 1450, swingAt: null, pitchStart: 1000, travelMs: 700, front };
+  const pArgs = { ...pa, uni: front ? uH : uA, player: sam.pitchers[0], throws: 'R', now: 1450, releaseAt: 1000, windMs: 800 };
+  const bs = ballScreen(V, { ...pitch, type: 'FB' }, 1000, 1450);
+  if (front) { sp.drawCatcherSprite(ctx, V, null, 0); sp.drawBatterSprite(ctx, bArgs); drawBall(ctx, bs.x, bs.y, bs.r, bs.spin); sp.drawPitcherSprite(ctx, pArgs); }
+  else { sp.drawPitcherSprite(ctx, pArgs); sp.drawBatterSprite(ctx, bArgs); drawBall(ctx, bs.x, bs.y, bs.r, bs.spin); }
+  (await import('./js/ui/art/fx.js')).finishFrame(ctx, W, H, 0);
+  document.title = 'sprites-ready';
+}
+if (scene.startsWith('replay')) {             // #replay-3 : 홈런 리플레이(공만 당겨 잡는 화면) 6컷
+  const seed = scene.split('-')[1] || '3';
+  const { standsReady } = await import('./js/ui/art/stadium.js');
+  const { fieldReady } = await import('./js/ui/art/sprites.js');
+  const { toMs } = await import('./js/ui/art/playscript.js');
+  while (!standsReady('catcher') || !fieldReady()) await new Promise(r => setTimeout(r, 50));
+  const sc = buildPlay({ event: 'HR', fly: true, contact: { pull: 0.5 }, bats: 'L', bases: [true, false, false], rng: createRng(+seed) });
+  const cols = 3, pw = W / cols, ph = H / 2;
+  [2.0, 1.5, 1.0, 0.5, 0.1, -0.3].forEach((back, i) => {
+    ctx.save(); ctx.translate((i % cols) * pw, Math.floor(i / cols) * ph); ctx.beginPath(); ctx.rect(0, 0, pw, ph); ctx.clip();
+    drawPlay3D(ctx, pw, ph, sc, toMs(Math.max(0.2, sc.landT - back)), { field: uA, bat: uH }, { tele: true });
     ctx.restore();
   });
   document.title = 'sprites-ready';

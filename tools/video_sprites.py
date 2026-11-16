@@ -29,6 +29,10 @@ VIDEOS = {
     # 대각선(오른쪽으로 비스듬히): 멀어지는 쪽 3/4 뒷모습, 다가오는 쪽 3/4 앞모습. 왼쪽은 게임에서 뒤집어 쓴다
     'baserunner_diag_back_running': ('runner_diagb', 'back'),
     'baserunner_diag_front_running': ('runner_diagf', 'front'),
+    # 2026-11-16 다시 만든 영상(흰 유니폼 + 파란 모자·헬멧으로 통일). 파일 이름이 스프라이트 이름과 같다
+    'frun': ('frun', 'side'), 'frun_front': ('frun_front', 'front'), 'frun_back': ('frun_back', 'back'),
+    'runner': ('runner', 'side'), 'runner_fruint': ('runner_front', 'front'), 'runner_back': ('runner_back', 'back'),
+    'runner_diagb': ('runner_diagb', 'back'), 'runner_diagf': ('runner_diagf', 'front'),
 }
 ONLY = set(sys.argv[3].split(',')) if len(sys.argv) > 3 else None
 small = new_session('u2netp')

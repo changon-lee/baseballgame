@@ -9,6 +9,7 @@ const LAUNCH = 0.07;                                   // 처음 잠깐은 땅�
 import { standsImage, groundTexture, isNight, duskLevel, duskGrade } from './stadium.js';
 import { drawBall } from './figures.js';
 import { fieldSprite, fieldCount, FIELD_PX, pitcherFieldSprite } from './sprites.js';
+import { fxOn, drawLit, castShadow, finishFrame, grassDetail } from './fx.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -82,7 +83,9 @@ function fillPoly(ctx, K, pts, color, z = 0) { if (polyPath(ctx, K, pts, z)) { c
 
 // 관심 대상(공 + 지금 중요한 선수)을 모두 담는 중심과 폭
 const START = { c: [0, 120, 0], span: 230 };
-function frameAt(sc, t) {
+const TELE_SPAN = 105;                                    // 리플레이: 공만 당겨 잡는 망원 화면의 폭(피트)
+function frameAt(sc, t, tele) {
+  if (tele) { const b = ballAt(sc, Math.max(0, t)).p; return { c: [b[0], b[1], Math.min(b[2], 140)], span: TELE_SPAN }; }
   if (t < 0.15) return START;
   const pts = [];
   if (!(t > sc.ballUntil)) { const b = ballAt(sc, t).p; pts.push([b[0], b[1], Math.min(b[2], 140)]); }
@@ -98,11 +101,11 @@ function frameAt(sc, t) {
   pts.forEach(p => { r = Math.max(r, Math.hypot(p[0] - c[0], p[1] - c[1]), Math.abs(p[2] - c[2]) * 1.4); });
   return { c, span: clamp(r * 2.6 + 50, sc.minSpan || 80, 420) };   // minSpan: 장면이 더 가까이 보고 싶을 때(도루)
 }
-export function cameraAt(sc, t, W, H) {
+export function cameraAt(sc, t, W, H, tele = false) {
   // 지난 0.6초를 평균해서 부드럽게 따라간다
   const c = [0, 0, 0]; let span = 0, ws = 0;
   for (let i = 0; i < 12; i++) {
-    const w = 1 - i / 12, fr = frameAt(sc, t - i * 0.05);
+    const w = 1 - i / 12, fr = frameAt(sc, t - i * 0.05, tele);
     c[0] += fr.c[0] * w; c[1] += fr.c[1] * w; c[2] += fr.c[2] * w; span += fr.span * w; ws += w;
   }
   c[0] /= ws; c[1] /= ws; c[2] /= ws; span /= ws;
@@ -318,9 +321,9 @@ function drawOuter(ctx, K, empty) {
   const img = empty ? null : standsImage('field');
   if (img && crowdSrc !== img) {                         // 낮·밤 그림이 바뀌면 무늬도 다시
     crowdSrc = img;
-    const c = document.createElement('canvas'); c.width = Math.round(img.width * 0.35); c.height = Math.round(235 * 0.35);
+    const c = document.createElement('canvas'); c.width = Math.round(img.width * 0.35); c.height = Math.round(160 * 0.35);
     const x = c.getContext('2d');
-    x.drawImage(img, 0, 440, img.width, 235, 0, 0, c.width, c.height);
+    x.drawImage(img, 0, 510, img.width, 160, 0, 0, c.width, c.height);   // 아래층 관중(510~670줄, tools/field_stands.py)
     x.fillStyle = 'rgba(14,20,32,.35)'; x.fillRect(0, 0, c.width, c.height);   // 조금 어둡게
     crowdPat = ctx.createPattern(c, 'repeat');
   }
@@ -335,11 +338,11 @@ function drawOuter(ctx, K, empty) {
 // 사진에서 뽑은 흙 결을 바닥에 입힌다: 바닥을 칸으로 나눠 칸마다 무늬를 원근(아핀)에 맞춰 overlay로 칠한다.
 // 아주 멀어서 무늬가 자글거릴 칸은 점점 흐리게, 카메라 뒤로 넘어간 칸은 건너뛴다
 const CELL = 45, TEX_FT = 55;                             // 칸 크기(피트), 무늬 한 장(512px)이 덮는 길이(피트)
-function groundGrain(ctx, K, k, clipPts, x0, x1, y0, y1, alpha) {
-  const img = groundTexture(k);
+function groundGrain(ctx, K, k, clipPts, x0, x1, y0, y1, alpha, ft = TEX_FT) {   // k: 무늬 이름 또는 무늬 그림, ft: 무늬 한 장이 덮는 길이(피트)
+  const img = typeof k === 'string' ? groundTexture(k) : k;
   if (!img || !polyPath(ctx, K, clipPts)) return;
   ctx.save(); ctx.clip(); ctx.globalCompositeOperation = 'overlay';
-  const pat = ctx.createPattern(img, 'repeat'), tp = 512 / TEX_FT;
+  const pat = ctx.createPattern(img, 'repeat'), tp = img.width / ft;
   if (!pat.setTransform) { ctx.restore(); return; }
   for (let x = x0; x < x1; x += CELL) for (let y = y0; y < y1; y += CELL) {
     const a = project(K, [x, y, 0]), b = project(K, [x + CELL, y, 0]), c = project(K, [x, y + CELL, 0]), d = project(K, [x + CELL, y + CELL, 0]);
@@ -356,21 +359,24 @@ function groundGrain(ctx, K, k, clipPts, x0, x1, y0, y1, alpha) {
   ctx.restore();
 }
 function drawGround(ctx, K, bases) {
-  fillPoly(ctx, K, RING, '#3a8a45');
+  const fx = fxOn();
+  fillPoly(ctx, K, RING, fx ? '#44803a' : '#3a8a45');
   // 잔디 깎은 무늬(페어 지역만)
   if (polyPath(ctx, K, FAIR)) {
     ctx.save(); ctx.clip();
-    ctx.fillStyle = 'rgba(255,255,255,.07)';
+    ctx.fillStyle = fx ? 'rgba(255,255,225,.11)' : 'rgba(255,255,255,.07)';
     for (let y = 0; y < 430; y += 30) if (polyPath(ctx, K, [[-450, y], [450, y], [450, y + 15], [-450, y + 15]])) ctx.fill();
-    ctx.fillStyle = 'rgba(0,30,0,.06)';
+    ctx.fillStyle = fx ? 'rgba(0,30,0,.1)' : 'rgba(0,30,0,.06)';
     for (let x = -330; x < 330; x += 30) if (polyPath(ctx, K, [[x, 0], [x + 15, 0], [x + 15, 430], [x, 430]])) ctx.fill();
     ctx.restore();
   }
-  fillPoly(ctx, K, TRACK, '#a07a52');
-  fillPoly(ctx, K, DIRT, '#b98a5e');
+  if (fx) groundGrain(ctx, K, grassDetail(), RING, -450, 450, -180, 450, 0.85, 26);   // 풀잎 결
+  fillPoly(ctx, K, TRACK, fx ? '#96714c' : '#a07a52');
+  fillPoly(ctx, K, DIRT, fx ? '#ae8459' : '#b98a5e');
   groundGrain(ctx, K, 'dirt_tex', DIRT, -100, 100, -40, 160, 0.8);
   groundGrain(ctx, K, 'dirt_tex', TRACK, -450, 450, 150, 450, 0.8);
-  fillPoly(ctx, K, INGRASS, '#3f9049');
+  fillPoly(ctx, K, INGRASS, fx ? '#49863c' : '#3f9049');
+  if (fx) groundGrain(ctx, K, grassDetail(), INGRASS, -90, 90, 0, 135, 0.85, 26);
   fillPoly(ctx, K, circle(0, 60.5, 9, 20), '#c2946a');
   fillPoly(ctx, K, circle(0, 0, 13, 24), '#b98a5e');
   LINES.forEach(q => fillPoly(ctx, K, q, 'rgba(255,255,255,.92)', 0.02));
@@ -545,7 +551,12 @@ function drawSprite(ctx, x, y, s, u, kind, act, ph, since, dir, view, rot = 0) {
       const px = (sp.ax - ax) * k;
       ctx.translate(px, 0); ctx.rotate(-rot * Math.PI / 180); ctx.translate(-px, 0);
     }
-    ctx.drawImage(sp.img, -ax * k, -(sp.ay ?? sp.h) * k, sp.w * k, sp.h * k);
+    const iw = sp.img.naturalWidth || sp.img.width, ih = sp.img.naturalHeight || sp.img.height, ay = sp.ay ?? sp.h;
+    if (act !== 'jump' && act !== 'dive' && act !== 'lie') {   // 땅에 눕는 그림자(떠 있거나 엎드린 그림은 발밑 그림자만)
+      const kx = sp.w * k / iw, ky = sp.h * k / ih;
+      ctx.save(); ctx.scale(kx, ky); castShadow(ctx, sp.img, iw, ih, -ax * k / kx, -ay * k / ky, side && dir < 0 ? -1 : 1); ctx.restore();
+    }
+    drawLit(ctx, sp.img, iw, ih, -ax * k, -ay * k, sp.w * k, sp.h * k);
     ctx.restore();
     return true;
   }
@@ -557,7 +568,7 @@ function drawSprite(ctx, x, y, s, u, kind, act, ph, since, dir, view, rot = 0) {
 // opts.practice: 연습장(노을, 빈 관중석, 심판 없음). 수비수·주자는 practicePlay가 대본에서 이미 뺐다
 export function drawPlay3D(ctx, W, H, sc, ms, uni, opts = {}) {
   const t = toSec(ms), P = !!opts.practice, N = !P && isNight(), D = P ? 1 : duskLevel();   // D: 노을 세기(연습장은 늘 노을)
-  const K = cameraAt(sc, t, W, H);
+  const K = cameraAt(sc, t, W, H, !!opts.tele);   // opts.tele: 리플레이(공만 당겨서 따라간다)
   drawSky(ctx, K, P ? 'practice' : D > 0 ? 'game' : null, N);
   if (P) drawTowers(ctx, K);                             // 연습장: 관중석 대신 담장 너머 조명탑
   drawOuter(ctx, K, P);                                     // 경기장 바깥(카메라 쪽 관중석)
@@ -652,6 +663,7 @@ export function drawPlay3D(ctx, W, H, sc, ms, uni, opts = {}) {
   }
   if (bp && !ballDrawn && !B.held) drawBall(ctx, bp.x, bp.y, Math.max(2.2, bp.s * 0.3), ms / 30);
   if (P) duskGrade(ctx, W, H);
+  finishFrame(ctx, W, H, ms);
 
   // 비거리
   const shownAt = sc.landT ?? (sc.fly && sc.outs.length ? sc.outs[0] : null);
