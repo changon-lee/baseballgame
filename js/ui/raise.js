@@ -199,13 +199,16 @@ function seasonStatsCard(slot) {
 const groupName = slot => (slot.kind === 'bat' ? '타자' : slot.role === 'SP' ? '선발 투수' : '불펜 투수');
 function boardTable(slot, key) {
   const b = leaderboard(slot, key);
-  const tr = r => `<tr class="${r.me ? 'me' : ''}"><td>${r.rank == null ? '-' : `${r.tie ? '<small>공동</small>' : ''}${r.rank}`}</td>
-      <td>${esc(r.name)} <small>${esc(r.team)}</small></td><td>${esc(r.text)}</td></tr>`;
+  const col = r => { const t = getTeam(String(r.id).replace(/-[bp]\d+$/, '')) || getTeam(ME); return t.colors.main; };
+  const tr = r => `<div class="tv-r ${r.me ? 'me' : ''}" style="--c:${col(r)}"><i>${r.rank == null ? '-' : r.rank}</i>
+      <span>${esc(r.name)}<small>${esc(r.team)}${r.tie ? ' · 공동' : ''}</small></span><em>${esc(r.text)}</em></div>`;
   const top = b.rows.slice(0, BOARD_TOP), rest = b.rows.slice(BOARD_TOP);   // 50위 밖이면 나만 따로 아래에
-  const gap = rest.some(r => r.gap) ? '<tr class="gap"><td colspan="3">⋯</td></tr>' : '';
+  const gap = rest.some(r => r.gap) ? '<div class="tv-gap">⋯</div>' : '';
   const mine = b.myRank != null ? `내 순위 <b>${b.rows.find(r => r.me).tie ? '공동 ' : ''}${b.myRank}위</b> / ${b.pool}명` : '규정을 채우면 순위에 들어가요';
-  return `<p class="hint rz-bcap">${esc(b.name)}${b.low ? ' (낮을수록 좋아요)' : ''} · ${mine}</p>
-    ${b.rows.length ? `<div class="rz-bscroll"><table class="rz-table rz-board">${top.map(tr).join('')}${gap}${rest.map(tr).join('')}</table></div>` : '<p class="hint">아직 순위에 든 선수가 없어요</p>'}`;
+  // 중계 자막처럼: 노란 꼬리표 + 파란 띠 머리, 줄마다 팀 색 띠, 내 줄은 파랗게
+  return `<div class="tv"><div class="tv-hd"><span>${esc(b.name)}</span><b>${slot.year} ${esc(b.name)} 순위${b.low ? ' <small>낮을수록 좋아요</small>' : ''}</b></div>
+    <p class="hint rz-bcap">${mine}</p>
+    ${b.rows.length ? `<div class="rz-bscroll">${top.map(tr).join('')}${gap}${rest.map(tr).join('')}</div>` : '<p class="hint">아직 순위에 든 선수가 없어요</p>'}</div>`;
 }
 function boardCard(slot, key) {
   const defs = STAT_DEFS[slot.kind === 'pitch' ? 'pit' : 'bat'];
@@ -256,7 +259,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
   const boardKey = { bat: 'avg', pitch: 'era' };
   // 순위표는 표 안에서만 스크롤된다. 처음에는 내 줄이 가운데 오게
   const centerMe = () => {
-    const box = root.querySelector('.rz-bscroll'), me = box && box.querySelector('tr.me');
+    const box = root.querySelector('.rz-bscroll'), me = box && box.querySelector('.me');
     if (me) box.scrollTop = Math.max(0, me.offsetTop - box.clientHeight / 2 + me.offsetHeight / 2);
   };
   const bindBoard = s => {
@@ -410,22 +413,34 @@ export function showRaise(root, { storage, loadGame, onBack }) {
         <button class="chip rest" data-act="choose" data-id="rest"><b>재활 휴식</b><small>피로 ${RAISE.rest - (has(s, 'bed') ? LIFE.bedRest : 0)} · 하루씩 나아요</small></button>
         <button class="chip light" data-act="choose" data-id="rehab" ${rehabOk ? '' : 'disabled'}><b>프리미엄 재활</b><small>${won(LIFE.rehabCost)} · 하루 더 빨리 나아요</small><small class="${rehabOk ? '' : 'tired'}">${rehabOk ? '전문 재활 센터' : '현금이 모자라요'}</small></button></div>
         <p class="hint">다친 동안은 훈련도 경기도 못 해요. 피로가 높은 채로 경기에 나가면 다치기 쉬워요.</p>`
-      : `<div class="rz-drills">${drills.map(x => {
-        const c = canChoose(s, x.id), n = s.progress.train[x.id] || 0, tr = x.trait && traitOf(x.trait);
-        const sub = x.drill ? (s.traits.includes(x.trait) ? `${tr.name} 보유` : `→ ${tr.name} ${Math.min(n, RAISE.drillNeed)}/${RAISE.drillNeed}`) : `${STAT_KO[x.stat]} ${p[x.stat]}`;
-        const how = x.quick ? '달리기 트랙 · 바로 끝' : x.light ? '바로 끝 · 효과 조금' : s.kind === 'bat' ? `타격 ${RAISE.practiceGoal.bat}번` : `투구 ${RAISE.practiceGoal.pitch}구`;
-        return `<button class="chip ${x.drill ? 'drill' : instant(x) ? 'light' : ''}" data-act="choose" data-id="${x.id}" ${c.ok ? '' : 'disabled'}><b>${x.name}</b><small>${sub}</small><small class="${c.ok ? '' : 'tired'}">${c.ok ? `피로 +${x.cost} · ${how}` : '너무 지쳤어요'}</small></button>`;
-      }).join('')}
-        <button class="chip rest" data-act="choose" data-id="rest"><b>휴식</b><small>피로 ${RAISE.rest} · 컨디션이 보통 쪽으로</small><small>오늘 경기는 결장</small></button></div>
+      : (() => {
+        // 능력치 훈련은 동그란 게이지 타일(가운데 지금 능력치), 특훈은 진행 점이 달린 줄, 맨 아래 휴식
+        const ring = pct => `<svg viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="22"/><circle cx="26" cy="26" r="22" stroke-dasharray="${(Math.max(0, Math.min(100, pct)) / 100 * 138.2).toFixed(1)} 139" transform="rotate(-90 26 26)"/></svg>`;
+        const tile = x => {
+          const c = canChoose(s, x.id);
+          const how = x.quick ? '달리기 · 바로 끝' : x.light ? '바로 끝 · 효과 조금' : s.kind === 'bat' ? `타격 ${RAISE.practiceGoal.bat}번` : `투구 ${RAISE.practiceGoal.pitch}구`;
+          return `<button class="ns-tile ${instant(x) ? 'light' : ''}" data-act="choose" data-id="${x.id}" ${c.ok ? '' : 'disabled'}><span class="rw">${ring(barPct(x.stat, p[x.stat]))}<b>${p[x.stat]}</b></span>
+            <span>${x.name}</span><small class="${c.ok ? '' : 'tired'}">${c.ok ? `피로 +${x.cost}` : '너무 지쳤어요'}</small><small>${how}</small></button>`;
+        };
+        const row = x => {
+          const c = canChoose(s, x.id), n = Math.min(s.progress.train[x.id] || 0, RAISE.drillNeed), tr = traitOf(x.trait), got = s.traits.includes(x.trait);
+          return `<button class="ns-drill ${got ? 'got' : ''}" data-act="choose" data-id="${x.id}" ${c.ok ? '' : 'disabled'}><span>${x.name}<small>${got ? `${tr.name} 보유` : `→ ${tr.name}`} · <em class="${c.ok ? '' : 'tired'}">${c.ok ? `피로 +${x.cost}` : '너무 지쳤어요'}</em></small></span>
+            <span class="d">${Array.from({ length: RAISE.drillNeed }, (_, k) => `<i class="${got || k < n ? 'f' : ''}"></i>`).join('')}</span></button>`;
+        };
+        return `<div class="ns-tiles">${drills.filter(x => !x.drill).map(tile).join('')}</div>
+      <div class="ns-drills">${drills.filter(x => x.drill).map(row).join('')}
+        <button class="ns-drill rest" data-act="choose" data-id="rest"><span>휴식<small>컨디션이 보통 쪽으로 · 오늘 경기는 결장</small></span><b>피로 ${RAISE.rest}</b></button></div>
       <p class="hint">훈련을 고르면 연습장에서 직접 ${s.kind === 'bat' ? '쳐요' : '던져요'}. 잘할수록 많이 오르고, 중간에 나가면 훈련은 없던 일이 돼요. 훈련한 날도 경기에는 나가요. 휴식한 날만 쉬어요.</p>`;
+      })();
     // 나이트 스타디움: 밤 구장 사진 위에 선수 그림과 이름, 능력치 타일, 아래에 붙어 있는 경기 시작 줄
-    const man = new URL('../../assets/' + (s.kind === 'bat' ? 'ui/title_man.webp' : 'sprites/pitcher_front_16.webp'), import.meta.url).href;
+    const woman = !!s.custom && s.custom.face >= 9;      // 여성 얼굴(9번부터)을 고른 나만의 선수는 여성 선수 그림(tools/title_player.py)
+    const man = new URL('../../assets/' + (s.kind === 'bat' ? (woman ? 'ui/title_woman.webp' : 'ui/title_man.webp') : woman ? 'ui/title_wpitcher.webp' : 'sprites/pitcher_front_16.webp'), import.meta.url).href;
     const why = s.injury ? '부상 · 결장' : d.resting ? '휴식 · 결장' : d.plan === 'none' ? '벤치' : '등판 없음';
-    screen(`<img class="ns-man ${s.kind}" alt="" src="${man}">
+    screen(`<img class="ns-man ${s.kind}${woman ? ' w' : ''}" alt="" src="${man}">
       <header class="bar"><button class="ghost small" data-act="back" aria-label="뒤로">${icon('back')}</button><h2>육성모드</h2><button class="ghost small rz-rec" data-act="records">기록</button></header>
       <section class="ns-who">
         <small>SAMSUNG · ${roleOf(s)}</small>
-        <h1>${esc(p.name)}${ringHtml(s)}</h1>
+        <h1 class="${p.name.length >= 7 ? 'xl' : p.name.length >= 5 ? 'lg' : ''}">${esc(p.name)}${ringHtml(s)}</h1>
         <p>${s.year} 시즌 · ${seasonLine(s, s.stats)}</p>
         ${condHtml(s.condition)}
       </section>

@@ -882,3 +882,47 @@ button.primary{background:linear-gradient(180deg,#4c97ff,#1f6fe5 52%,#0a4fb8);bo
 .rz-slot.empty{background:rgba(255,255,255,.03);border-style:dashed;border-color:rgba(255,255,255,.16);box-shadow:none}
 .rz-slot.empty .card-h{justify-content:center}
 .rz-pp .rz-who b{font-size:17px;font-weight:900}
+
+
+/* ═══ 육성 허브 오늘의 선택: 게이지 타일 + 특훈 줄 ═══ */
+.ns-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.ns-tile{display:flex;flex-direction:column;align-items:center;gap:1px;min-height:0;padding:12px 6px 10px;border-radius:16px;text-align:center;
+  background:linear-gradient(180deg,rgba(30,44,72,.85),rgba(13,22,40,.9));border:1px solid rgba(255,255,255,.1);border-top-color:rgba(255,255,255,.22)}
+.ns-tile .rw{position:relative;display:block;width:52px;height:52px;margin-bottom:6px}
+.ns-tile svg{display:block;width:52px;height:52px}
+.ns-tile svg circle{fill:none;stroke:rgba(255,255,255,.1);stroke-width:4}
+.ns-tile svg circle+circle{stroke:#5b9bff;stroke-linecap:round}
+.ns-tile.light svg circle+circle{stroke:var(--ice)}
+.ns-tile .rw b{position:absolute;inset:0;display:grid;place-items:center;font-size:17px;font-weight:900;font-style:italic}
+.ns-tile>span:not(.rw){font-size:13px;font-weight:800;letter-spacing:-.02em;word-break:keep-all}
+.ns-tile small{font-size:10.5px;color:var(--dim);font-weight:600;line-height:1.35}
+.ns-tile small.tired,.ns-drill em.tired{color:#ff9d8f}
+.ns-tile:disabled,.ns-drill:disabled{opacity:.45}
+.ns-tile:active:not(:disabled),.ns-drill:active:not(:disabled){border-color:#5b9bff;background:linear-gradient(160deg,rgba(51,132,255,.42),rgba(31,111,229,.1))}
+.ns-drills{display:grid;gap:6px;margin-top:8px}
+.ns-drill{display:flex;align-items:center;gap:10px;width:100%;min-height:0;padding:11px 13px;border-radius:14px;text-align:left;font-size:14px;font-weight:800;
+  background:linear-gradient(180deg,rgba(30,44,72,.85),rgba(13,22,40,.9));border:1px solid rgba(255,210,63,.3)}
+.ns-drill>span:first-child{flex:1;min-width:0}
+.ns-drill small{display:block;margin-top:1px;font-size:11px;color:var(--dim);font-weight:600}.ns-drill em{font-style:normal}
+.ns-drill .d{display:flex;gap:4px;flex:none}
+.ns-drill .d i{width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.12)}
+.ns-drill .d i.f{background:var(--accent);box-shadow:0 0 6px rgba(255,210,63,.7)}
+.ns-drill.got{border-color:rgba(255,210,63,.6)}
+.ns-drill.rest{border-color:rgba(61,220,132,.35)}.ns-drill.rest>b{flex:none;font-size:13px;color:#6ff0a8}
+
+/* ═══ 육성모드 리그 순위표: 중계 자막식 ═══ */
+.tv{margin-top:10px}
+.tv-hd{display:flex;font-size:13px;font-weight:900;font-style:italic;letter-spacing:.03em;border-radius:6px;overflow:hidden}
+.tv-hd span{flex:none;padding:8px 20px 8px 14px;background:var(--accent);color:#111;clip-path:polygon(0 0,100% 0,calc(100% - 10px) 100%,0 100%)}
+.tv-hd b{flex:1;margin-left:-6px;padding:8px 14px 8px 18px;background:#0d47b8;clip-path:polygon(10px 0,100% 0,100% 100%,0 100%)}
+.tv-hd small{font-size:10.5px;font-style:normal;opacity:.75;margin-left:6px}
+.tv .rz-bscroll{margin:0}
+.tv-r{display:grid;grid-template-columns:38px 1fr auto;align-items:center;margin-top:3px;background:#111a2e;border-left:5px solid var(--c);font-size:14px;font-weight:800}
+.tv-r i{font-style:italic;font-size:17px;font-weight:900;text-align:center;color:#8b9bb6}
+.tv-r span{padding:9px 0;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tv-r span small{font-size:11px;color:#8b9bb6;margin-left:6px;font-weight:600}
+.tv-r em{min-width:70px;padding:9px 14px;font-style:italic;font-size:17px;font-weight:900;text-align:right;background:rgba(255,255,255,.05);font-variant-numeric:tabular-nums}
+.tv-r.me{background:#0d47b8}.tv-r.me i{color:var(--accent)}.tv-r.me span small{color:#cfe3ff}.tv-r.me em{background:var(--accent);color:#111}
+.tv-gap{text-align:center;color:var(--dim2);padding:2px}
+.ns-man.pitch.w{right:-6px;height:316px}
+.ns-who h1.lg{font-size:clamp(32px,10vw,42px)}.ns-who h1.xl{font-size:clamp(24px,7.4vw,31px);letter-spacing:-.05em}.ns-who h1{overflow-wrap:anywhere}
