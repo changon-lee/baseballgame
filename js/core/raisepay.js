@@ -5,6 +5,7 @@
 // 다음 해 연봉은 두 가지 중 큰 쪽:
 //   ① 성적 배수: 지금 연봉 × (성적이 좋을수록 큰 배수, 미친 성적이면 3배). 연봉이 이미 높은 선수도 잘하면 크게 오른다
 //   ② 시세: 실제 KBO 시세(리그 평균 약 1.7억, 최고 30~42억, 김도영 1억 → 5억) 쪽으로 다가간 값. 연봉이 낮은 선수가 잘하면 시세까지 확 뛴다
+// 한 번에 최대 3배까지지만, 리그 1등(정규시즌 MVP·구원왕)은 한도 없이 시세를 그대로 받는다
 const START = {
   'samsung-b01': 23000,   // 김지찬 2억 3000만
   'samsung-b02': 20000,   // 김성윤 2억
@@ -32,6 +33,7 @@ const START = {
 export const PAY = {
   min: 3000,              // 최저 연봉 3000만
   raiseMax: 3,            // 한 번에 최대 3배(+200%). 우승하면 3.3배까지
+  topAwards: ['mvp', 'sv'], // 이 상을 받으면(리그 1등) 3배 한도 없이 시세를 그대로 받는다
   cutMax: 0.4,            // 한 번에 최대 40% 삭감
   toward: 0.7,            // 성적 기준 연봉 쪽으로 이만큼 다가간다(협상)
   scale: 0.85,            // 실제 시세보다 조금 보수적으로
@@ -130,8 +132,10 @@ export function contract(slot) {
   const awards = awardsOf(slot);
   const prem = (champ ? PAY.champPremium : 1) * (1 + awards.reduce((a, x) => a + x.prem, 0));
   const goal = target(slot) * prem;
-  let to = Math.max(from * perfMult(slot) * prem, from + (goal - from) * PAY.toward);
-  const lo = from * (1 - PAY.cutMax), hi = from * PAY.raiseMax * prem;
+  // 리그 1등(정규시즌 MVP, 마무리는 구원왕)은 협상 없이 시세를 그대로 받고, 3배 한도도 없다(최저 연봉 신인도 바로 리그 최고 대우)
+  const top = awards.some(a => PAY.topAwards.includes(a.id));
+  let to = Math.max(from * perfMult(slot) * prem, from + (goal - from) * (top ? 1 : PAY.toward));
+  const lo = from * (1 - PAY.cutMax), hi = Math.max(from * PAY.raiseMax * prem, top ? goal : 0);
   to = roundPay(Math.min(hi, Math.max(lo, to)));
   if (to < lo) to = roundPay(lo, Math.ceil);
   if (to > hi) to = roundPay(hi, Math.floor);

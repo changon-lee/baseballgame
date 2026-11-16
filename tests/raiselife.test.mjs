@@ -112,3 +112,19 @@ test('awards: the league leader takes the titles, a prize, a salary premium and 
   assert.deepEqual(awardsOf({ ...best, season: { ...best.season, phase: 'regular' } }), []);
   assert.ok(PAY.raiseMax);
 });
+
+test('a league MVP on the minimum salary jumps straight to the market rate, past the 3x limit', () => {
+  const others = Array.from({ length: 8 }, (_, k) => line(110, 100, 25 + k, 3 + k, 10, 15 + k));
+  const rookie = { ...leagueSlot(line(115, 100, 45, 15, 15, 40), others), salary: PAY.min };
+  const c = contract(rookie);
+  assert.ok(c.awards.some(a => a.id === 'mvp'));
+  assert.ok(c.to >= 200000, `mvp rookie ${c.to}`);                       // OPS 1.4대 MVP: 20억 이상
+  // 잘했지만 리그 1등이 아니면 3배 한도 그대로
+  const second = { ...leagueSlot(line(115, 100, 40, 10, 15, 30), [...others, line(115, 100, 50, 20, 15, 50)]), salary: PAY.min };
+  const c2 = contract(second);
+  assert.ok(!c2.awards.some(a => a.id === 'mvp'));
+  assert.ok(c2.to <= PAY.min * PAY.raiseMax * 1.5, `second ${c2.to}`);
+  // 이미 많이 받는 MVP는 깎이지 않는다
+  const star = contract({ ...rookie, salary: 400000 });
+  assert.ok(star.to >= 400000);
+});
