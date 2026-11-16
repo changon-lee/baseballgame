@@ -1162,7 +1162,8 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   }
   function drawMsg() {
     if (!msg || msg.hidden) return;
-    const y = V && V.kind === 'pitcher' && !play ? H * 0.2 : H * 0.14;
+    // 왼쪽 위 점수판·체력·응원 게이지(hudY 아래 72px까지)를 피해 그 아래에 띄운다
+    const y = Math.max(V && V.kind === 'pitcher' && !play ? H * 0.2 : H * 0.14, hudY() + 108);
     // 튀어나오기: 크게 나타났다가 살짝 작아지며 자리 잡는다(0.26초)
     const t = Math.min(1, (performance.now() - (msg.at || 0)) / 260);
     const sc = t < 0.55 ? 1.6 - 0.75 * (t / 0.55) : 0.85 + 0.15 * Math.sin(((t - 0.55) / 0.45) * Math.PI / 2);
