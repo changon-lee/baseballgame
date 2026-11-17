@@ -62,8 +62,65 @@ const fxText = (fx, ups = []) => [fx.cond ? `컨디션 ${fx.cond > 0 ? '+' : ''}
 const optHint = o => { const f = o.fx; if (f.gamble) return '운에 맡기기'; const t = []; if (f.cond) t.push(`컨디션 ${f.cond > 0 ? '↑' : '↓'}`); if (f.fat) t.push(`피로 ${f.fat > 0 ? '+' : ''}${f.fat}`); if (f.fans) t.push(`인기 ${f.fans > 0 ? '+' : ''}${f.fans}`); if (f.cash) t.push(`${f.cash > 0 ? '+' : ''}${won(f.cash)}`); if (f.cashAd) t.push('광고 한 편'); if (f.xp) t.push('경험치'); return t.join(' · ') || '별일 없음'; };
 const pctTxt = x => `${x > 0 ? '▲' : x < 0 ? '▼' : ''}${Math.abs(x).toFixed(1)}%`;
 const tone = x => (x > 0.05 ? 'up' : x < -0.05 ? 'down' : '');
-// 우승 반지
-const ringHtml = s => (rings(s) ? ` <span class="rz-ring" title="한국시리즈 우승 ${rings(s)}회">💍${rings(s) > 1 ? '×' + rings(s) : ''}</span>` : '');
+// 우승 반지: 결혼반지(가는 띠 + 큰 다이아 하나)가 아니라 실제 우승 반지처럼 — 크고 납작한 팔각 윗면, 가장자리를 두른 작은 다이아,
+// 팀 색 에나멜 위 'KOREAN SERIES CHAMPIONS' 글자, 가운데 LIONS 문장과 통산 우승 수만큼의 다이아, 두꺼운 금 띠에 새긴 팀 이름·연도·이름
+const oct = (cx, cy, w, h, c) => [[cx - w + c, cy - h], [cx + w - c, cy - h], [cx + w, cy - h + c], [cx + w, cy + h - c], [cx + w - c, cy + h], [cx - w + c, cy + h], [cx - w, cy + h - c], [cx - w, cy - h + c]];
+const pts = p => p.map(q => q.map(v => v.toFixed(1)).join(',')).join(' ');
+function alongPerimeter(poly, n) {      // 다각형 둘레를 n칸으로 고르게 나눈 점들(가장자리 다이아 자리)
+  const seg = poly.map((a, i) => { const b = poly[(i + 1) % poly.length]; return [a, b, Math.hypot(b[0] - a[0], b[1] - a[1])]; });
+  const total = seg.reduce((t, x) => t + x[2], 0), out = [];
+  for (let k = 0; k < n; k++) {
+    let d = (k + 0.5) * total / n, i = 0;
+    while (d > seg[i][2]) { d -= seg[i][2]; i++; }
+    const [a, b, len] = seg[i];
+    out.push([a[0] + (b[0] - a[0]) * d / len, a[1] + (b[1] - a[1]) * d / len]);
+  }
+  return out;
+}
+let ringUid = 0;
+// 큰 반지(세리머니). titles: 통산 우승 수(가운데 위 다이아 개수, 최대 12), year, name: 띠에 새길 이름
+export function ringSvg({ titles, year, name }) {
+  const u = 'cr' + (++ringUid), cx = 100, cy = 88;
+  const pave = alongPerimeter(oct(cx, cy, 59, 51, 17), 34);
+  const n = Math.max(1, Math.min(12, titles)), crown = Array.from({ length: n }, (_, k) => {
+    const a = Math.PI * (1.18 + 0.64 * (n === 1 ? 0.5 : k / (n - 1)));       // 가운데 문장 위로 부채꼴
+    return [cx + Math.cos(a) * 24, cy + 4 + Math.sin(a) * 21];
+  });
+  const stone = ([x, y], r, k) => `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}" fill="url(#${u}d)" stroke="#8a6a1c" stroke-width=".6"/>${k % 5 === 0 ? `<circle class="spark" style="--k:${k}" cx="${(x - r * 0.3).toFixed(1)}" cy="${(y - r * 0.3).toFixed(1)}" r="${(r * 0.45).toFixed(1)}" fill="#fff"/>` : ''}`;
+  return `<svg viewBox="0 0 200 222" role="img" aria-label="${year} 한국시리즈 우승 반지">
+  <defs>
+    <linearGradient id="${u}g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff3c4"/><stop offset=".35" stop-color="#f2c14e"/><stop offset=".7" stop-color="#b9831f"/><stop offset="1" stop-color="#ffe08a"/></linearGradient>
+    <linearGradient id="${u}s" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#7a5212"/><stop offset=".22" stop-color="#e9b443"/><stop offset=".5" stop-color="#fff0b5"/><stop offset=".78" stop-color="#d9a238"/><stop offset="1" stop-color="#7a5212"/></linearGradient>
+    <radialGradient id="${u}d" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#fff"/><stop offset=".55" stop-color="#e3eefc"/><stop offset="1" stop-color="#9fb6d6"/></radialGradient>
+    <radialGradient id="${u}b" cx=".5" cy=".38" r=".75"><stop offset="0" stop-color="#2f7dff"/><stop offset=".6" stop-color="#0a4fb8"/><stop offset="1" stop-color="#05275e"/></radialGradient>
+    <linearGradient id="${u}sh" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".55"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+    <clipPath id="${u}c"><polygon points="${pts(oct(cx, cy, 66, 58, 20))}"/></clipPath>
+    <path id="${u}t" d="M ${cx - 36} ${cy} A 36 31 0 0 1 ${cx + 36} ${cy}"/>
+    <path id="${u}u" d="M ${cx - 43} ${cy} A 43 38 0 0 0 ${cx + 43} ${cy}"/>
+    <path id="${u}e" d="M ${cx - 58} 150 A 58 62 0 0 0 ${cx + 58} 150"/>
+  </defs>
+  <path fill-rule="evenodd" fill="url(#${u}s)" stroke="#6b4710" stroke-width="1.2" d="M ${cx} 44 a 72 86 0 1 0 .01 0 Z M ${cx} 70 a 47 62 0 1 1 -.01 0 Z"/>
+  <text class="eng" font-size="8.5"><textPath href="#${u}e" startOffset="50%" text-anchor="middle">SAMSUNG LIONS · ${year} · ${name}</textPath></text>
+  <polygon points="${pts(oct(cx, cy + 4, 66, 58, 20))}" fill="#5c3c0c"/>
+  <polygon points="${pts(oct(cx, cy, 66, 58, 20))}" fill="url(#${u}g)" stroke="#6b4710" stroke-width="1.2"/>
+  ${pave.map((p, k) => stone(p, 2.9, k)).join('')}
+  <polygon points="${pts(oct(cx, cy, 52, 44, 14))}" fill="url(#${u}b)" stroke="#f2c14e" stroke-width="1.6"/>
+  <text class="arc" font-size="8.6"><textPath href="#${u}t" startOffset="50%" text-anchor="middle">KOREAN SERIES</textPath></text>
+  <text class="arc" font-size="8.6"><textPath href="#${u}u" startOffset="50%" text-anchor="middle">CHAMPIONS</textPath></text>
+  <ellipse cx="${cx}" cy="${cy + 2}" rx="29" ry="24" fill="#05275e" stroke="url(#${u}g)" stroke-width="3"/>
+  ${crown.map((p, k) => stone(p, 2.2, k + 1)).join('')}
+  <text class="crest" x="${cx}" y="${cy + 9}" font-size="15" text-anchor="middle">LIONS</text>
+  <text class="yr" x="${cx}" y="${cy + 20}" font-size="7" text-anchor="middle">${year}</text>
+  <g clip-path="url(#${u}c)"><rect class="sheen" x="-60" y="20" width="40" height="150" fill="url(#${u}sh)" transform="rotate(18 100 88)"/></g>
+</svg>`;
+}
+// 작은 반지(이름 옆·결산 줄): 팔각 금 윗면 + 파란 에나멜 + 가운데 다이아, 아래로 두꺼운 띠
+export const ringIcon = () => `<svg class="ring-ic" viewBox="0 0 24 24" aria-hidden="true">
+  <path d="M5 13a7 8.5 0 1 0 14 0" fill="none" stroke="#b9831f" stroke-width="3.2" stroke-linecap="round"/>
+  <polygon points="${pts(oct(12, 9, 8.5, 7, 2.8))}" fill="#f2c14e" stroke="#7a5212" stroke-width=".8"/>
+  <polygon points="${pts(oct(12, 9, 5.6, 4.4, 1.8))}" fill="#0a4fb8"/>
+  <circle cx="12" cy="9" r="1.9" fill="#fff"/></svg>`;
+const ringHtml = s => (rings(s) ? ` <span class="rz-ring" title="한국시리즈 우승 ${rings(s)}회">${ringIcon()}${rings(s) > 1 ? '×' + rings(s) : ''}</span>` : '');
 // 가을야구 소식(경기 결과 화면): 정규시즌이 끝난 날의 진출 여부, 시리즈를 이기거나 진 날
 function postNews(rep) {
   if (rep.postStart) {
@@ -147,7 +204,7 @@ function ceremonyHtml(s, team) {
         : `<p>이번 한국시리즈엔 나서지 못했지만<br>정규시즌의 활약이 우승의 밑거름이 됐어요</p><p class="rz-line">정규시즌 ${seasonLine(s, s.stats)}</p>`}`,
     // 4. 우승 반지
     `<div class="cer-kicker">챔피언의 증표</div>
-     <div class="cer-ringwrap"><div class="cer-ring"><i>💎</i></div></div>
+     <div class="cer-ringwrap"><div class="cer-ring">${ringSvg({ titles: REAL_TITLES + ring, year: s.year, name })}</div></div>
      <div class="cer-engrave">${s.year} CHAMPIONS · ${name} · #${ring}</div>
      <h2 class="cer-h">우승 반지 ${ring}개째</h2>
      <p>삼성 라이온즈 통산 <b>${REAL_TITLES + ring}번째 우승</b> · ${when}</p>
@@ -641,7 +698,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
     screen(`<div class="eyebrow center">${s.year} 시즌 종료</div>
       ${champ ? `<section class="card rz-champ"><div class="rz-confetti">🎊 🏆 🎊</div><h1>${esc(result)}!</h1>
         <p>${s.year} 삼성 라이온즈가 한국시리즈 정상에 올랐어요</p>
-        <div class="rz-ringbig">💍 우승 반지 ${rings(s) + 1}개째</div>${mvp ? '<div class="rz-ringbig mvp">🏅 한국시리즈 MVP</div>' : ''}
+        <div class="rz-ringbig">${ringIcon()} 우승 반지 ${rings(s) + 1}개째</div>${mvp ? '<div class="rz-ringbig mvp">🏅 한국시리즈 MVP</div>' : ''}
         <p class="hint">${esc(p.name)}의 우승 반지는 슬롯과 허브에 계속 남아요</p>
         <button class="ghost small" data-act="cere">세리머니 다시 보기</button></section>`
         : `<div class="re">🏁</div><h1 class="res">${esc(p.name)}</h1><p class="hint center rz-postres">${s.season.post && s.season.post.seeds.includes(ME) ? '🍂' : '🍃'} ${esc(result)}</p>`}

@@ -1128,3 +1128,19 @@ button.primary:disabled{opacity:1;color:var(--dim2);background:rgba(255,255,255,
 /* ── 홈런 컷인: 터치하면 넘어가요 ── */
 .cutin .c-skip{left:0;right:0;top:calc(36% + clamp(62px,11vh,96px) + 56px);text-align:center;font-size:13px;font-weight:700;color:rgba(255,255,255,.85);text-shadow:0 1px 6px rgba(0,0,0,.9);opacity:0;animation:c-fadein .3s .5s ease-out forwards}.cutin.k-homerun_bad .c-skip{top:calc(30% + clamp(86px,22vw,132px) + 96px)}
 .ns-meta b{white-space:normal;word-break:keep-all;overflow-wrap:anywhere}
+
+/* ── 우승 반지(실제 우승 반지 모양 SVG) ── */
+.cer-ring{width:min(210px,62vw);height:auto;border-radius:0;background:none;filter:drop-shadow(0 10px 22px rgba(0,0,0,.55)) drop-shadow(0 0 22px rgba(242,193,78,.45));animation:cerRingFloat 3.6s ease-in-out infinite}
+.cer-ring svg{display:block;width:100%;height:auto}
+.cer-ring .arc{fill:#ffe08a;font-weight:900;letter-spacing:.14em;font-family:system-ui,sans-serif}
+.cer-ring .crest{fill:#f2c14e;font-weight:900;font-style:italic;letter-spacing:.04em;font-family:system-ui,sans-serif;paint-order:stroke;stroke:#5c3c0c;stroke-width:.8px}
+.cer-ring .yr{fill:#cfe0ff;font-weight:800;letter-spacing:.2em;font-family:system-ui,sans-serif}
+.cer-ring .eng{fill:#5c3c0c;font-weight:900;letter-spacing:.12em;font-family:system-ui,sans-serif}
+.cer-ring .sheen{animation:cerSheen 3.6s ease-in-out infinite}
+.cer-ring .spark{opacity:0;animation:cerSpark 2.4s ease-in-out infinite;animation-delay:calc(var(--k) * .17s)}
+@keyframes cerRingFloat{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-6px) rotate(2deg)}}
+@keyframes cerSheen{0%,35%{transform:translateX(0) rotate(18deg)}75%,100%{transform:translateX(260px) rotate(18deg)}}
+@keyframes cerSpark{0%,70%,100%{opacity:0}80%{opacity:1}}
+.ring-ic{width:1.05em;height:1.05em;vertical-align:-.16em;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}
+.rz-ringbig .ring-ic{width:1.2em;height:1.2em;margin-right:2px}
+@media (prefers-reduced-motion:reduce){.cer-ring .sheen,.cer-ring .spark{animation:none}}
