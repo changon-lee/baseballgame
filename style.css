@@ -971,3 +971,160 @@ button.primary{background:linear-gradient(180deg,#4c97ff,#1f6fe5 52%,#0a4fb8);bo
 .stage:has(.pitch-pick:not(:empty):not(.out)) .controls p{text-align:left;max-width:46%}
 .pitch-pick button{--a:calc(96deg + var(--i) * 20deg);width:58px;height:58px}
 .pitch-pick kbd{right:auto;left:-1px;top:-1px;min-width:15px;height:15px;font-size:9.5px}
+
+
+/* ═══ 경기 끝: 중계 파이널(FINAL 꼬리표 · 두 팀 색 점수 띠 · 이닝 표 · MVP 자막) ═══ */
+.game.ended .board,.game.ended .hud-r{display:none}
+.overlay:has(.fin){align-items:flex-start;overflow-y:auto;padding:calc(20px + env(safe-area-inset-top)) 16px calc(18px + env(safe-area-inset-bottom));
+  background:linear-gradient(180deg,rgba(4,8,18,.5),rgba(4,8,18,.94) 52%)}
+.end-card.fin{max-width:420px;max-height:none;overflow:visible;padding:0;text-align:left;background:none;border:0;box-shadow:none;animation:finIn .45s cubic-bezier(.2,.9,.3,1) both}
+.fin-tag{display:inline-block;padding:4px 10px 3px;border-radius:3px;background:var(--gold);color:#111;font-size:13px;font-weight:900;font-style:italic;letter-spacing:.1em}
+.end-card.fin h1{font-size:50px;font-weight:900;margin:8px 0 12px;letter-spacing:-.02em;text-shadow:0 6px 24px rgba(0,0,0,.5)}
+.end-card.fin.lose h1{color:#c3cfdf}
+.fin-sb{display:grid;grid-template-columns:1fr 66px 1fr;height:76px;border-radius:10px;overflow:hidden;box-shadow:0 14px 34px rgba(0,0,0,.5)}
+.fin-sb>div{display:flex;align-items:center;justify-content:space-between;gap:6px;min-width:0;padding:0 14px;background:var(--c);color:#fff;font-size:18px;font-weight:900;white-space:nowrap}
+.fin-sb>div b{font-size:46px;font-weight:900;font-style:italic;line-height:1}
+.fin-sb>div.l{filter:saturate(.45) brightness(.65)}
+.fin-sb>span{display:flex;flex-direction:column;align-items:center;justify-content:center;background:#f3f6fb;color:#0b111f;font-size:16px;font-weight:900;font-style:italic;letter-spacing:.04em}
+.fin-sb>span small{font-size:11px;font-style:normal;color:#5b6b82;letter-spacing:0}
+.end-card.fin .ls{margin:12px 0 0;background:rgba(10,16,30,.88);border-radius:8px;overflow:hidden;font-size:12.5px}
+.end-card.fin .ls th{background:rgba(255,255,255,.04);padding:6px 0 4px}
+.end-card.fin .ls td{padding:7px 0}
+.end-card.fin .ls .tn{padding-left:10px;box-shadow:inset 4px 0 0 var(--c)}
+.end-card.fin .ls td.rr{color:var(--gold);background:rgba(255,255,255,.05)}
+.fin-mvp{position:relative;display:flex;align-items:center;gap:12px;margin-top:14px;padding:10px 12px;border-radius:10px;overflow:hidden;background:linear-gradient(90deg,var(--c),rgba(11,17,31,.96))}
+.fin-mvp>em{position:absolute;right:-4px;top:-12px;font-size:60px;font-weight:900;font-style:italic;color:rgba(255,255,255,.12);pointer-events:none}
+.fin-mvp .av{width:54px;height:54px;border-radius:8px}
+.fin-mvp small{display:block;font-size:11px;font-weight:900;color:var(--gold);letter-spacing:.05em}
+.fin-mvp b{display:block;font-size:19px;font-weight:900}.fin-mvp p{margin:1px 0 0;font-size:12.5px;color:#d6e4ff}
+.end-card.fin .box{margin:12px 0 0;padding:4px 12px 8px;border-radius:10px;background:rgba(255,255,255,.05)}
+.fin-act{margin-top:16px}
+@keyframes finIn{from{opacity:0;transform:translateY(18px)}}
+
+/* ═══ 공수교대 라인스코어: 화면 아래 방송 띠 ═══ */
+.linescore{left:0;right:0;top:auto;bottom:calc(14px + env(safe-area-inset-bottom));padding:0;border-radius:0;background:none;border:0;box-shadow:none;transform:translateY(24px)}
+.linescore .ls-hd{display:flex;width:max-content;max-width:calc(100% - 20px);margin-left:10px}
+.linescore .ls-hd span{padding:5px 16px 5px 12px;background:var(--gold);color:#111;font-size:12.5px;font-weight:900;white-space:nowrap;clip-path:polygon(0 0,100% 0,calc(100% - 9px) 100%,0 100%)}
+.linescore .ls-hd b{padding:5px 16px 5px 18px;margin-left:-6px;background:#0d47b8;color:#fff;font-size:12.5px;font-weight:800;white-space:nowrap;clip-path:polygon(9px 0,100% 0,100% 100%,0 100%)}
+.linescore .ls{background:#0b111f;font-size:14px;box-shadow:0 -6px 24px rgba(0,0,0,.4)}
+.linescore .ls.x{font-size:12px}
+.linescore .ls th{background:#111a2e;padding:5px 0 3px}
+.linescore .ls td{padding:7px 0;font-weight:700;border-top-color:rgba(255,255,255,.06)}
+.linescore .ls .tn{width:62px;padding-left:12px;box-shadow:inset 6px 0 0 var(--c)}
+.linescore .ls .cur{background:rgba(255,210,63,.18);color:var(--gold)}
+.linescore .ls .rr{background:#f3f6fb;color:#0b111f;border-left:0;padding:0 2px;font-style:italic}.linescore .ls td.rr{font-size:16px;font-weight:900}
+.linescore .ls .hh{background:#1a2438;color:#c3d2e8;padding:0 2px}
+
+/* ═══ 경기 시작 카운트다운: 3·2·1 고리 → PLAY BALL, 아래 두 팀 선발 ═══ */
+.cdown{position:absolute;inset:0;z-index:4;cursor:pointer;background:radial-gradient(circle at 50% 40%,rgba(4,8,18,.4),rgba(4,8,18,.88) 70%);animation:cdIn .3s both;transition:opacity .3s}
+.cdown.out{opacity:0}
+.cd-ring{position:absolute;left:50%;top:38%;width:200px;height:200px;transform:translate(-50%,-50%);transition:opacity .3s,transform .3s}
+.cd-ring svg{width:100%;height:100%;overflow:visible}
+.cd-ring circle{fill:none;stroke:rgba(255,255,255,.12);stroke-width:5}
+.cd-ring .arc{stroke:#5b9bff;stroke-linecap:round;stroke-dasharray:100 100;filter:drop-shadow(0 0 6px #5b9bff)}
+.cd-ring.pop .arc{animation:cdArc .7s linear both}
+.cd-ring b{position:absolute;inset:0;display:grid;place-items:center;font-size:110px;font-weight:900;font-style:italic;color:#fff;text-shadow:0 0 30px rgba(91,155,255,.8)}
+.cd-ring.pop b{animation:cdNum .7s cubic-bezier(.2,.9,.3,1) both}
+.cdown.go .cd-ring{opacity:0;transform:translate(-50%,-50%) scale(1.3)}
+.cd-pb{position:absolute;left:0;right:0;top:calc(38% + 118px);text-align:center;font-size:44px;font-weight:900;font-style:italic;letter-spacing:.12em;color:#fff;opacity:.4;transition:opacity .25s,transform .35s cubic-bezier(.2,.9,.3,1),top .35s}
+.cdown.go .cd-pb{opacity:1;top:calc(38% - 30px);transform:scale(1.12);text-shadow:0 0 26px rgba(91,155,255,.9)}
+.cd-pb small{display:block;margin-top:6px;font-size:13px;font-style:normal;font-weight:700;letter-spacing:0;color:#9fb3cc;text-shadow:none}
+.cd-mu{position:absolute;left:16px;right:16px;bottom:calc(30px + env(safe-area-inset-bottom));max-width:420px;margin:0 auto;display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:14px;background:rgba(10,16,30,.85);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+.cd-p{flex:1;display:flex;align-items:center;gap:10px;min-width:0}
+.cd-p.home{flex-direction:row-reverse;text-align:right}
+.cd-p>div{min-width:0}
+.cd-p .av{width:44px;height:44px;box-shadow:0 0 0 2px var(--c)}
+.cd-p b{display:block;font-size:14px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cd-p small{display:block;font-size:11px;font-weight:700;color:#9fb3cc;white-space:nowrap}
+.cd-mu em{flex:none;font-size:16px;font-weight:900;font-style:italic;color:var(--gold)}
+@keyframes cdArc{from{stroke-dashoffset:0}to{stroke-dashoffset:100}}
+@keyframes cdNum{0%{transform:scale(1.6);opacity:0}40%{transform:scale(.95);opacity:1}100%{transform:none}}
+@keyframes cdIn{from{opacity:0}}
+
+/* ═══ 육성 경기 결과: 중계 파이널 톤 ═══ */
+.rr-top{display:flex;justify-content:space-between;gap:8px;margin:2px 0 10px;font-size:12px;font-weight:700;color:#aab8cc;text-align:left}
+.rr-strip{display:flex;height:42px;border-radius:8px;overflow:hidden;font-weight:900;box-shadow:0 10px 24px rgba(0,0,0,.35);text-align:left}
+.rr-strip span{display:grid;place-items:center;padding:0 14px;background:var(--accent);color:#111;font-size:16px;font-style:italic;letter-spacing:.1em}
+.rr-strip.lose span{background:#8b98ad}.rr-strip.draw span,.rr-strip.final span{background:#c3cfdf}
+.rr-strip b{flex:1;display:flex;align-items:center;gap:8px;padding:0 14px;background:#0d47b8;color:#fff;font-size:15px}
+.rr-strip.lose b{background:#24324d}
+.rr-strip u{margin-left:auto;font-size:22px;font-style:italic;text-decoration:none}
+.rr-hero{display:flex;align-items:flex-end;gap:14px;margin:16px 0 12px;text-align:left}
+.rr-hero .av{width:84px;height:84px;border-radius:12px;box-shadow:0 0 0 3px #1f5fd6}
+.rr-hero>div{min-width:0}
+.rr-hero small{font-size:12px;font-weight:700;color:#9fb3cc}
+.rr-hero h2{margin:1px 0 0;font-size:28px;font-weight:900;line-height:1.1}
+.rr-hero p{margin:4px 0 0;font-size:12.5px;font-weight:800;color:var(--accent)}
+.rr-line{display:grid;grid-template-columns:repeat(4,1fr);border-radius:12px;background:#0f1729;border:1px solid rgba(255,255,255,.08)}
+.rr-line div{padding:10px 0;text-align:center}.rr-line div+div{border-left:1px solid rgba(255,255,255,.07)}
+.rr-line b{display:block;font-size:28px;font-weight:900;font-style:italic;line-height:1.1}
+.rr-line small{font-size:11px;font-weight:700;color:#8b9bb6}
+.rr-line .hl b{color:var(--accent)}
+.rr-why{margin-top:8px;text-align:left}
+.rr-grow{margin-top:14px;text-align:left}
+.rr-grow h4{margin:0 0 7px;font-size:12px;font-weight:800;color:#8b9bb6;letter-spacing:.04em}
+.rr-grow div{display:grid;grid-template-columns:48px 1fr auto;align-items:center;gap:10px;margin-bottom:7px;font-size:13px;font-weight:800}
+.rr-grow i{display:block;height:8px;border-radius:4px;background:rgba(255,255,255,.08);overflow:hidden}
+.rr-grow i i{height:100%;background:linear-gradient(90deg,#3d8bff,#7ab6ff);box-shadow:0 0 10px #3d8bff}
+.rr-grow em{font-style:normal;color:#3ddc84}
+.rr-meta{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin:12px 0 4px;text-align:left}
+.rr-meta div{min-width:0;padding:9px 11px;border-radius:10px;background:#0f1729;font-size:11.5px;font-weight:700;color:#8b9bb6}
+.rr-meta b{display:block;margin-top:3px;font-size:14.5px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rr-meta em{margin-left:3px;font-size:12px;font-style:normal}.rr-meta em.up{color:#3ddc84}.rr-meta em.down{color:#ff8a7a}
+.rr-meta .rz-cond{padding:1px 6px;font-size:11.5px}
+
+/* ── 누를 수 없는 단추: 어디서든 흐리게(살 수 없는 물건, 다 쓴 연습 등) ── */
+button:disabled{opacity:.45;cursor:default}
+button.primary:disabled{opacity:1;color:var(--dim2);background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1px var(--line2)}
+.hub button.primary.big:disabled::after{display:none}
+.rz-item .primary.small small{display:block;margin-top:1px;font-size:10.5px;font-weight:700;color:#ff8f8f}
+
+/* ── 시즌 허브: 경기 시작은 탭바 위에 늘 붙어 있는 줄 ── */
+.hub .hub-dock{bottom:calc(80px + env(safe-area-inset-bottom));margin:14px -2px 0}
+
+/* ── 육성 허브: 오늘의 선택 전에는 '선택하기'가 큰 단추, '바로 경기'는 작은 단추 ── */
+.ns-dock.pick{gap:8px;padding-left:14px}
+.ns-dock.pick b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ns-dock.pick button{padding:0 14px}
+.ns-dock.pick button.ghost{min-height:44px;font-size:13.5px;color:var(--dim)}
+.ns-choice{scroll-margin-top:12px}
+
+/* ── 경기 중 단추: 메뉴(줄 셋)와 나가기를 44px로, 사이를 넓게 ── */
+.hud-btns{gap:10px}
+.hud-btns button{width:44px;height:44px;font-size:16px}
+.hud-btns svg{width:18px;height:18px}
+
+/* ── 진행 메뉴: 진행 / 설정 / 소리 묶음, 켜고 끄는 것은 스위치 ── */
+.menu-card{padding:20px 16px 16px}
+.menu-card .tag{margin-bottom:12px}
+.menu-card .hint{margin:6px 0 10px}
+.menu-card .row2{margin:0 0 8px}
+.menu-card .mc-h{margin:16px 2px 6px;text-align:left;font-size:11.5px;font-weight:800;letter-spacing:.08em;color:var(--dim2)}
+.menu-card .mc-list{margin-bottom:12px;border-radius:14px;background:rgba(255,255,255,.05);box-shadow:inset 0 0 0 1px var(--line)}
+.menu-card .mc-list>*+*{border-top:1px solid var(--line)}
+.menu-card .mc-row{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;margin:0;padding:9px 12px;border-radius:0;background:none;box-shadow:none;text-align:left}
+.menu-card .mc-row>span{flex:1;min-width:0}
+.menu-card .mc-row b{display:block;font-size:14.5px}
+.menu-card .mc-row small{display:block;margin-top:2px;font-size:11.5px;font-weight:500;line-height:1.4;color:var(--dim)}
+.menu-card .mc-row em{flex:none;font-style:normal;font-size:13.5px;font-weight:800;color:var(--accent)}
+.menu-card .mc-row em::after{content:" ›";color:var(--dim2)}
+.menu-card .mc-row:disabled{opacity:1}.menu-card .mc-row:disabled em::after{content:""}
+.swt{flex:none;position:relative;display:block;width:42px;height:25px;border-radius:99px;background:rgba(255,255,255,.16);transition:background .15s}
+.swt::after{content:"";position:absolute;left:3px;top:3px;width:19px;height:19px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.4);transition:transform .15s}
+[aria-checked=true]>.swt{background:var(--blue)}
+[aria-checked=true]>.swt::after{transform:translateX(17px)}
+.menu-card .mc-snd{display:flex;align-items:center;gap:8px;padding:4px 6px 4px 12px}
+.menu-card .mc-snd .vol{flex:1;min-width:0;margin:0;grid-template-columns:62px 1fr 38px;gap:8px;text-align:left}
+.menu-card .mc-snd.off .vol{opacity:.4}
+.menu-card .mc-sw{flex:none;display:grid;place-items:center;width:54px;min-height:44px;margin:0;padding:0;background:none;box-shadow:none}
+@media (prefers-reduced-motion:reduce){.swt,.swt::after{transition:none}}
+/* ── 육성: 한계 돌파(능력치 99·구속 162km 넘음) ── */
+.ns-stats>div.over{border-color:rgba(242,193,78,.55);background:linear-gradient(180deg,rgba(84,62,14,.85),rgba(28,20,6,.9));box-shadow:0 0 18px rgba(242,193,78,.25)}
+.ns-stats>div.over b{color:var(--gold)}
+.ns-stats>div.over small span{color:var(--gold)}
+.ns-stats>div.over u{background:linear-gradient(90deg,#f2c14e,#fff1b8)}
+.rz-shop-limit{border-color:rgba(242,193,78,.4);background:linear-gradient(180deg,rgba(242,193,78,.1),rgba(255,255,255,.02))}
+.rz-shop-limit .card-h{color:var(--gold)}
+/* ── 홈런 컷인: 터치하면 넘어가요 ── */
+.cutin .c-skip{left:0;right:0;top:calc(36% + clamp(62px,11vh,96px) + 56px);text-align:center;font-size:13px;font-weight:700;color:rgba(255,255,255,.85);text-shadow:0 1px 6px rgba(0,0,0,.9);opacity:0;animation:c-fadein .3s .5s ease-out forwards}.cutin.k-homerun_bad .c-skip{top:calc(30% + clamp(86px,22vw,132px) + 96px)}
+.ns-meta b{white-space:normal;word-break:keep-all;overflow-wrap:anywhere}

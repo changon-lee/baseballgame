@@ -12,28 +12,62 @@ export const LIFE = {
   houseRecover: 3,          // 집이 있으면 매일 피로 -3
   bedRest: 10,              // 수면 캡슐 침대: 휴식 피로 회복 +10
   nutriLoad: 0.7,           // 영양사: 경기 출전 피로 × 0.7
-  fans: { min: 20, max: 60, per: 5000 },   // 시작 인기 = 20 + 연봉(만원)/5000 (20~60)
-  adsPer: 3,                // 시즌 끝 광고 수입 = 인기² × 3만원 (인기 50 → 7500만, 100 → 3억)
+  // 시작 인기 = 20 + 연봉(만원)/5000 (20~60). 인기에 상한은 없지만 easy를 넘으면 오르는 양이 easy/인기 배로 줄어든다
+  // (100까지는 그대로, 200이면 절반, 500이면 1/5, 1000이면 1/10). 내려가는 건 그대로
+  fans: { min: 20, max: 60, per: 5000, easy: 100 },
+  adPerFan: 2000,           // 광고 한 편 = 인기 × 2000만원 (인기 100 → 20억, 1000 → 200억). 시즌 끝 광고 수입과 CF 이벤트가 한 편씩
 };
 
-// ── 쇼핑 ──
-// season: 그 시즌만(다음 시즌엔 다시 계약), once: 한 번 사면 계속, repeat: 몇 번이든
+// ── 쇼핑 ── 값은 만원(10000 = 1억, 1000000 = 100억)
+// type — season: 그 시즌만(다음 시즌엔 다시 계약), once: 한 번 사면 계속, repeat: 몇 번이든
+// 효과 — xp: 훈련 경험치 배수(가장 큰 것 하나), load: 경기 피로 배수 · injury: 부상 위험 배수(가장 작은 것 하나),
+//        recover: 매일 피로 회복(더한다), rest: 휴식할 때 더 풀리는 피로(더한다), fans: 살 때 인기,
+//        gear: 능력치(일반 장비는 상한 99·구속 162km까지), over: 능력치(한계 돌파 — 상한을 넘어서 더한다)
+// line: 같은 줄의 더 좋은 것(rank가 큰 것)을 가지고 있으면 아래 것은 살 필요가 없다
 export const SHOP = [
-  { id: 'trainer', group: 'staff', type: 'season', name: '전담 트레이너', icon: '🧑‍🏫', price: 10000, desc: '훈련 경험치 +25%', xp: 1.25 },
-  { id: 'coach', group: 'staff', type: 'season', name: '메이저리그 출신 코치', icon: '🎓', price: 50000, desc: '훈련 경험치 +60%', xp: 1.6 },
-  { id: 'nutri', group: 'staff', type: 'season', name: '전담 영양사', icon: '🥗', price: 15000, desc: '경기 피로 -30% · 부상 위험 절반' },
-  { id: 'gBat', group: 'gear', type: 'once', kind: 'bat', name: '맞춤 제작 배트', icon: '🏏', price: 8000, desc: '파워 +2 · 컨택 +1', gear: { power: 2, contact: 1 } },
-  { id: 'gGoggle', group: 'gear', type: 'once', kind: 'bat', name: '고성능 스포츠 고글', icon: '🥽', price: 4000, desc: '선구안 +2', gear: { eye: 2 } },
+  { id: 'trainer', group: 'staff', type: 'season', name: '전담 트레이너', icon: '🧑‍🏫', price: 10000, desc: '훈련 경험치 +25%', xp: 1.25, line: 'xp', rank: 1 },
+  { id: 'coach', group: 'staff', type: 'season', name: '메이저리그 출신 코치', icon: '🎓', price: 50000, desc: '훈련 경험치 +60%', xp: 1.6, line: 'xp', rank: 2 },
+  { id: 'legendCoach', group: 'staff', type: 'season', name: '명예의 전당 레전드 코치', icon: '🏛️', price: 500000, desc: '훈련 경험치 +150%', xp: 2.5, line: 'xp', rank: 3 },
+  { id: 'nutri', group: 'staff', type: 'season', name: '전담 영양사', icon: '🥗', price: 15000, desc: '경기 피로 -30% · 부상 위험 절반', load: LIFE.nutriLoad, injury: LIFE.injury.nutriInjury, line: 'body', rank: 1 },
+  { id: 'science', group: 'staff', type: 'season', name: '스포츠 과학 전담팀', icon: '🔬', price: 200000, desc: '경기 피로 -50% · 부상 위험 1/4', load: 0.5, injury: 0.25, line: 'body', rank: 2 },
+  { id: 'physio', group: 'staff', type: 'season', name: '전담 물리치료사', icon: '💆', price: 30000, desc: '휴식할 때 피로가 10 더 풀려요', rest: 10 },
+  { id: 'mental', group: 'staff', type: 'season', name: '스포츠 심리 상담사', icon: '🧠', price: 20000, desc: '매일 피로 -2 · 마음이 편해요', recover: 2 },
+
+  { id: 'gGloveB', group: 'gear', type: 'once', kind: 'bat', name: '배팅 장갑', icon: '🧤', price: 2000, desc: '컨택 +1', gear: { contact: 1 } },
   { id: 'gSpike', group: 'gear', type: 'once', kind: 'bat', name: '경량 스파이크', icon: '👟', price: 3000, desc: '주력 +3', gear: { speed: 3 } },
-  { id: 'gGlove', group: 'gear', type: 'once', kind: 'pitch', name: '맞춤 글러브', icon: '🧤', price: 5000, desc: '제구 +2', gear: { control: 2 } },
-  { id: 'gPSpike', group: 'gear', type: 'once', kind: 'pitch', name: '투구용 스파이크', icon: '👟', price: 4000, desc: '구속 +1km', gear: { velo: 1 } },
+  { id: 'gGoggle', group: 'gear', type: 'once', kind: 'bat', name: '고성능 스포츠 고글', icon: '🥽', price: 4000, desc: '선구안 +2', gear: { eye: 2 } },
+  { id: 'gBat', group: 'gear', type: 'once', kind: 'bat', name: '맞춤 제작 배트', icon: '🏏', price: 8000, desc: '파워 +2 · 컨택 +1', gear: { power: 2, contact: 1 } },
+  { id: 'gSensor', group: 'gear', type: 'once', kind: 'bat', name: '스윙 분석 센서', icon: '📡', price: 12000, desc: '컨택 +2 · 선구안 +1', gear: { contact: 2, eye: 1 } },
+  { id: 'gSleeve', group: 'gear', type: 'once', kind: 'pitch', name: '어깨 보호 슬리브', icon: '🦾', price: 2000, desc: '체력 +1', gear: { stamina: 1 } },
   { id: 'gBand', group: 'gear', type: 'once', kind: 'pitch', name: '트레이닝 밴드 세트', icon: '🪢', price: 3000, desc: '체력 +2', gear: { stamina: 2 } },
-  { id: 'bed', group: 'life', type: 'once', name: '수면 캡슐 침대', icon: '🛏️', price: 2000, desc: '휴식할 때 피로가 10 더 풀려요' },
-  { id: 'car', group: 'life', type: 'once', name: '스포츠카', icon: '🏎️', price: 40000, desc: '출근길이 화제 · 인기 +5', fans: 5 },
-  { id: 'house', group: 'life', type: 'once', name: '대구 단독주택', icon: '🏡', price: 200000, desc: '매일 피로 -3 · 연고지 팬 인기 +10', fans: 10 },
+  { id: 'gPSpike', group: 'gear', type: 'once', kind: 'pitch', name: '투구용 스파이크', icon: '👟', price: 4000, desc: '구속 +1km', gear: { velo: 1 } },
+  { id: 'gGlove', group: 'gear', type: 'once', kind: 'pitch', name: '맞춤 글러브', icon: '🧤', price: 5000, desc: '제구 +2', gear: { control: 2 } },
+  { id: 'gRadar', group: 'gear', type: 'once', kind: 'pitch', name: '투구 추적 레이더', icon: '📡', price: 15000, desc: '제구 +2 · 구속 +1km', gear: { control: 2, velo: 1 } },
+
+  // 한계 돌파: 99(구속 162km)를 넘어서 오른다
+  { id: 'xShoe', group: 'limit', type: 'once', kind: 'bat', name: '카본 플레이트 스파이크', icon: '⚡', price: 200000, desc: '주력 +5', over: { speed: 5 } },
+  { id: 'xBat', group: 'limit', type: 'once', kind: 'bat', name: '티타늄 장인 배트', icon: '🔨', price: 300000, desc: '파워 +4', over: { power: 4 } },
+  { id: 'xLens', group: 'limit', type: 'once', kind: 'bat', name: '스마트 콘택트렌즈', icon: '👁️', price: 300000, desc: '선구안 +4 · 컨택 +2', over: { eye: 4, contact: 2 } },
+  { id: 'xGeneB', group: 'limit', type: 'once', kind: 'bat', name: '유전자 맞춤 트레이닝', icon: '🧬', price: 1000000, desc: '파워 · 컨택 · 선구안 +5', over: { power: 5, contact: 5, eye: 5 } },
+  { id: 'xGodB', group: 'limit', type: 'once', kind: 'bat', name: '전설의 배트 「천하무적」', icon: '🌟', price: 3000000, desc: '파워 · 컨택 +10', over: { power: 10, contact: 10 } },
+  { id: 'xLung', group: 'limit', type: 'once', kind: 'pitch', name: '고산 훈련 캠프', icon: '🏔️', price: 200000, desc: '체력 +6', over: { stamina: 6 } },
+  { id: 'xGloveP', group: 'limit', type: 'once', kind: 'pitch', name: '우주 소재 글러브', icon: '🛰️', price: 300000, desc: '제구 +4', over: { control: 4 } },
+  { id: 'xArm', group: 'limit', type: 'once', kind: 'pitch', name: '바이오메카닉스 정밀 교정', icon: '🦿', price: 500000, desc: '구속 +3km', over: { velo: 3 } },
+  { id: 'xGeneP', group: 'limit', type: 'once', kind: 'pitch', name: '유전자 맞춤 트레이닝', icon: '🧬', price: 1000000, desc: '구속 +3km · 제구 +5 · 체력 +5', over: { velo: 3, control: 5, stamina: 5 } },
+  { id: 'xGodP', group: 'limit', type: 'once', kind: 'pitch', name: '전설의 공 「불사조」', icon: '🔥', price: 3000000, desc: '구속 +6km · 제구 +10', over: { velo: 6, control: 10 } },
+
+  { id: 'bed', group: 'life', type: 'once', name: '수면 캡슐 침대', icon: '🛏️', price: 2000, desc: '휴식할 때 피로가 10 더 풀려요', rest: 10 },
   { id: 'donate', group: 'life', type: 'repeat', name: '어린이 야구단 기부', icon: '💝', price: 10000, desc: '인기 +8 · 몇 번이든', fans: 8 },
+  { id: 'car', group: 'life', type: 'once', name: '스포츠카', icon: '🏎️', price: 40000, desc: '출근길이 화제 · 인기 +5', fans: 5 },
+  { id: 'house', group: 'life', type: 'once', name: '대구 단독주택', icon: '🏡', price: 200000, desc: '매일 피로 -3 · 연고지 팬 인기 +10', fans: 10, recover: LIFE.houseRecover },
+  { id: 'penthouse', group: 'life', type: 'once', name: '한강뷰 펜트하우스', icon: '🌆', price: 1000000, desc: '매일 피로 -5 · 인기 +15', fans: 15, recover: 5 },
+  { id: 'jet', group: 'life', type: 'once', name: '개인 전용기', icon: '🛩️', price: 1500000, desc: '원정길이 편해요 · 매일 피로 -3 · 인기 +15', fans: 15, recover: 3 },
+  { id: 'yacht', group: 'life', type: 'once', name: '슈퍼 요트', icon: '🛥️', price: 3000000, desc: '휴식할 때 피로가 15 더 풀려요 · 인기 +20', fans: 20, rest: 15 },
+  { id: 'island', group: 'life', type: 'once', name: '개인 섬', icon: '🏝️', price: 5000000, desc: '매일 피로 -5 · 인기 +25', fans: 25, recover: 5 },
+  { id: 'naming', group: 'life', type: 'once', name: '대구 야구장 이름 짓기', icon: '🏟️', price: 10000000, desc: '구장에 내 이름이 붙어요 · 인기 +50', fans: 50 },
 ];
-export const SHOP_GROUPS = [['staff', '이번 시즌 계약', '시즌이 끝나면 계약도 끝나요'], ['gear', '장비', '한 번 사면 계속 써요'], ['life', '생활', '']];
+export const SHOP_GROUPS = [['staff', '이번 시즌 계약', '시즌이 끝나면 계약도 끝나요'], ['gear', '장비', '한 번 사면 계속 써요 · 능력치 99까지'],
+  ['limit', '한계 돌파', '능력치 99 · 구속 162km를 넘어서 올라요'], ['life', '생활', '']];
 export const itemOf = id => SHOP.find(x => x.id === id);
 
 const owned = slot => slot.owned || {};
@@ -47,7 +81,7 @@ export function canBuy(slot, id) {
   const it = itemOf(id);
   if (!it || (it.kind && it.kind !== slot.kind)) return { ok: false, reason: 'kind' };
   if (it.type !== 'repeat' && has(slot, id)) return { ok: false, reason: 'owned' };
-  if (id === 'trainer' && has(slot, 'coach')) return { ok: false, reason: 'owned' };   // 코치가 있으면 트레이너는 필요 없다
+  if (betterOwned(slot, it)) return { ok: false, reason: 'owned' };   // 같은 줄의 더 좋은 것이 있으면(코치가 있으면 트레이너는) 필요 없다
   if ((slot.assets || 0) < it.price) return { ok: false, reason: 'cash' };
   return { ok: true };
 }
@@ -55,21 +89,41 @@ export function buyItem(slot, id) {
   const it = itemOf(id), c = canBuy(slot, id);
   if (!c.ok) return slot;
   const val = it.type === 'season' ? slot.year : it.type === 'repeat' ? (owned(slot)[id] || 0) + 1 : true;
-  return { ...slot, assets: slot.assets - it.price, owned: { ...owned(slot), [id]: val }, fans: clamp(fansOf(slot) + (it.fans || 0), 0, 100) };
+  return { ...slot, assets: slot.assets - it.price, owned: { ...owned(slot), [id]: val }, fans: addFans(fansOf(slot), it.fans || 0) };
 }
-// 장비로 붙는 능력치
+const betterOwned = (slot, it) => !!it.line && SHOP.some(o => o.line === it.line && o.rank > it.rank && has(slot, o.id));
+const mine = (slot, key) => SHOP.filter(it => it[key] != null && has(slot, it.id));
+// 장비로 붙는 능력치: gearBonus는 상한(99·162km)까지, overBonus는 상한을 넘어서
 export function gearBonus(slot, stat) {
   return SHOP.reduce((a, it) => a + (it.gear && it.gear[stat] && has(slot, it.id) ? it.gear[stat] : 0), 0);
 }
-export const trainMult = slot => (has(slot, 'coach') ? itemOf('coach').xp : has(slot, 'trainer') ? itemOf('trainer').xp : 1);
+export function overBonus(slot, stat) {
+  return SHOP.reduce((a, it) => a + (it.over && it.over[stat] && has(slot, it.id) ? it.over[stat] : 0), 0);
+}
+export const trainMult = slot => Math.max(1, ...mine(slot, 'xp').map(it => it.xp));
+export const loadMult = slot => Math.min(1, ...mine(slot, 'load').map(it => it.load));        // 경기 피로 배수
+export const injuryMult = slot => Math.min(1, ...mine(slot, 'injury').map(it => it.injury));  // 부상 위험 배수
+export const dailyRecover = slot => mine(slot, 'recover').reduce((a, it) => a + it.recover, 0);
+export const restBonus = slot => mine(slot, 'rest').reduce((a, it) => a + it.rest, 0);
 
-// ── 인기 ──
+// ── 인기 ── 상한 없음. 소수로 저장해서(높을 때 조금씩 오른 것도 쌓인다) 화면에는 반올림해서 보여 준다
 export function fansOf(slot) {
   if (slot.fans != null) return slot.fans;
   const f = LIFE.fans, sal = slot.salary ?? 0;
   return Math.round(clamp(f.min + sal / f.per, f.min, f.max));
 }
-export const adsOf = slot => Math.round(fansOf(slot) ** 2 * LIFE.adsPer);
+export const fansShown = slot => Math.round(fansOf(slot));
+// 지금 인기에서 오르는 양의 배수(100까지 1, 그 위로는 100/인기)
+export const fansMult = f => (f <= LIFE.fans.easy ? 1 : LIFE.fans.easy / f);
+// 인기 f에 n만큼 더한다. 오를 때는 조금씩 나눠 올리며 배수를 다시 잰다(오를수록 더 힘들다). 내릴 때는 그대로, 0 밑으로는 안 간다
+export function addFans(f, n) {
+  if (!n) return f;
+  if (n < 0) return Math.max(0, f + n);
+  for (let left = n; left > 1e-9; left -= 0.5) { const step = Math.min(left, 0.5); f += step * fansMult(f); }
+  return Math.round(f * 1000) / 1000;
+}
+// 광고 한 편 값(만원): 인기에 비례
+export const adsOf = slot => Math.round(fansOf(slot) * LIFE.adPerFan);
 
 // ── 날마다 다른 난수 ──
 export function dayRng(slot, salt) {
@@ -86,7 +140,7 @@ const HURT = {
 };
 export function injuryChance(slot) {
   const L = LIFE.injury;
-  return Math.max(0, slot.fatigue - L.safe) * L.perFatigue * (has(slot, 'nutri') ? L.nutriInjury : 1);
+  return Math.max(0, slot.fatigue - L.safe) * L.perFatigue * injuryMult(slot);
 }
 // 경기에 나간 날 다쳤는지: { name, left(남은 경기), major } | null
 export function rollInjury(slot) {
@@ -113,7 +167,7 @@ export const EVENTS = [
   { id: 'dinner', icon: '🍖', title: '선배의 회식 초대', text: '고참 선배가 고기 사 준다고 나오래요.',
     opts: [{ label: '간다', fx: { cond: 1, fat: 8, fans: 1 }, say: '팀 분위기 최고! 조금 늦게 잤어요.' }, { label: '집에서 쉰다', fx: { fat: -10 }, say: '푹 잤어요.' }] },
   { id: 'cf', icon: '🎬', title: 'CF 광고 제의', text: '음료 회사에서 광고 모델 제의가 왔어요.', need: s => fansOf(s) >= 40,
-    opts: [{ label: '찍는다', fx: { cashFans: 100, fat: 15 }, say: '촬영은 힘들었지만 통장이 두둑해졌어요.' }, { label: '시즌에 집중', fx: { cond: 1 }, say: '야구에만 집중하기로 했어요.' }] },
+    opts: [{ label: '찍는다', fx: { cashAd: 1, fat: 15 }, say: '촬영은 힘들었지만 통장이 두둑해졌어요.' }, { label: '시즌에 집중', fx: { cond: 1 }, say: '야구에만 집중하기로 했어요.' }] },
   { id: 'letter', icon: '💌', title: '어린이 팬의 편지', text: '"커서 꼭 형처럼 될 거예요!" 삐뚤빼뚤한 편지가 왔어요.',
     opts: [{ label: '사인볼과 답장 보내기', fx: { fans: 6, cond: 1 }, say: '아이가 SNS에 자랑했대요. 마음이 따뜻해졌어요.' }, { label: '고이 간직한다', fx: { cond: 1 }, say: '사물함에 붙여 뒀어요.' }] },
   { id: 'coin', icon: '🎲', title: '동료의 코인 추천', text: '"이거 무조건 간다니까?" 동료가 신종 코인을 추천해요. 1억이면 된대요.', need: s => (s.assets || 0) >= 10000,
@@ -161,12 +215,14 @@ export function resolveEvent(slot, k) {
     for (const [k2, v] of Object.entries(extra)) fx[k2] = (fx[k2] || 0) + v;
     say = won ? o.win : o.lose;
   }
-  if (fx.cashFans) { fx.cash = (fx.cash || 0) + fansOf(slot) * fx.cashFans; delete fx.cashFans; }
+  if (fx.cashAd) { fx.cash = (fx.cash || 0) + adsOf(slot) * fx.cashAd; delete fx.cashAd; }   // CF 한 편 = 광고 한 편 값
+  const f0 = fansOf(slot), f1 = addFans(f0, fx.fans || 0);
+  if (fx.fans) fx.fans = Math.round((f1 - f0) * 10) / 10;                                   // 실제로 오른 만큼(인기가 높으면 덜 오른다)
   const next = {
     ...slot, event: null,
     condition: clamp(slot.condition + (fx.cond || 0), -2, 2),
     fatigue: clamp(slot.fatigue + (fx.fat || 0), 0, 100),
-    fans: clamp(fansOf(slot) + (fx.fans || 0), 0, 100),
+    fans: f1,
     assets: Math.max(0, (slot.assets || 0) + (fx.cash || 0)),
   };
   return { slot: next, say, fx, stat: MAIN[slot.kind] };

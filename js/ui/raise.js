@@ -6,12 +6,12 @@ import { avg, era, ip } from '../core/growth.js';
 import { createRng } from '../core/rng.js';
 import { TRAITS } from '../core/perks.js';
 import { defaultLineup } from '../core/team.js';
-import { RAISE, DRILLS, newSlot, loadRaise, saveRaise, slotPlayer, raiseTeam, canChoose, choose, dayInfo, applyDay, seasonOver, nextSeason, seasonGains, prelude , postResult, rings , withSpeed, instant, pickEvent } from '../core/raise.js';
-import { LIFE, SHOP, SHOP_GROUPS, canBuy, buyItem, has, fansOf, adsOf, eventOf, canPick } from '../core/raiselife.js';
+import { RAISE, DRILLS, newSlot, loadRaise, saveRaise, slotPlayer, raiseTeam, canChoose, choose, dayInfo, applyDay, seasonOver, nextSeason, seasonGains, prelude , postResult, rings , withSpeed, instant, pickEvent, STAT_CAP } from '../core/raise.js';
+import { LIFE, SHOP, SHOP_GROUPS, canBuy, buyItem, has, fansOf, fansShown, fansMult, adsOf, eventOf, canPick, restBonus } from '../core/raiselife.js';
 import { AWARDS } from '../core/raiseawards.js';
 import { CUSTOM, CUSTOM_ID, NAME_MAX, FACES, FACE_GROUPS, POSITIONS, POS_KO, defaultCustom, validCustom, groupOf, pointsOf, usedPoints, customPlayer } from '../core/raisecustom.js';
 import { seasonCard, leaderboard, STAT_DEFS, BOARD_TOP } from '../core/raisestats.js';
-import { contract, startSalary, won, ksMvp, PAY } from '../core/raisepay.js';
+import { contract, startSalary, salaryNow, won, ksMvp, PAY } from '../core/raisepay.js';
 import { PRODUCTS, RISK, buy, sell, netWorth, investedValue } from '../core/invest.js';
 import { playSound, vibrate } from './feedback.js';
 import { face, badge } from './hub.js';
@@ -54,12 +54,12 @@ function seasonLine(slot, st) {
 }
 
 // 연봉·자산(예전 저장은 연봉 표에서)
-const salaryOf = s => s.salary ?? startSalary(s.playerId);
-const moneyHtml = s => `<div class="rz-money"><span>연봉 <b>${won(salaryOf(s))}</b></span><span>자산 <b>${won(netWorth(s))}</b></span><span>인기 <b>${fansOf(s)}</b></span></div>`;
+const salaryOf = salaryNow;
+const moneyHtml = s => `<div class="rz-money"><span>연봉 <b>${won(salaryOf(s))}</b></span><span>자산 <b>${won(netWorth(s))}</b></span><span>인기 <b>${fansShown(s)}</b></span></div>`;
 // 이벤트 효과 한 줄
 const fxText = (fx, ups = []) => [fx.cond ? `컨디션 ${fx.cond > 0 ? '+' : ''}${fx.cond}` : '', fx.fat ? `피로 ${fx.fat > 0 ? '+' : ''}${fx.fat}` : '', fx.fans ? `인기 ${fx.fans > 0 ? '+' : ''}${fx.fans}` : '',
   fx.cash ? `현금 ${fx.cash > 0 ? '+' : ''}${won(fx.cash)}` : '', ...ups.map(u => `${STAT_KO[u.stat]} +${u.n}`)].filter(Boolean).join(' · ');
-const optHint = o => { const f = o.fx; if (f.gamble) return '운에 맡기기'; const t = []; if (f.cond) t.push(`컨디션 ${f.cond > 0 ? '↑' : '↓'}`); if (f.fat) t.push(`피로 ${f.fat > 0 ? '+' : ''}${f.fat}`); if (f.fans) t.push(`인기 ${f.fans > 0 ? '+' : ''}${f.fans}`); if (f.cash) t.push(`${f.cash > 0 ? '+' : ''}${won(f.cash)}`); if (f.cashFans) t.push('광고료'); if (f.xp) t.push('경험치'); return t.join(' · ') || '별일 없음'; };
+const optHint = o => { const f = o.fx; if (f.gamble) return '운에 맡기기'; const t = []; if (f.cond) t.push(`컨디션 ${f.cond > 0 ? '↑' : '↓'}`); if (f.fat) t.push(`피로 ${f.fat > 0 ? '+' : ''}${f.fat}`); if (f.fans) t.push(`인기 ${f.fans > 0 ? '+' : ''}${f.fans}`); if (f.cash) t.push(`${f.cash > 0 ? '+' : ''}${won(f.cash)}`); if (f.cashAd) t.push('광고 한 편'); if (f.xp) t.push('경험치'); return t.join(' · ') || '별일 없음'; };
 const pctTxt = x => `${x > 0 ? '▲' : x < 0 ? '▼' : ''}${Math.abs(x).toFixed(1)}%`;
 const tone = x => (x > 0.05 ? 'up' : x < -0.05 ? 'down' : '');
 // 우승 반지
@@ -93,7 +93,7 @@ function payCard(s) {
     <div class="rz-payrow"><span>${s.year} 연봉</span><b>${won(c.from)}</b></div>
     ${left ? `<div class="rz-payrow"><span>아직 안 받은 연봉</span><b>+${won(left)}</b></div>` : ''}
     ${c.prize ? `<div class="rz-payrow"><span>시상식 상금</span><b>+${won(c.prize)}</b></div>` : ''}
-    ${c.ads ? `<div class="rz-payrow"><span>광고 수입 (인기 ${fansOf(s)})</span><b>+${won(c.ads)}</b></div>` : ''}
+    ${c.ads ? `<div class="rz-payrow"><span>광고 수입 (인기 ${fansShown(s)})</span><b>+${won(c.ads)}</b></div>` : ''}
     ${c.bonus ? `<div class="rz-payrow"><span>우승 보너스${c.mvp ? ' + MVP 상금' : ''}</span><b>+${won(c.bonus)}</b></div>` : ''}
     <div class="rz-payrow"><span>자산</span><b>${won(now)} → ${won(after)}</b></div>
     <div class="rz-payrow big ${tn}"><span>${s.year + 1} 연봉</span><b>${won(c.to)} <em>${c.pct > 0 ? '▲' : c.pct < 0 ? '▼' : ''}${Math.abs(c.pct)}%</em></b></div></section>`;
@@ -410,7 +410,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
     const rehabOk = canChoose(s, 'rehab').ok;
     const choiceHtml = s.chosen ? `<p class="rz-done">${flash ? esc(flash) : '오늘 선택을 마쳤어요'}</p>`
       : s.injury ? `<div class="rz-drills">
-        <button class="chip rest" data-act="choose" data-id="rest"><b>재활 휴식</b><small>피로 ${RAISE.rest - (has(s, 'bed') ? LIFE.bedRest : 0)} · 하루씩 나아요</small></button>
+        <button class="chip rest" data-act="choose" data-id="rest"><b>재활 휴식</b><small>피로 ${RAISE.rest - restBonus(s)} · 하루씩 나아요</small></button>
         <button class="chip light" data-act="choose" data-id="rehab" ${rehabOk ? '' : 'disabled'}><b>프리미엄 재활</b><small>${won(LIFE.rehabCost)} · 하루 더 빨리 나아요</small><small class="${rehabOk ? '' : 'tired'}">${rehabOk ? '전문 재활 센터' : '현금이 모자라요'}</small></button></div>
         <p class="hint">다친 동안은 훈련도 경기도 못 해요. 피로가 높은 채로 경기에 나가면 다치기 쉬워요.</p>`
       : (() => {
@@ -444,13 +444,13 @@ export function showRaise(root, { storage, loadGame, onBack }) {
         <p>${s.year} 시즌 · ${seasonLine(s, s.stats)}</p>
         ${condHtml(s.condition)}
       </section>
-      <div class="ns-stats n${STATS[s.kind].length}">${STATS[s.kind].map(k => `<div><small>${STAT_KO[k]}</small><b>${p[k]}${k === 'velo' ? '<em>km</em>' : ''}</b><i><u style="width:${barPct(k, p[k])}%"></u></i></div>`).join('')}</div>
+      <div class="ns-stats n${STATS[s.kind].length}">${STATS[s.kind].map(k => `<div class="${p[k] > STAT_CAP[k] ? 'over' : ''}"><small>${STAT_KO[k]}${p[k] > STAT_CAP[k] ? ' <span aria-label="한계 돌파">★</span>' : ''}</small><b>${p[k]}${k === 'velo' ? '<em>km</em>' : ''}</b><i><u style="width:${barPct(k, p[k])}%"></u></i></div>`).join('')}</div>
       <section class="card ns-body">
         <div class="rz-fat"><span>피로</span><i><u class="${s.fatigue >= RAISE.tiredAt ? 'hi' : ''}" style="width:${s.fatigue}%"></u></i><em>${Math.round(s.fatigue)}</em></div>
         ${trustHtml(s)}
         ${s.traits.length ? `<div class="rz-traits">${s.traits.map(t => `<span class="rz-trait" title="${esc(traitOf(t).desc)}">${esc(traitOf(t).name)}</span>`).join('')}</div>` : '<p class="hint">특성은 특훈을 4번 하거나 경기에서 활약하면 생겨요</p>'}
         ${s.injury ? `<p class="rz-hurt">${esc(s.injury.name)} · ${s.injury.left}경기 더 쉬어야 해요</p>` : s.fatigue >= LIFE.injury.safe ? `<p class="rz-hurt warn">피로가 높아 경기에 나가면 다칠 수 있어요</p>` : ''}
-        <div class="ns-meta"><span>연봉<b>${won(salaryOf(s))}</b></span><span>자산<b>${won(netWorth(s))}</b></span><span>인기<b>${fansOf(s)}</b></span></div>
+        <div class="ns-meta"><span>연봉<b>${won(salaryOf(s))}</b></span><span>자산<b>${won(netWorth(s))}</b></span><span>인기<b>${fansShown(s)}</b></span></div>
         <div class="rz-moneybtns"><button class="ghost small" data-act="invest">재테크</button><button class="ghost small" data-act="shop">쇼핑</button></div>
       </section>
       ${lastGameHtml(i)}
@@ -464,7 +464,10 @@ export function showRaise(root, { storage, loadGame, onBack }) {
         ${!s.chosen ? '<p class="hint center">선택 없이 경기에 나가면 피로가 조금만 풀려요</p>' : ''}
         ${s.injury ? '<p class="hint center">부상으로 오늘 경기에 나가지 않아요</p>' : d.resting ? '<p class="hint center">오늘은 휴식이라 경기에 나가지 않아요</p>' : d.plan ? `<p class="hint center rz-plan">${PLAN[d.plan]}</p>` : ''}
       </section>
-      <div class="ns-dock"><div><small>${d.label}${d.needsScreen ? '' : ' · ' + why}</small><b>${opp.short} vs 삼성</b></div><button class="primary big" data-act="play">${d.needsScreen ? '경기 시작' : '경기 진행'}${icon('play')}</button></div>`, 'ns');
+      ${s.chosen
+        ? `<div class="ns-dock"><div><small>${d.label}${d.needsScreen ? '' : ' · ' + why}</small><b>${opp.short} vs 삼성</b></div><button class="primary big" data-act="play">${d.needsScreen ? '경기 시작' : '경기 진행'}${icon('play')}</button></div>`
+        // 오늘의 선택을 아직 안 했으면 선택이 먼저다: 큰 단추는 선택 카드로 내려가고, 경기는 작은 단추로 바로 갈 수 있다
+        : `<div class="ns-dock pick"><div><small>${d.label} · ${opp.short}전</small><b>${s.injury ? '재활을 골라요' : '오늘의 선택을 골라요'}</b></div><button class="ghost" data-act="play">바로 경기</button><button class="primary big" data-act="tochoice">선택하기</button></div>`}`, 'ns');
     act('back', () => { flash = null; slotsView(); });
     act('records', () => recordsView(i));
     act('invest', () => investView(i));
@@ -488,6 +491,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
       hubView(i);
     });
     act('play', () => play(i));
+    act('tochoice', () => { const c = root.querySelector('.ns-choice'); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
   }
 
   // 연습장 없이 바로 끝나는 훈련(헬스·유연성·주루)
@@ -563,24 +567,34 @@ export function showRaise(root, { storage, loadGame, onBack }) {
     const res = !g ? '경기 종료' : g.hs > g.as ? '승리' : g.hs < g.as ? '패배' : '무승부';
     const line = s.kind === 'bat' ? batLine(rep.line.bat && { ...rep.line.bat, ...(rep.run || {}) }) : pitLine(rep.line.pit, rep.dec);
     const why = rep.rested && (rep.injuryLeft || rep.healed) ? `부상으로 쉬었어요${rep.injuryLeft ? ` · ${rep.injuryLeft}경기 더 쉬어야 해요` : ''}` : rep.rested ? '오늘은 휴식하며 경기에 나가지 않았어요' : NOTE[note] || (!rep.appeared ? (s.kind === 'bat' ? '오늘은 타석에 서지 못했어요' : '오늘은 등판이 없었어요') : '');
-    screen(`<div class="eyebrow center">${esc(p.name)} · ${s.year} ${rep.post ? `가을야구 · ${esc(rep.series.name)}` : `시즌 ${s.season.round}/${s.season.schedule.length}경기`}</div>
-      <div class="re">${res === '승리' ? '🎉' : res === '패배' ? '😢' : '⚾'}</div>
-      <h1 class="res ${res === '승리' ? 'win' : res === '패배' ? 'lose' : ''}">${res}</h1>
-      ${g ? `<div class="scoreline">${badge(g.away, 'lg')}<b>${g.as}</b><i>:</i><b>${g.hs}</b>${badge(g.home, 'lg')}</div>` : ''}
-      ${rep.post ? `<p class="hint center">${esc(rep.series.name)} ${rep.series.w}승 ${rep.series.l}패</p>` : `<p class="hint center">팀 ${rep.team.w}승 ${rep.team.l}패${rep.team.d ? ' ' + rep.team.d + '무' : ''} · ${rep.team.rank}위</p>`}
+    // 중계 파이널 톤: 위 한 줄(시즌·팀 성적) → 노랑·파랑 결과 띠 → 선수 얼굴과 이름 → 오늘 기록 큰 숫자 넷 → 성장 막대 → 상태 칸
+    const tag = res === '승리' ? 'WIN' : res === '패배' ? 'LOSE' : res === '무승부' ? 'DRAW' : 'FINAL';
+    const bl = s.kind === 'bat' ? rep.line.bat : rep.line.pit;
+    const nums = !bl ? [] : s.kind === 'bat'
+      ? [['타수', bl.ab], ['안타', bl.h, bl.h > 0], ['홈런', bl.hr, bl.hr > 0], ['타점', bl.rbi, bl.rbi > 0]]
+      : [['이닝', ip(bl)], ['실점', bl.r], ['탈삼진', bl.so, bl.so > 0], ['피안타', bl.h]];
+    const delta = (a, b) => (b > a ? `<em class="up">+${b - a}</em>` : b < a ? `<em class="down">${b - a}</em>` : '');
+    const tiles = [
+      ['컨디션', `${condHtml(rep.condFrom)} → ${condHtml(rep.condTo)}`],
+      ['피로', `${Math.round(s.fatigue)}`],
+      rep.fansTo != null ? ['인기', `${Math.round(rep.fansTo)} ${delta(Math.round(rep.fansFrom), Math.round(rep.fansTo))}`] : null,
+      rep.trustTo != null && !rep.promoted ? ['감독 신뢰', `${Math.round(rep.trustTo)} / ${RAISE.bench.need} ${delta(Math.round(rep.trustFrom), Math.round(rep.trustTo))}`] : null,
+      rep.money ? ['연봉', `+${won(rep.money.pay)}`] : null,
+      rep.money && rep.money.change ? ['투자', `<span class="${tone(rep.money.change)}">${rep.money.change > 0 ? '+' : ''}${won(rep.money.change)}</span>`] : null,
+    ].filter(Boolean);
+    screen(`<div class="rr-top"><span>${s.year} ${rep.post ? `가을야구 · ${esc(rep.series.name)}` : `정규시즌 · ${s.season.round}/${s.season.schedule.length}경기`}</span>
+        <span>${rep.post ? `${rep.series.w}승 ${rep.series.l}패` : `팀 ${rep.team.w}승 ${rep.team.l}패${rep.team.d ? ' ' + rep.team.d + '무' : ''} · ${rep.team.rank}위`}</span></div>
+      ${g ? `<div class="rr-strip ${tag.toLowerCase()}"><span>${tag}</span><b>${esc(getTeam(g.home).short)}<u>${g.hs} : ${g.as}</u>${esc(getTeam(g.away).short)}</b></div>` : ''}
+      <div class="rr-hero">${face(p, s.kind === 'bat' ? 'b' : 'p')}<div><small>${p.num != null ? `#${p.num} · ` : ''}${esc(roleOf(s))}</small><h2>${esc(p.name)}</h2>${line ? `<p>${line}</p>` : ''}</div></div>
+      ${nums.length ? `<div class="rr-line">${nums.map(([k, v, hl]) => `<div class="${hl ? 'hl' : ''}"><b>${v}</b><small>${k}</small></div>`).join('')}</div>` : ''}
+      ${why ? `<p class="hint rr-why">${why}</p>` : ''}
+      ${rep.ups.length ? `<div class="rr-grow"><h4>오늘 성장</h4>${rep.ups.map(u => `<div><span>${STAT_KO[u.stat]}</span><i><i style="width:${barPct(u.stat, p[u.stat])}%"></i></i><em>${p[u.stat] - u.n} → ${p[u.stat]}${u.stat === 'velo' ? 'km' : ''}</em></div>`).join('')}</div>` : ''}
+      <div class="rr-meta">${tiles.map(([k, v]) => `<div>${k}<b>${v}</b></div>`).join('')}</div>
       ${postNews(rep)}
       ${rep.hurt ? `<section class="card rz-hurtcard"><div class="card-h">부상! ${esc(rep.hurt.name)}</div><p class="hint">${rep.hurt.major ? '꽤 큰 부상이에요. ' : ''}${rep.hurt.left}경기 동안 쉬어야 해요. 피로가 높을 때 무리하면 다치기 쉬워요.</p></section>` : ''}
       ${rep.promoted ? '<section class="card rz-post win rz-promo"><div class="card-h">주전 승격!</div><p class="hint">감독이 실력을 인정했어요. 이제 매일 지명타자로 선발 출전해요!</p></section>' : ''}
       ${rep.healed ? '<section class="card rz-post win"><div class="card-h">부상 회복!</div><p class="hint">다음 경기부터 다시 뛸 수 있어요</p></section>' : ''}
       ${rep.traitsNew.length ? `<section class="card rz-newtrait">${rep.traitsNew.map(t => `<div class="card-h">새 특성 · ${esc(traitOf(t).name)}</div><p class="hint">${esc(traitOf(t).desc)}</p>`).join('')}</section>` : ''}
-      <section class="card"><div class="card-h">오늘 ${esc(p.name)}</div>
-        <p class="rz-line">${line || '-'}</p>${why ? `<p class="hint">${why}</p>` : ''}
-        <p class="hint">컨디션 ${condHtml(rep.condFrom)} → ${condHtml(rep.condTo)} · 피로 ${Math.round(s.fatigue)}</p>
-        ${rep.fansTo != null && rep.fansTo !== rep.fansFrom ? `<p class="hint">인기 ${rep.fansFrom} → ${rep.fansTo}</p>` : ''}
-        ${rep.trustTo != null && !rep.promoted && rep.trustTo !== rep.trustFrom ? `<p class="hint">감독 신뢰도 ${Math.round(rep.trustFrom)} → ${Math.round(rep.trustTo)} / ${RAISE.bench.need}</p>` : ''}
-        ${rep.money ? `<p class="hint rz-today-money">연봉 +${won(rep.money.pay)}${rep.money.change ? ` · 투자 <span class="${tone(rep.money.change)}">${rep.money.change > 0 ? '+' : ''}${won(rep.money.change)}</span>` : ''}</p>` : ''}
-        ${rep.ups.length ? `<div class="ups">${rep.ups.map(u => `<div><b>${STAT_KO[u.stat]}</b><span><em>+${u.n}${u.stat === 'velo' ? 'km' : ''}</em></span></div>`).join('')}</div>` : ''}
-      </section>
       ${seasonStatsCard(s)}
       ${boardCard(s, boardKey[s.kind])}
       <div class="actions"><button class="primary big" data-act="ok">${rep.seasonOver ? (rep.series && rep.series.champion ? '우승 세리머니' : '시즌 결산 보기') : '확인'}</button></div>`, 'result');
@@ -656,13 +670,13 @@ export function showRaise(root, { storage, loadGame, onBack }) {
     const state = x => {
       const c = canBuy(s, x.id);
       if (c.reason === 'owned') return `<span class="pill gold">${x.type === 'season' ? '계약 중' : '보유'}</span>`;
-      return `<button class="primary small" data-act="buyitem" data-id="${x.id}" ${c.ok ? '' : 'disabled'}>${won(x.price)}</button>`;
+      return `<button class="primary small" data-act="buyitem" data-id="${x.id}" ${c.ok ? '' : 'disabled'}>${won(x.price)}${c.reason === 'cash' ? '<small>현금 부족</small>' : ''}</button>`;
     };
     screen(`<header class="bar"><button class="ghost small" data-act="back" aria-label="뒤로">${icon('back')}</button><h2>쇼핑</h2></header>
       <section class="card"><div class="rz-payrow big"><span>현금</span><b>${won(cash)}</b></div>
-        <div class="rz-payrow"><span>인기</span><b>${fansOf(s)} <em>· 시즌 끝 광고 수입 약 ${won(adsOf(s))}</em></b></div>
-        <p class="hint">투자한 돈은 재테크에서 팔아야 현금이 돼요.</p>${msg ? `<p class="rz-done">${esc(msg)}</p>` : ''}</section>
-      ${SHOP_GROUPS.map(([g, title, sub]) => `<section class="card flush"><div class="card-h pad">${title}${sub ? `<span class="pill">${sub}</span>` : ''}</div>
+        <div class="rz-payrow"><span>인기</span><b>${fansShown(s)} <em>· 광고 한 편 ${won(adsOf(s))}</em></b></div>
+        <p class="hint">투자한 돈은 재테크에서 팔아야 현금이 돼요. 인기는 끝없이 오르지만 100을 넘으면 오르는 양이 줄어요${fansMult(fansOf(s)) < 1 ? ` (지금은 표시된 인기의 ${Math.round(fansMult(fansOf(s)) * 100)}%만 올라요)` : ''}.</p>${msg ? `<p class="rz-done">${esc(msg)}</p>` : ''}</section>
+      ${SHOP_GROUPS.filter(([g]) => items(g).length).map(([g, title, sub]) => `<section class="card flush rz-shop-${g}"><div class="card-h pad">${title}${sub ? `<span class="pill">${sub}</span>` : ''}</div>
         ${items(g).map(x => `<div class="rz-item"><span class="rz-pico">${x.icon}</span><span class="rz-pname"><b>${esc(x.name)}${x.id === 'donate' && s.owned && s.owned.donate ? ` <small>· ${s.owned.donate}번</small>` : ''}</b><small>${esc(x.desc)}</small></span>${state(x)}</div>`).join('')}</section>`).join('')}`);
     act('back', () => hubView(i));
     act('buyitem', b => {

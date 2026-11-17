@@ -15,7 +15,7 @@ export function cpuChoosePitch({ pitcher, balls, strikes, rng, strikeOnly = fals
   let target;
   if (inZone) target = { x: (rng() * 2 - 1) * 0.85 * ZONE_K, y: (rng() * 2 - 1) * 0.85 * ZONE_K };
   else { const a = rng() * Math.PI * 2, rr = 1.2 + rng() * 0.4; target = { x: Math.cos(a) * rr, y: Math.sin(a) * rr }; }
-  const gaugePos = 0.5 + randNormal(rng) * 0.05 * (1.3 - pitcher.control / 100);
+  const gaugePos = 0.5 + randNormal(rng) * 0.05 * Math.max(0.1, 1.3 - pitcher.control / 100);
   return { type: pitcher.pitches[i], target, gaugePos };
 }
 

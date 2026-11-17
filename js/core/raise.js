@@ -10,9 +10,9 @@ import { decisions, gameLine, raiseStep } from './raisematch.js';
 import { createMatch } from './match.js';
 import { leagueAdd, emptyLeague } from './raisestats.js';
 import { TRAITS } from './perks.js';
-import { startSalary, contract, ksMvp } from './raisepay.js';
+import { startSalary, salaryNow, contract, ksMvp } from './raisepay.js';
 import { tickMarket, netWorth } from './invest.js';
-import { LIFE, has, gearBonus, trainMult, fansOf, rollInjury, rollEvent, resolveEvent, dayRng } from './raiselife.js';
+import { LIFE, gearBonus, overBonus, trainMult, loadMult, dailyRecover, restBonus, fansOf, addFans, rollInjury, rollEvent, resolveEvent, dayRng } from './raiselife.js';
 import { CUSTOM_ID, validCustom, withCustom } from './raisecustom.js';
 import { PAY } from './raisepay.js';
 
@@ -52,7 +52,9 @@ export const RAISE = {
     escape: ['rispEscapes', 10], lhbKiller: ['lhbSo', 15], finisher: ['so', 30], ironArm: ['longStarts', 5], closer: ['saves', 8] },
 };
 
+// 훈련·일반 장비로 오르는 상한. 쇼핑의 '한계 돌파' 장비만 이 위로 더한다
 const CAP = { power: 99, contact: 99, eye: 99, speed: 99, control: 99, stamina: 99, velo: 162 };
+export const STAT_CAP = CAP;
 
 export const DRILLS = [
   { id: 'power', kind: 'bat', name: '파워 훈련', stat: 'power' },
@@ -167,7 +169,12 @@ const GEAR_STATS = ['power', 'contact', 'eye', 'speed', 'control', 'stamina', 'v
 function withGear(p, slot) {
   if (!slot.owned || p.id !== slot.playerId) return p;
   const q = { ...p };
-  for (const k of GEAR_STATS) { const n = gearBonus(slot, k); if (n && q[k] != null) q[k] = Math.min(CAP[k], q[k] + n); }
+  for (const k of GEAR_STATS) {
+    if (q[k] == null) continue;
+    const n = gearBonus(slot, k), x = overBonus(slot, k);
+    if (n) q[k] = Math.max(q[k], Math.min(CAP[k], q[k] + n));   // 일반 장비는 상한까지(이미 넘었으면 그대로)
+    if (x) q[k] += x;                                           // 한계 돌파는 상한 위로
+  }
   return q;
 }
 export const raiseTeam = (slot, { benchMe = false } = {}) => {
@@ -218,7 +225,7 @@ export function choose(slot, id, pts = null) {
   if (!c.ok) throw new Error(`고를 수 없어요: ${id} (${c.reason})`);
   if (id === 'rest' || id === 'rehab') {
     const cond = slot.condition - Math.sign(slot.condition);
-    const rest = RAISE.rest - (has(slot, 'bed') ? LIFE.bedRest : 0);
+    const rest = RAISE.rest - restBonus(slot);
     // 휴식한 날은 그날 경기에 나가지 않는다(벤치). 프리미엄 재활은 부상이 하루 더 낫는다
     const extra = id === 'rehab' ? { assets: slot.assets - LIFE.rehabCost, injury: { ...slot.injury, left: Math.max(1, slot.injury.left - 1) } } : {};
     return { slot: { ...slot, ...extra, chosen: true, resting: true, fatigue: clamp(slot.fatigue + rest, 0, 100), condition: cond }, ups: [], trait: null };
@@ -419,14 +426,14 @@ export function applyDay(slot, result, rng) {
   const condition = clamp(slot.condition + d, -2, 2);
   // 피로: 아무것도 안 고른 날은 조금 회복, 출전하면 쌓인다
   const pitches = myLog.filter(e => e.pitcherId === id).reduce((a, e) => a + (e.pitches || []).length, 0);
-  const load = (slot.kind === 'bat' ? (appeared ? RAISE.batGame : 0) : pitches * RAISE.perPitch) * (has(slot, 'nutri') ? LIFE.nutriLoad : 1);
-  const fatigue = clamp(slot.fatigue + (slot.chosen ? 0 : RAISE.idle) + load - (has(slot, 'house') ? LIFE.houseRecover : 0), 0, 100);
+  const load = (slot.kind === 'bat' ? (appeared ? RAISE.batGame : 0) : pitches * RAISE.perPitch) * loadMult(slot);
+  const fatigue = clamp(slot.fatigue + (slot.chosen ? 0 : RAISE.idle) + load - dailyRecover(slot), 0, 100);
   // 부상: 다친 상태면 하루씩 낫고, 아니면 경기에 나간 날 피로에 따라 다칠 수 있다
   let injury = slot.injury || null, hurt = null, healed = false;
   if (injury) { injury = injury.left > 1 ? { ...injury, left: injury.left - 1 } : null; healed = !injury; }
   else if (appeared) { hurt = rollInjury(slot); injury = hurt; }
   // 인기: 활약하면 +1, 부상이면 -2
-  const fans = clamp(fansOf(slot) + (d > 0 ? 1 : 0) - (hurt ? 2 : 0), 0, 100);
+  const fans = addFans(addFans(fansOf(slot), d > 0 ? 1 : 0), hurt ? -2 : 0);   // 인기는 상한 없이, 오를수록 덜 오른다
   // 후보 선수: 타석 결과로 감독 신뢰도가 쌓이고, 다 차면 주전 지명타자
   let bench = slot.bench, trust = slot.trust, promoted = false;
   if (slot.kind === 'bat' && slot.bench) {
@@ -464,7 +471,7 @@ export function applyDay(slot, result, rng) {
   // 돈: 정규시즌 하루마다 연봉 1/N이 들어오고, 투자한 것의 시세가 움직인다
   let money = null;
   if (!post) {
-    const day = slot.season.round, n = slot.season.schedule.length, sal = slot.salary ?? startSalary(id);
+    const day = slot.season.round, n = slot.season.schedule.length, sal = salaryNow(slot);
     const pay = Math.round((sal * (day + 1)) / n) - Math.round((sal * day) / n);
     const m = tickMarket(slot, day, n);
     Object.assign(next, { assets: (slot.assets || 0) + pay, paid: (slot.paid || 0) + pay, invest: m.invest, mkt: m.mkt });
@@ -502,7 +509,7 @@ export function nextSeason(slot, { games = slot.games } = {}) {
   Object.assign(entry, { salary: pay.from, nextSalary: pay.to, bonus: pay.bonus, worth: Math.round(netWorth({ ...slot, assets })),
     ...(pay.awards.length ? { awards: pay.awards.map(a => a.id) } : {}), prize: pay.prize, ads: pay.ads });
   // 인기: 상·우승만큼 오른다
-  const fans = Math.min(100, fansOf(slot) + pay.awards.reduce((a, x) => a + x.fans, 0) + (slot.season.champion === ME ? 10 : 0));
+  const fans = addFans(fansOf(slot), pay.awards.reduce((a, x) => a + x.fans, 0) + (slot.season.champion === ME ? 10 : 0));
   const year = slot.year + 1;
   const { postStats, ksStats, ...rest } = slot;
   return {

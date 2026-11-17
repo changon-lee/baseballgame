@@ -57,7 +57,8 @@ export function createCutins(layer) {
       const ms = CUT_MS[kind], el = document.createElement('div');
       el.className = `cutin k-${kind}`; el.style.setProperty('--ms', ms + 'ms');
       const party = (kind === 'homerun' || kind === 'win') && !reduced();
-      el.innerHTML = mediaHtml(kind) + HTML[kind](sub) + (party ? confetti(kind === 'win' ? 70 : 36) : '');
+      const skip = kind === 'homerun' || kind === 'homerun_bad' ? '<div class="c-skip">화면을 터치하면 넘어가요</div>' : '';   // 경기 화면이 터치로 건너뛴다
+      el.innerHTML = mediaHtml(kind) + HTML[kind](sub) + (party ? confetti(kind === 'win' ? 70 : 36) : '') + skip;
       layer.appendChild(el);
       setTimeout(() => el.remove(), ms + 250);
     },

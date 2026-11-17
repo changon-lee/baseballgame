@@ -32,6 +32,7 @@ const START = {
 
 export const PAY = {
   min: 3000,              // 최저 연봉 3000만
+  max: 3000000,           // 최고 연봉 300억. 어떤 성적·상·우승 보너스로도 이 위로는 안 오른다
   raiseMax: 3,            // 한 번에 최대 3배(+200%). 우승하면 3.3배까지
   topAwards: ['mvp', 'sv'], // 이 상을 받으면(리그 1등) 3배 한도 없이 시세를 그대로 받는다
   cutMax: 0.4,            // 한 번에 최대 40% 삭감
@@ -57,6 +58,8 @@ export const PAY = {
 };
 
 export const startSalary = id => START[id] ?? PAY.min;
+// 지금 연봉(최고 연봉을 넘는 옛 저장도 300억으로 본다). 경기마다 받는 돈·화면·다음 협상 모두 이 값을 쓴다
+export const salaryNow = slot => Math.min(PAY.max, slot.salary ?? startSalary(slot.playerId));
 import { awardsOf } from './raiseawards.js';
 import { adsOf } from './raiselife.js';
 
@@ -127,7 +130,7 @@ const roundPay = (m, f = Math.round) => { const u = m >= 10000 ? 500 : 100; retu
 // 다음 해 연봉 협상: { from, to, pct(%), bonus(우승 보너스 + 한국시리즈 MVP 상금), mvp,
 //   awards(시상식에서 받은 상), prize(상금 합), ads(인기에 따른 광고 수입) }. 상을 받으면 다음 연봉 기준도 오른다
 export function contract(slot) {
-  const from = slot.salary ?? startSalary(slot.playerId);
+  const from = salaryNow(slot);
   const champ = slot.season.champion === 'samsung';
   const awards = awardsOf(slot);
   const prem = (champ ? PAY.champPremium : 1) * (1 + awards.reduce((a, x) => a + x.prem, 0));
@@ -139,7 +142,7 @@ export function contract(slot) {
   to = roundPay(Math.min(hi, Math.max(lo, to)));
   if (to < lo) to = roundPay(lo, Math.ceil);
   if (to > hi) to = roundPay(hi, Math.floor);
-  to = Math.max(PAY.min, to);
+  to = Math.min(PAY.max, Math.max(PAY.min, to));          // 최고 연봉 300억에서 멈춘다
   const mvp = ksMvp(slot);
   return { from, to, pct: Math.round(((to - from) / from) * 100), bonus: champ ? PAY.champBonus + (mvp ? PAY.mvpBonus : 0) : 0, mvp,
     awards, prize: awards.reduce((a, x) => a + x.prize, 0), ads: adsOf(slot) };
@@ -149,5 +152,7 @@ export function contract(slot) {
 export function won(m) {
   const a = Math.abs(Math.round(m)), eok = Math.floor(a / 10000), man = a % 10000;
   if (!a) return '0원';
+  // 1조(1억 만원) 넘으면 조·억까지만(만원 단위는 너무 길다)
+  if (a >= 100000000) { const jo = Math.floor(a / 100000000), e = Math.floor((a % 100000000) / 10000); return (m < 0 ? '-' : '') + `${jo}조${e ? ` ${e}억` : ''}원`; }
   return (m < 0 ? '-' : '') + (eok ? `${eok}억${man ? ` ${man}만원` : '원'}` : `${man}만원`);
 }

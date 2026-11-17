@@ -16,7 +16,8 @@ import { boostFor } from '../core/perks.js';
 import { raiseStep, raiseSteal } from '../core/raisematch.js';
 import { lineScore, todayText, gameMvp } from '../core/boxscore.js';
 import { fieldChance, judgeTap, fieldWin, CPU_DIVE } from '../core/fielding.js';
-import { playerLine, avg } from '../core/growth.js';
+import { playerLine, avg, era } from '../core/growth.js';
+import { face } from './hub.js';
 import { loadPrefs, savePrefs, LEVELS, LEVEL_NAME } from './prefs.js';
 import { volRow, bindVol } from './volume.js';
 import { startLoop } from './loop.js';
@@ -131,7 +132,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       </div>
     </div>
     <div class="hud-r">
-      <div class="hud-btns"><button class="more" aria-label="진행 메뉴"><svg viewBox="0 0 16 16"><path d="M1 3l7 5-7 5zM8 3l7 5-7 5z"/></svg></button>
+      <div class="hud-btns"><button class="more" aria-label="진행 메뉴"><svg viewBox="0 0 16 16"><path d="M2 3.2h12v1.8H2zM2 7.1h12v1.8H2zM2 11h12v1.8H2z"/></svg></button>
         <button class="exit" aria-label="나가기">✕</button></div>
       <div class="sub"><span class="mu"></span>${title ? `<span class="ttl">${title}</span>` : ''}</div>
     </div>
@@ -204,9 +205,19 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       : `<b>${mu.pitcher.name}</b>${condTag(mu.pitcher.id)} <small>${match.pitchCount[mu.pitchingSide]}구</small> <span class="vs">vs</span> <small>${g.battingIndex[mu.battingSide] + 1}번</small> <b>${mu.batter.name}</b>${condTag(mu.batter.id)}${heatOn && isHot(match.log, mu.batter.id) ? ` <span class="hot">🔥${hitsToday(match.log, mu.batter.id)}안타</span>` : ''}`;
   }
   const setControls = html => { controls.innerHTML = html; if (!['aim', 'pick'].includes(mode)) hideBullpenChip(); };
-  function showMsg(text, color, ms, sub, then, hidden = false) {   // hidden: 컷인이 대신 보여 주므로 글자는 숨긴다
-    msg = { text, color, sub, hidden, at: performance.now() };
-    later(() => { msg = null; if (then) then(); }, ms);
+  function showMsg(text, color, ms, sub, then, hidden = false) {   // hidden: 컷인이 대신 보여 주므로 글자는 숨긴다(컷인은 터치로 건너뛴다)
+    const m = { text, color, sub, hidden, at: performance.now(), then };
+    m.timer = later(() => { if (msg === m) msg = null; if (then) then(); }, ms);
+    msg = m;
+  }
+  // 컷인(홈런·피홈런·삼진) 건너뛰기: 남은 시간을 기다리지 않고 바로 다음으로. 친 손가락이 그대로 건너뛰지 않게 0.3초는 막는다
+  function skipCutin() {
+    const m = msg;
+    if (!m || !m.hidden || performance.now() - m.at < 300) return false;
+    clearTimeout(m.timer); timers = timers.filter(t => t !== m.timer);
+    msg = null; cutins.clear();
+    if (m.then) m.then();
+    return true;
   }
 
   // 육성모드: 내 장면까지 넘긴다. 넘겼으면 상황을 잠깐 보여 주고 다시 nextPlay, 더 할 장면이 없으면 결과로. 처리했으면 true
@@ -756,11 +767,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     if (cut) cutins.play(cut, { sub: cut === 'homerun' ? (HR_NAME[r.runs] || '홈런!!') + far : cut === 'homerun_bad' ? (HR_NAME[r.runs] || '피홈런') + far : '' });
     // 내가 타자일 때는 공 하나하나 결과(볼·스트라이크·파울·타구 결과)를 절반만 보여 줘서 빨리 다음 공으로(홈런·컷인은 그대로)
     const msgMs = cut ? CUT_MS[cut] : r.event === 'HR' ? 2000 : userPitched ? 1300 : 650;
-    const replay = cut === 'homerun' && !net && play && play.landT != null;   // 내가 친 홈런은 결과 뒤에 느린 화면으로 한 번 더
-    showMsg(label, color, msgMs, sub, () => {
-      if (replay && play && !play.replay) return startReplay(afterMsg);
-      afterMsg();
-    }, !!cut);
+    showMsg(label, color, msgMs, sub, afterMsg, !!cut);
     function afterMsg() {
       if (practice && practice.n >= practice.goal) return finishPractice();
       if (match.game.over) return showEnd();
@@ -768,36 +775,11 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
         play = null; ball = null;
         const was = todAt(prev.inning).phase, now = todAt(g.inning).phase;
         const note = now !== was ? (now === 'night' ? ' · 조명이 켜졌어요' : now === 'dusk' ? ' · 해가 지고 있어요' : '') : '';
-        showLineScore(2300);
+        showLineScore(2300, prev);
         return showMsg('공수교대', '#9fb3cc', 2300, `${g.inning}회${g.half === 'top' ? '초' : '말'}${note}`, nextPlay);
       }
       nextPlay();
     }
-  }
-
-  // ── 홈런 리플레이: 공이 담장을 넘어가는 순간을 느리게, 공만 당겨서 다시 보여 준다. 화면을 터치하면 건너뛴다 ──
-  const REPLAY = { before: 2.0, after: 0.35, rate: 0.4 };   // 넘어가기 몇 초(장면 시간) 전부터 · 뒤까지 · 재생 속도
-  function startReplay(then) {
-    play.replay = { at: performance.now(), r0: toMs(Math.max(0.2, play.landT - REPLAY.before)), r1: toMs(play.landT + REPLAY.after), then };
-  }
-  function endReplay() {
-    const rp = play && play.replay;
-    if (!rp) return;
-    play.replay = null; rp.then();
-  }
-  function drawReplay(now) {                             // 그렸으면 true(끝났으면 false: 평소 화면으로)
-    const rp = play.replay, ms = rp.r0 + (now - rp.at) * REPLAY.rate;
-    if (ms >= rp.r1) { endReplay(); return false; }
-    const mu = shownMu(), bar = Math.round(H * 0.07);
-    drawPlay3D(ctx, W, H, play, ms, { field: uni[mu.pitchingSide], bat: uni[mu.battingSide] }, { tele: true });
-    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, bar); ctx.fillRect(0, H - bar, W, bar);   // 위아래 검은 띠(영화 화면)
-    ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.font = '800 13px system-ui,sans-serif';
-    if (Math.floor(now / 500) % 2) { ctx.fillStyle = '#ff4d4d'; ctx.beginPath(); ctx.arc(16, bar / 2, 4.5, 0, Math.PI * 2); ctx.fill(); }
-    ctx.fillStyle = '#fff'; ctx.fillText('REPLAY', 27, bar / 2 + 0.5);
-    ctx.font = '600 12px system-ui,sans-serif'; ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(255,255,255,.8)';
-    ctx.fillText('터치하면 건너뛰기', W - 12, H - bar / 2);
-    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-    return true;
   }
 
   // 홈 관중(우리 팀 팬)의 반응. 홈런은 친 순간·넘어가는 순간에 따로 낸다
@@ -837,27 +819,37 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   }
 
   function showEnd() {
-    mode = 'end'; $('.more').hidden = true;
+    mode = 'end'; $('.more').hidden = true; $('.game').classList.add('ended');   // 점수판·단추는 숨기고 결과 카드만
     const g = match.game;
     const won = g.result === mySide;
     const res = won ? '승리' : g.result === 'home' || g.result === 'away' ? '패배' : '무승부';
     // MVP · 이닝별 점수표 · 우리 타자 성적표
-    const nameOf = id => { for (const s of ['home', 'away']) { const t = match.teams[s], p = t.batters.find(q => q.id === id) || t.pitchers.find(q => q.id === id); if (p) return { name: p.name, team: t }; } return { name: '?', team: userTeam }; };
+    const nameOf = id => {
+      for (const s of ['home', 'away']) {
+        const t = match.teams[s], b = t.batters.find(q => q.id === id), p = b || t.pitchers.find(q => q.id === id);
+        if (p) return { name: p.name, team: t, p, kind: b ? 'b' : 'p' };
+      }
+      return { name: '?', team: userTeam, p: null };
+    };
     const myIds = new Set([...match.teams[mySide].batters, ...match.teams[mySide].pitchers].map(p => p.id));
     const mvp = gameMvp(match.log, { mine: id => myIds.has(id), userSide: mySide, result: g.result });
     const who = mvp && nameOf(mvp.id);
-    const mvpHtml = mvp ? `<div class="mvp" style="--c:${who.team.colors.main}"><span>MVP</span><div><b>${who.name}</b><small>${who.team.short} · ${mvp.text}</small></div></div>` : '';
+    // 중계 마지막 장면: FINAL 꼬리표 → 큰 결과 → 두 팀 색 점수 띠 → 이닝 표 → MVP 자막
+    const mvpHtml = mvp ? `<div class="fin-mvp" style="--c:${who.team.colors.main}"><em>MVP</em>${who.p ? face(who.p, who.kind) : ''}<div><small>GAME MVP · ${who.team.short}</small><b>${who.name}</b><p>${mvp.text}</p></div></div>` : '';
+    const T = match.teams, sa = g.score.away, sh = g.score.home;
+    const sb = `<div class="fin-sb"><div class="${sa < sh ? 'l' : ''}" style="--c:${T.away.colors.main}">${T.away.short}<b>${sa}</b></div>
+      <span>FINAL<small>${g.inning}회</small></span><div class="${sh < sa ? 'l' : ''}" style="--c:${T.home.colors.main}"><b>${sh}</b>${T.home.short}</div></div>`;
     const line = playerLine({}, match.log).bat, order = match.lineups[mySide].order;
     const box = order.map(id => { const b = line[id], p = nameOf(id);
       return b ? `<tr class="${b.h ? 'h' : ''}"><td>${p.name}</td><td>${b.ab}-${b.h}</td><td>${b.hr || ''}</td><td>${b.rbi || ''}</td></tr>` : `<tr><td>${p.name}</td><td>-</td><td></td><td></td></tr>`; }).join('');
-    overlay.innerHTML = `<div class="end-card ${won ? 'win' : ''}">
-      <div class="tag">경기 종료 · ${g.inning}회</div><h1>${res}</h1>
-      <div class="final"><span>${cpuTeam.short}</span><b>${g.score.away}</b><i>:</i><b>${g.score.home}</b><span>${userTeam.short}</span></div>
+    overlay.innerHTML = `<div class="end-card fin ${won ? 'win' : res === '패배' ? 'lose' : ''}">
+      <span class="fin-tag">FINAL · ${g.inning}회</span><h1>${res}</h1>
+      ${sb}
       ${lineScoreHtml()}
       ${mvpHtml}
       <details class="box"><summary>${match.teams[mySide].short} 타자 성적</summary><table><tr><th>타자</th><th>타수-안타</th><th>홈런</th><th>타점</th></tr>${box}</table></details>
-      <button class="primary" data-act="menu">계속</button>
-      <button class="ghost" data-act="log">경기 기록 보기</button></div>`;
+      <div class="fin-act"><button class="primary" data-act="menu">계속</button>
+      <button class="ghost" data-act="log">경기 기록 보기</button></div></div>`;
     overlay.classList.remove('hidden');
     overlay.querySelector('[data-act=log]').onclick = () => showLog(match.log, '경기 기록', showEnd);
     if (won) { playSound('roar'); playSound('jingle'); vibrate([80, 60, 80, 60, 160]); cutins.play('win'); }
@@ -881,22 +873,26 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   function showMenu() {
     if (mode === 'end' || overlayOpen()) return;
     const g = match.game;
+    // 세 묶음: 진행(자동·넘기기·기록) / 설정(스위치) / 소리(스위치 + 크기 바). 켜고 끄는 것은 스위치로, 되돌릴 수 없는 넘기기는 빨간 글씨로
+    const sw = (a, label, desc, on) => `<button class="mc-row" data-act="${a}" role="switch" aria-checked="${!!on}"><span><b>${label}</b>${desc ? `<small>${desc}</small>` : ''}</span><i class="swt"></i></button>`;
+    const snd = (a, label, key, on) => `<div class="mc-snd${on ? '' : ' off'}">${volRow('', label, key, prefs[key])}<button class="mc-sw" data-act="${a}" role="switch" aria-checked="${!!on}" aria-label="${label} 켜기"><i class="swt"></i></button></div>`;
+    const levelDesc = { easy: '배트가 크고 잘 맞아요. 제구 게이지의 초록 구간이 넓고 느려요', normal: '배트가 작고, 제구 게이지가 좁고 빨라요. 공이 올 길은 대략 보여 줘요(선구안이 좋을수록 정확)', hard: '배트가 더 작고 궤적 안내가 없어요. 제구 게이지가 가장 좁고 빨라요' }[lvl()];
     overlay.innerHTML = `<div class="end-card menu-card">
       <div class="tag">${g.inning}회${g.half === 'top' ? '초' : '말'} · 진행 메뉴</div>
       ${net || raise ? '' : `<button class="primary" data-act="auto">${auto ? '자동 진행 끄기' : '자동 진행 켜기'}</button>
       <p class="hint">투수가 알아서 던지고, 타자가 알아서 칩니다</p>`}
-      <div class="row2"><button class="ghost" data-act="guide">${prefs.guide ? '궤적 안내 켜짐' : '궤적 안내 꺼짐'}</button>
-        ${net ? `<button class="ghost" disabled>난이도: ${LEVEL_NAME[lvl()]}</button>` : `<button class="ghost" data-act="level">난이도: ${LEVEL_NAME[prefs.level]}</button>`}</div>
-      <p class="hint">${net ? '1:1 대결은 방을 만든 사람이 정한 난이도로 둘 다 같게 해요. ' : ''}${{ easy: '쉬움: 배트가 크고 잘 맞아요. 제구 게이지의 초록 구간이 넓고 느려요', normal: '보통: 배트가 작고, 제구 게이지가 좁고 빨라요. 공이 올 길은 대략 보여 줘요(선구안이 좋을수록 정확)', hard: '어려움: 배트가 더 작고 궤적 안내가 없어요. 제구 게이지가 가장 좁고 빨라요' }[lvl()]}</p>
-      ${net ? '' : `<button class="ghost" data-act="fielding">🧤 수비 조작 ${prefs.fielding ? '켜짐' : '꺼짐'}</button>
-      <p class="hint">상대 타구 중 아슬아슬한 수비(다이빙 캐치·1루 송구·홈 송구)에서 링이 초록 원에 겹칠 때 터치하면 아웃. 끄면 컴퓨터가 정해요</p>`}
-      <div class="row2 snd"><button class="ghost" data-act="sfx">효과음 ${prefs.sfx ? '켜짐' : '꺼짐'}</button>
-        <button class="ghost" data-act="amb">관중·응원 ${prefs.amb ? '켜짐' : '꺼짐'}</button></div>
-      <div class="vols">${volRow('🔊', '효과음', 'sfxVol', prefs.sfxVol)}${volRow('👏', '배경음', 'ambVol', prefs.ambVol)}</div>
-      ${net ? '' : raise ? '<button class="ghost" data-act="game">남은 경기 자동으로 끝내기</button>' : `<button class="ghost" data-act="half">이번 ${userPitching() ? '수비' : '공격'} 넘기기</button>
-      <button class="ghost" data-act="inning">이번 이닝 넘기기</button>
-      <button class="ghost" data-act="game">이번 경기 넘기기</button>`}
+      ${net ? '' : raise ? '<button class="ghost" data-act="game">남은 경기 자동으로 끝내기</button>' : `<div class="row2"><button class="ghost" data-act="half">이번 ${userPitching() ? '수비' : '공격'} 넘기기</button>
+        <button class="ghost" data-act="inning">이번 이닝 넘기기</button></div>
+      <button class="ghost danger" data-act="game">이번 경기 넘기기</button>`}
       <button class="ghost" data-act="log">경기 기록 보기</button>
+      <div class="mc-h">설정</div>
+      <div class="mc-list">
+        <button class="mc-row" data-act="level"${net ? ' disabled' : ''}><span><b>난이도</b><small>${net ? '1:1 대결은 방을 만든 사람이 정한 난이도로 둘 다 같게 해요. ' : ''}${levelDesc}</small></span><em>${LEVEL_NAME[lvl()]}</em></button>
+        ${sw('guide', '궤적 안내', '공이 올 길을 미리 보여 줘요', prefs.guide)}
+        ${net ? '' : sw('fielding', '수비 조작', '아슬아슬한 수비(다이빙 캐치·1루 송구·홈 송구)에서 링이 초록 원에 겹칠 때 터치하면 아웃. 끄면 컴퓨터가 정해요', prefs.fielding)}
+      </div>
+      <div class="mc-h">소리</div>
+      <div class="mc-list">${snd('sfx', '효과음', 'sfxVol', prefs.sfx)}${snd('amb', '관중·응원', 'ambVol', prefs.amb)}</div>
       <button class="ghost" data-act="close">닫기</button></div>`;
     overlay.classList.remove('hidden');
     const on = (a, fn) => { const el = overlay.querySelector(`[data-act=${a}]`); if (el) el.onclick = fn; };
@@ -1001,8 +997,9 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     if (!alive) return;
     unlockAudio();
     if (e.target.closest('button') || overlayOpen()) return;
+    if (cdown) return cdown.done();                     // 경기 시작 카운트다운 건너뛰기
     if (mode === 'bflight' && auto) return;
-    if (play && play.replay) return endReplay();        // 리플레이 건너뛰기
+    if (skipCutin()) return;                            // 홈런·삼진 컷인 건너뛰기
     if (mode === 'gauge') throwUserPitch(e.timeStamp);
     else if ((mode === 'bwait' || mode === 'bflight') && !auto) startBatDrag(e);
     else if (play && play.fc && play.fc.state === 'wait') { if (play.fc.r0) decideField(e.timeStamp - play.fc.hitAt); }   // 수비 조작(링 전에는 무시)
@@ -1126,13 +1123,16 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     if (k > 0) { ctx.fillStyle = color; ctx.beginPath(); ctx.roundRect(x, y, Math.max(h, w * k), h, h / 2); ctx.fill(); }
     ctx.restore();
   }
-  // 방금 공의 구속·구종(오른쪽 위, 주자 표시 아래). 2.4초 동안 보이고 사라진다
+  // 방금 공의 구속·구종(오른쪽 위, 메뉴·나가기 단추와 대결 자막 아래). 2.4초 동안 보이고 사라진다
+  // 오른쪽 위 HUD 높이는 자막 줄 수·화면 크기에 따라 달라서, 공마다 한 번 재서 그 아래에 둔다
+  const hudRY = () => { const r = $('.hud-r'); return r ? Math.round(r.offsetTop + r.offsetHeight - stage.offsetTop + 8) : 54; };
   function drawSpeed() {
     if (!speedTag) return;
     const t = performance.now() - speedTag.at;
     if (t > 2400) return;
+    if (speedTag.y == null) speedTag.y = Math.max(54, hudRY());
     const a = Math.max(0, Math.min(1, t / 120, (2400 - t) / 300));
-    const w = 96, h = 46, x = W - 10 - w, y = 54;
+    const w = 96, h = 46, x = W - 10 - w, y = speedTag.y;
     ctx.save(); ctx.globalAlpha = a;
     ctx.translate(0, (1 - Math.min(1, t / 160)) * -6);
     panel(x, y, w, h);
@@ -1189,7 +1189,6 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     if (mode === 'bwait' && pitchAt && overlayOpen()) pitchAt = Math.max(pitchAt, now + CONFIG.WIND_CPU_MS + 500);
     else if (mode === 'bwait' && pitchAt && now >= pitchAt) throwCpuPitch();
 
-    if (play && play.replay && drawReplay(now)) return;
     if (play && play.fc && play.fc.state === 'wait' && now >= play.start) fieldTick(now);
     if (play && now >= play.start) {
       const mu = shownMu(), ms = now - play.start;
@@ -1405,17 +1404,57 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   }
 
   // ── 이닝별 점수표(공수교대 때 잠깐, 경기 끝 화면) ──
-  function lineScoreHtml() {
-    const ls = lineScore(match.log, match.game), cell = v => (v == null ? '' : v);
-    const head = Array.from({ length: ls.n }, (_, i) => `<th>${i + 1}</th>`).join('');
-    const row = (side, team) => `<tr><td class="tn" style="--c:${team.colors.main}">${team.short}</td>${ls[side].map(v => `<td>${cell(v)}</td>`).join('')}<td class="rr">${ls.R[side]}</td><td class="hh">${ls.H[side]}</td></tr>`;
+  function lineScoreHtml(cur = 0) {                     // cur: 방금 끝난 이닝(그 열을 노랗게)
+    const ls = lineScore(match.log, match.game), cell = v => (v == null ? '' : v), c = i => (i + 1 === cur ? ' class="cur"' : '');
+    const head = Array.from({ length: ls.n }, (_, i) => `<th${c(i)}>${i + 1}</th>`).join('');
+    const row = (side, team) => `<tr><td class="tn" style="--c:${team.colors.main}">${team.short}</td>${ls[side].map((v, i) => `<td${c(i)}>${cell(v)}</td>`).join('')}<td class="rr">${ls.R[side]}</td><td class="hh">${ls.H[side]}</td></tr>`;
     return `<table class="ls${ls.n > 9 ? ' x' : ''}"><tr><th></th>${head}<th class="rr">R</th><th class="hh">H</th></tr>${row('away', match.teams.away)}${row('home', match.teams.home)}</table>`;
   }
-  function showLineScore(ms) {
+  // 공수교대: 화면 아래 방송 띠(노란 꼬리표 '몇 회 종료' + 파란 띠 '몇 점 냈나' + 이닝 표)
+  function showLineScore(ms, prev) {
     const el = $('.linescore');
-    el.innerHTML = lineScoreHtml();
+    const side = prev.half === 'top' ? 'away' : 'home', t = match.teams[side];
+    const runs = lineScore(match.log, match.game)[side][prev.inning - 1] || 0;
+    el.innerHTML = `<div class="ls-hd"><span>${prev.inning}회${prev.half === 'top' ? '초' : '말'} 종료</span><b>${t.short} ${runs ? `${runs}득점` : '무득점'}</b></div>${lineScoreHtml(prev.inning)}`;
     el.classList.add('show');
     later(() => el.classList.remove('show'), ms - 200);
+  }
+
+  // ── 경기 시작 카운트다운: 3·2·1 고리가 줄어들고 PLAY BALL. 아래 작은 띠에 두 팀 선발. 화면을 누르면 바로 시작 ──
+  let cdown = null;
+  function startCountdown(then) {
+    mode = 'msg'; setControls('');
+    const esc = s => String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+    const pit = side => {
+      const t = match.teams[side], p = t.pitchers.find(q => q.id === match.pitcher[side]);
+      if (!p) return '';
+      const st = stats && stats.pit && stats.pit[p.id];
+      return `<div class="cd-p ${side}" style="--c:${t.colors.main}">${face(p, 'p')}<div><b>${esc(p.name)}</b><small>${esc(t.short)} · ${st && st.outs ? `평균자책 ${era(st)}` : `${p.velo}km`}</small></div></div>`;
+    };
+    const who = raise ? '내 장면까지 자동으로 진행해요' : userPitching() ? '내가 던져요' : '내가 쳐요';
+    const el = document.createElement('div');
+    el.className = 'cdown';
+    el.innerHTML = `<div class="cd-ring"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="44"/><circle class="arc" cx="50" cy="50" r="44" pathLength="100" transform="rotate(-90 50 50)"/></svg><b>3</b></div>
+      <div class="cd-pb">PLAY BALL<small>1회초 · ${esc(match.teams.away.short)} 공격 · ${who}</small></div>
+      <div class="cd-mu">${pit('away')}<em>VS</em>${pit('home')}</div>`;
+    stage.appendChild(el);
+    const ring = el.querySelector('.cd-ring'), num = ring.querySelector('b');
+    const pop = () => { ring.classList.remove('pop'); void ring.offsetWidth; ring.classList.add('pop'); };
+    let k = 3;
+    const tick = () => {
+      if (!cdown) return;
+      if (--k > 0) { num.textContent = k; pop(); playSound('catch', { gain: 0.4 }); cdown.t = later(tick, 700); return; }
+      el.classList.add('go'); playSound('cheer', { gain: 0.7 }); vibrate(40);
+      cdown.t = later(done, 900);
+    };
+    const done = () => {
+      if (!cdown) return;
+      clearTimeout(cdown.t); cdown = null;
+      el.classList.add('out'); setTimeout(() => el.remove(), 320);
+      then();
+    };
+    cdown = { t: later(tick, 700), done };
+    pop();
   }
 
   // 확인용: 지금 타석에 정해진 타구 장면을 바로 띄운다(수비 조작 확인)
@@ -1427,6 +1466,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   resize();
   updateBoard();
   if (raiseFirst) nextPlay();                          // 이어 받은 경기: '플레이볼' 대신 바로 '몇 회 · 내 장면'
-  else showMsg('플레이볼!', '#f1c40f', 1100, '1회초', nextPlay);
+  else if (practice || net) showMsg('플레이볼!', '#f1c40f', 1100, '1회초', nextPlay);   // 연습·1:1 대결은 짧게(대결은 두 폰 박자를 맞춘다)
+  else startCountdown(nextPlay);
   return { exit };
 }

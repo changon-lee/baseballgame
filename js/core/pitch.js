@@ -51,7 +51,8 @@ export function computePitch({ pitcher, type, target, gaugePos: gpos, pitchCount
   const onTarget = err <= sweet;
   const t = PITCH_TYPES[type];
   const speedKmh = Math.floor(pitcher.velo * t.speedMul * (onTarget ? 1 : 0.96) * (1 - 0.07 * f) * (1 - 0.01 * rng()));
-  const spread = (0.06 + (1 - pitcher.control / 100) * 0.25) * (onTarget ? 1 + (err / sweet) * 0.8 : 2.5 + 4 * err) * (1 + 1.2 * f);
+  // 제구 100을 넘으면(육성모드 한계 돌파) 흩어짐이 더 줄되, 0 밑으로는 안 내려간다
+  const spread = Math.max(0.015, 0.06 + (1 - pitcher.control / 100) * 0.25) * (onTarget ? 1 + (err / sweet) * 0.8 : 2.5 + 4 * err) * (1 + 1.2 * f);
   const plate = { x: target.x + spread * randNormal(rng), y: target.y + spread * randNormal(rng) };
   const sign = pitcher.throws === 'L' ? -1 : 1;
   return {

@@ -110,13 +110,13 @@ export function showHub(root, ctx) {
         <span class="ms"><span>구속</span><i><u style="width:${Math.max(6, Math.min(100, (p.velo - 125) / 37 * 100))}%"></u></i><em>${p.velo}</em></span>
         <span class="ms"><span>제구</span><i><u style="width:${Math.min(100, p.control)}%"></u></i><em>${p.control}</em></span>${tiredTag(c, p.id)}</button>`).join('')}</div>
       <div class="actions">
-        <button class="primary big" data-act="play">▶ 경기 시작</button>
         <button class="ghost" data-act="auto">자동 진행</button>
+        <button class="ghost" data-act="lineup">타순 편집</button>
       </div>
       ${s.phase === 'regular' && s.schedule.length - s.round > 1 ? `<button class="link" data-act="automany">남은 정규시즌 자동 진행 (${s.schedule.length - s.round}경기)</button>` : ''}
-      <button class="link" data-act="lineup">타순 편집</button>
     </section>
-    ${s.phase === 'regular' ? miniTable(s) : post}`;
+    ${s.phase === 'regular' ? miniTable(s) : post}
+    <div class="ns-dock hub-dock"><div><small>${g.label} · 선발 ${esc((sps.find(p => p.id === starter) || {}).name || '')}</small><b>${opp.short} vs 삼성</b></div><button class="primary big" data-act="play">경기 시작${icon('play')}</button></div>`;
   }
 
   function setupCard(c) {

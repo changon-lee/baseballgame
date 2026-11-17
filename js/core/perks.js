@@ -63,7 +63,7 @@ export function perkPitcher(m, pitcher) {
     const b = m.teams[bs].batters.find(q => q.id === id);
     if (b && b.bats === 'L') control += PERK.trait.control;
   }
-  control = Math.min(100, control);          // 효과를 겹쳐도 제구는 100까지
+  control = Math.min(Math.max(100, pitcher.control), control);   // 효과를 겹쳐도 제구는 100까지(한계 돌파로 원래 100을 넘으면 그 값까지)
   if (control === pitcher.control && velo === pitcher.velo && stamina === pitcher.stamina) return pitcher;
   return { ...pitcher, control, velo, stamina };
 }
