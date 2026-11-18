@@ -7,7 +7,7 @@ import { battingSide } from '../js/core/rules.js';
 import { defaultLineup } from '../js/core/team.js';
 import { getTeam } from '../js/data/rosters.js';
 import { createRng } from '../js/core/rng.js';
-import { raiseStep, raiseSteal, decisions, gameLine } from '../js/core/raisematch.js';
+import { raiseStep, raiseSteal, raisePull, decisions, gameLine, PULL_HARD, PULL_MORE_RUNS } from '../js/core/raisematch.js';
 
 const S = getTeam('samsung'), B = 'samsung-b03', SP = 'samsung-p01', CL = 'samsung-p05';
 const mk = (seed, starterId = S.pitchers[0].id) => {
@@ -18,11 +18,13 @@ const mk = (seed, starterId = S.pitchers[0].id) => {
 const playMyPA = (m, rng) => simulateUntil(m, rng, x => x.log.length > m.log.length);
 
 // 한 경기를 raiseStep으로 끝까지. onMe(match)는 내 장면마다
-function runGame(seed, raise, starterId, onMe = () => {}) {
+// coach: 투수코치 방문(phase 'pull')에 내려간다(true) / 더 던진다(false). 기본은 내려간다
+function runGame(seed, raise, starterId, onMe = () => {}, coach = () => true) {
   let { m, rng } = mk(seed, starterId), r, me = 0;
   for (let i = 0; i < 300; i++) {
     r = raiseStep(m, raise, rng);
     if (r.phase === 'steal') { m = raiseSteal(r.match, raise.playerId, false, rng).match; continue; }   // 도루는 안 한다
+    if (r.phase === 'pull') { m = raisePull(r.match, coach(r), rng); continue; }
     if (r.phase === 'done') return { r, me, m: r.match };
     me++; onMe(r.match);
     m = playMyPA(r.match, rng);
@@ -61,7 +63,7 @@ test('pinch hitter after 7th when cold and hitless with 2 K; I never bat again',
   assert.equal(six.phase, 'me');
 });
 
-test('starter is pulled at fatigue 0.6 and never returns', () => {
+test('starter: coach comes out at fatigue 0.6; going off means I never return', () => {
   const raise = { kind: 'pitch', role: 'SP', playerId: SP, cond: 0 };
   let pulled = 0;
   for (let seed = 1; seed <= 15; seed++) {
@@ -84,9 +86,37 @@ test('starter who gave up 5+ runs in an inning is pulled after it', () => {
   const { m: m0, rng } = mk(3, SP);
   const log = [0, 1, 2, 3, 4].map(i => ({ batterId: 'kt-b01', pitcherId: SP, event: 'HR', runs: 1, outs: 0, inning: 2, half: 'top', bases: [false, false, false], score: { home: 0, away: i + 1 }, pitches: [] }));
   const m = { ...m0, log, game: { ...m0.game, inning: 3, half: 'top', score: { home: 0, away: 5 } } };
-  const r = raiseStep(m, { kind: 'pitch', role: 'SP', playerId: SP, cond: 0 }, rng);
+  const raise = { kind: 'pitch', role: 'SP', playerId: SP, cond: 0 };
+  const ask = raiseStep(m, raise, rng);
+  assert.equal(ask.phase, 'pull'); assert.equal(ask.why, 'blown'); assert.equal(ask.runs, 5);
+  const r = raiseStep(raisePull(ask.match, true, rng), raise, rng);
   assert.equal(r.phase, 'done'); assert.equal(r.note, 'pulled');
   assert.equal(r.match.log.filter(e => e.pitcherId === SP).length, 5);
+  // 더 던진다: 같은 자리에서 다시 묻지 않고 내 차례가 된다
+  const stay = raiseStep(raisePull(ask.match, false, rng), raise, rng);
+  assert.equal(stay.phase, 'me'); assert.equal(stay.match.pitcher.home, SP);
+});
+
+test('staying in: asked only once, then pulled without asking at PULL_HARD or after more runs', () => {
+  const raise = { kind: 'pitch', role: 'SP', playerId: SP, cond: 0 };
+  for (let seed = 1; seed <= 12; seed++) {
+    let asks = 0;
+    const { r, m } = runGame(seed, raise, SP, () => {}, () => (asks++, false));
+    assert.ok(asks <= 1, `seed ${seed}: asked ${asks} times`);
+    if (r.note !== 'pulled') continue;
+    // 내려간 순간: 많이 지쳤거나, 더 던지기로 한 뒤 2점 이상 더 줬다
+    const last = m.log.map((e, i) => (e.pitcherId === SP ? i : -1)).filter(i => i >= 0).pop();
+    const f = fatigue(m.log.slice(0, last + 1).filter(e => e.pitcherId === SP).reduce((a, e) => a + e.pitches.length, 0), S.pitchers.find(p => p.id === SP).stamina);
+    assert.ok(asks === 1, `seed ${seed}: pulled only after the coach asked`);
+    assert.ok(f >= PULL_HARD - 0.05 || m.log.some(e => e.pitcherId === SP && e.runs), `seed ${seed}: f=${f.toFixed(2)}`);
+  }
+});
+
+test('my starter is never swapped by the computer between innings', () => {
+  const raise = { kind: 'pitch', role: 'SP', playerId: SP, cond: 0 };
+  for (let seed = 1; seed <= 10; seed++) {
+    runGame(seed, raise, SP, x => assert.equal(x.pitcher.home, SP), () => false);
+  }
 });
 
 test('a closer taken out by the user does not come back (review fix)', () => {

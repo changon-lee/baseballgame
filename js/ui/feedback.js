@@ -3,9 +3,13 @@
 // 두 갈래로 나눠 끄고 켤 수 있다: 효과음(방망이·글러브·헛스윙) / 관중·응원(관중 소리·응원 북·환호·탄식)
 let AC = null, SFX = null, AMB = null;
 const DIR = new URL('../../assets/audio/', import.meta.url);
-const FILES = ['bat_crack', 'bat_hr', 'mitt_pop', 'glove_catch', 'swing_whoosh', 'fence_hit', 'ball_bounce',
-  'crowd_ooh', 'crowd_aww', 'crowd_cheer', 'crowd_cheer_big', 'jingle_hr', 'crowd_loop'];
-const LOOPS = { crowd_loop: 30 };   // 반복 소리의 원래 길이(초): mp3 앞뒤 빈 소리를 빼고 이만큼만 돈다
+// 포수 미트 '퍽' 11가지(tools/make_audio_crowd.py): 공마다 하나를 고른다(바로 전 것은 피한다)
+const MITTS = Array.from({ length: 11 }, (_, i) => `mitt_${i + 1}`);
+// 관중 함성: 짧은 셋(안타·삼진) + 긴 하나(홈런·승리). 관중 소리는 이 넷과 웅성거림뿐이다
+const YELLS = ['crowd_yell1', 'crowd_yell2', 'crowd_yell3'];
+const FILES = ['bat_crack', 'mitt_pop', 'glove_catch', 'swing_whoosh', 'fence_hit', 'ball_bounce',
+  ...MITTS, ...YELLS, 'crowd_yell_big', 'jingle_hr', 'crowd_loop'];
+const LOOPS = { crowd_loop: 60 };   // 반복 소리의 원래 길이(초): mp3 앞뒤 빈 소리를 빼고 이만큼만 돈다
 const RAW = {}, BUF = {};
 let fetching = false;
 const opts = { sfx: true, amb: true, sfxVol: 1, ambVol: 1 };
@@ -77,7 +81,7 @@ export function setAudioOptions({ sfx = true, amb: a = true, sfxVol = 1, ambVol 
   AMB.gain.setTargetAtTime(a ? opts.ambVol : 0, AC.currentTime, 0.15);
 }
 // 볼륨을 만질 때 들어 보는 소리
-export function previewSound(kind) { playSound(kind === 'amb' ? 'cheer' : 'hit', kind === 'amb' ? { gain: 0.6 } : { q: 0.8 }); }
+export function previewSound(kind) { playSound(kind === 'amb' ? 'yell' : 'hit', kind === 'amb' ? { gain: 0.6 } : { q: 0.8 }); }
 
 // 경기장 분위기: 관중 웅성거림
 export function setAmbience(on) {
@@ -145,30 +149,31 @@ const SYNTH = {
   mitt: () => { noise(0.07, 380, 1, 0.9); tone(110, 0.09, 0.6); },
   whiff: () => noise(0.2, 700, 0.7, 0.28, 0.05),
   cheer: () => { noise(2.0, 1300, 0.4, 0.55, 0.35, 'bandpass', AMB); noise(1.6, 600, 0.5, 0.3, 0.3, 'bandpass', AMB); },
-  ooh: () => noise(0.9, 900, 0.5, 0.3, 0.2, 'bandpass', AMB),
 };
+let lastMitt = -1, lastYell = -1;
+const pick = (list, last) => { let k = Math.floor(Math.random() * list.length); if (k === last && list.length > 1) k = (k + 1) % list.length; return k; };
 
 // o: { q: 타구 질(0~1), speed: 구속 km/h, gain: 크기 배율 }
 const SOUNDS = {
   // 방망이 소리는 받은 녹음(bat_crack) 그대로. 잘 맞을수록 크게만 한다
   hit: o => { const q = o.q === undefined ? 0.7 : o.q; if (!sample('bat_crack', 0.55 + 0.45 * q)) SYNTH.hit(); },
-  // 우리 홈런(crowd): 받은 녹음 전체('딱' + 함성). 관중 소리를 껐거나 상대 홈런이면 '딱'만
-  homerun: o => { if (o.crowd && opts.amb && sample('bat_hr', 1)) return; if (!sample('bat_crack', 1)) SYNTH.hit(); },
+  // 우리 홈런(crowd): '딱' + 긴 함성. 상대 홈런이면 '딱'만
+  homerun: o => { if (!sample('bat_crack', 1)) SYNTH.hit(); if (o.crowd) SOUNDS.yellBig({ gain: 0.9 }); },
   foul: () => { if (!sample('bat_crack', 0.6)) SYNTH.foul(); },
-  mitt: o => {                                             // 포수 미트: 빠른 공일수록 크고 단단하게
-    const k = clamp01(((o.speed || 140) - 115) / 40);
-    if (!sample('mitt_pop', 0.55 + 0.45 * k, (0.97 + 0.06 * k) * jit(0.015))) SYNTH.mitt();
+  mitt: o => {                                             // 포수 미트: 녹음 11가지 중 하나. 빠른 공일수록 크고 단단하게
+    const v = o.speed || 140, k = clamp01((v - 115) / 40), i = pick(MITTS, lastMitt);
+    lastMitt = i;
+    if (!sample(MITTS[i], 0.6 + 0.4 * k, (0.97 + 0.05 * k) * jit(0.02)) && !sample('mitt_pop', 0.55 + 0.45 * k)) SYNTH.mitt();
+    if (v >= 150 && AC) tone(v >= 160 ? 78 : 92, v >= 160 ? 0.16 : 0.11, v >= 160 ? 0.55 : 0.35, 'sine', 0.6);   // 강속구는 낮은 '쿵'을 더한다
   },
   catch: () => { if (!sample('glove_catch', 0.75, jit(0.05))) SYNTH.mitt(); },   // 야수가 잡는 소리
   whiff: () => { if (!sample('swing_whoosh', 0.7, jit(0.05))) SYNTH.whiff(); },
   fence: () => { sample('fence_hit', 0.8, jit(0.04)); },
   bounce: () => { sample('ball_bounce', 0.6, jit(0.06)); },
   strikeout: () => { tone(660, 0.12, 0.18, 'square', 1); setTimeout(() => tone(880, 0.18, 0.18, 'square', 1), 120); },
-  // 관중(관중·응원 쪽으로 나간다)
-  cheer: o => { if (!sample('crowd_cheer', 0.8 * (o.gain || 1), jit(0.03), AMB)) SYNTH.cheer(); },
-  roar: o => { if (!sample('crowd_cheer_big', o.gain || 1, 1, AMB)) SYNTH.cheer(); },
-  ooh: o => { if (!sample('crowd_ooh', 0.8 * (o.gain || 1), jit(0.04), AMB)) SYNTH.ooh(); },
-  aww: o => { sample('crowd_aww', 0.65 * (o.gain || 1), jit(0.03), AMB); },
+  // 관중 함성(관중·응원 쪽으로 나간다). 안타·홈런, 삼진, 승리 때만 부른다
+  yell: o => { const i = pick(YELLS, lastYell); lastYell = i; if (!sample(YELLS[i], 0.85 * (o.gain || 1), jit(0.03), AMB)) SYNTH.cheer(); },
+  yellBig: o => { if (!sample('crowd_yell_big', o.gain || 1, 1, AMB)) SYNTH.cheer(); },
   jingle: () => { sample('jingle_hr', 0.85, 1, AMB); },
 };
 // 확인용: 지금 불러온 소리와 돌고 있는 반복 소리

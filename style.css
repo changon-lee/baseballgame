@@ -1144,3 +1144,6 @@ button.primary:disabled{opacity:1;color:var(--dim2);background:rgba(255,255,255,
 .ring-ic{width:1.05em;height:1.05em;vertical-align:-.16em;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}
 .rz-ringbig .ring-ic{width:1.2em;height:1.2em;margin-right:2px}
 @media (prefers-reduced-motion:reduce){.cer-ring .sheen,.cer-ring .spark{animation:none}}
+/* 투수코치 방문(강판 선택) */
+.pull-ask .hint b{color:var(--gold)}
+.pull-ask .pull-warn{margin-top:-6px;color:#8b9bb6;font-size:11.5px;line-height:1.5}

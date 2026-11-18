@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createRng } from '../js/core/rng.js';
 import { timingWindowMs, swingResult } from '../js/core/batting.js';
 import { battedBall } from '../js/core/outcome.js';
+import { CONFIG } from '../js/config.js';
 
 const batter = { contact: 50, power: 50, eye: 50 };
 const pitch = (o = {}) => ({ plate: { x: 0, y: 0 }, breakX: 0, breakY: 0.1, speedKmh: 145, isStrike: true, ...o });
@@ -42,8 +43,10 @@ test('double play only with runner on first and <2 outs', () => {
 // ── 배트 위치(내가 칠 때) ──
 import { batReach, batOffset } from '../js/core/batting.js';
 test('bat right on the ball: same as no aim', () => {
-  const a = swingResult({ timingDiffMs: 0, batter, pitch: pitch(), rng: createRng(1) });
-  const b = swingResult({ timingDiffMs: 0, batter, pitch: pitch(), rng: createRng(1), bat: { x: 0, y: 0 } });
+  // 컴퓨터 타자(bat 없음)만 받는 구위 보정이 0이 되도록 리그 평균 구속으로
+  const p = () => pitch({ speedKmh: CONFIG.BALANCE.VELO_MID });
+  const a = swingResult({ timingDiffMs: 0, batter, pitch: p(), rng: createRng(1) });
+  const b = swingResult({ timingDiffMs: 0, batter, pitch: p(), rng: createRng(1), bat: { x: 0, y: 0 } });
   assert.equal(b.kind, 'INPLAY'); assert.equal(b.quality, a.quality);
 });
 test('bat far from the ball path is a swing and miss even with perfect timing', () => {

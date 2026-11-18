@@ -451,7 +451,6 @@ export function showRaise(root, { storage, loadGame, onBack }) {
     act('mgo', () => {
       if (!validCustom(draft)) return;
       data = { ...data, slots: data.slots.map((s, j) => (j === i ? newSlot(null, { games, custom: draft }) : s)) }; persist();
-      playSound('cheer', { gain: 0.5 });
       hubView(i);
     });
   }
@@ -669,11 +668,10 @@ export function showRaise(root, { storage, loadGame, onBack }) {
     screen(c.html, 'result cer-screen');
     let k = 0;
     const cue = n => {
-      if (n === 0) { playSound('roar'); playSound('jingle'); vibrate([80, 60, 80, 60, 200]); }
-      else if (n === 1) { playSound('cheer'); vibrate([40, 120, 40, 120, 40]); }
-      else if (n === 2) { if (ksMvp(s)) { playSound('jingle'); vibrate([60, 40, 160]); } else playSound('cheer', { gain: 0.6 }); }
-      else if (n === 3) { playSound('cheer', { gain: 0.7 }); vibrate(60); }
-      else playSound('roar', { gain: 0.6 });
+      if (n === 0) { playSound('yellBig'); playSound('jingle'); vibrate([80, 60, 80, 60, 200]); }
+      else if (n === 1) vibrate([40, 120, 40, 120, 40]);
+      else if (n === 2) { if (ksMvp(s)) { playSound('jingle'); vibrate([60, 40, 160]); } }
+      else if (n === 3) vibrate(60);
     };
     const show = n => {
       root.querySelectorAll('.cer-stage').forEach(el => el.classList.toggle('on', +el.dataset.n === n));
@@ -741,7 +739,6 @@ export function showRaise(root, { storage, loadGame, onBack }) {
       if (!canBuy(data.slots[i], x.id).ok) return;
       if (x.price >= 50000 && !confirm(`${x.name}을(를) ${won(x.price)}에 살까요?`)) return;
       data = { ...data, slots: data.slots.map((q, j) => (j === i ? buyItem(q, x.id) : q)) }; persist();
-      playSound('cheer', { gain: 0.4 });
       shopView(i, `${x.icon} ${x.name}${x.type === 'season' ? ' 계약했어요' : x.id === 'donate' ? ' 했어요' : ' 샀어요'}`);
     });
   }

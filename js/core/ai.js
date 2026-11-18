@@ -1,7 +1,7 @@
 // 컴퓨터 투수의 공 선택, 컴퓨터 타자의 스윙
 import { CONFIG } from '../config.js';
 import { randNormal } from './rng.js';
-import { ZONE_K, BALL_R } from './pitch.js';
+import { ZONE_K, BALL_R, veloEdge } from './pitch.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const EDGE = ZONE_K + BALL_R;        // 공이 존에 걸치는 끝(isStrike와 같다)
@@ -51,7 +51,8 @@ export function cpuSwing({ batter, pitch, balls, strikes, rng, prev = null, k = 
   const green = balls === 3 && strikes === 0 && batter.power >= 80;   // 3-0 강타자는 노려 친다
   ps *= pitch.isStrike ? (green ? 0.7 : cs.zone ?? 1) : cs.chase ?? 1;
   if (rng() >= ps) return { swing: false, timingDiffMs: 0 };
-  let sigma = B.SIGMA_BASE + (100 - batter.contact) * 0.5 + Math.max(0, pitch.speedKmh - 135) + brk * 35;
+  // 구위: 빠를수록 타이밍이 더 흔들린다
+  let sigma = B.SIGMA_BASE + (100 - batter.contact) * 0.5 + veloEdge(pitch) * B.VELO_SIGMA + brk * 35;
   if (prev && prev.v) {
     const dv = Math.abs(pitch.speedKmh - prev.v);
     sigma += B.SPEED_MIX * dv;

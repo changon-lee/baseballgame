@@ -13,7 +13,15 @@ export const PITCH_TYPES = {
   FO: { name: '포크', speedMul: 0.86, breakX: 0.00, breakY: -0.55 },
 }; // breakX는 우투수 기준, 좌투수는 부호 반대
 
-export const BALL_R = 0.17;   // 공 반지름(좌표 1 = 예전 존 가로 반폭 기준)
+// 공의 '구위 구속': 이 공을 던진 투수의 직구 기준 구속(변화구는 구종 배율로 되돌린다). 빠른 투수는 변화구도 더 빠르고 날카롭다
+export const stuffVelo = p => p.speedKmh / ((PITCH_TYPES[p.type] && PITCH_TYPES[p.type].speedMul) || 1);
+// 구위 차이(리그 평균 대비 km): 빠른 쪽은 그대로, 느린 쪽은 VELO_SLOW만큼만 센다(느린 투수가 너무 얻어맞지 않게). ±VELO_CAP까지
+export function veloEdge(p) {
+  const B = CONFIG.BALANCE, d = stuffVelo(p) - B.VELO_MID;
+  return Math.max(-B.VELO_CAP, Math.min(B.VELO_CAP, d > 0 ? d : d * B.VELO_SLOW));
+}
+
+export const BALL_R = 0.17;  // 공 반지름(좌표 1 = 예전 존 가로 반폭 기준)
 // 스트라이크존(심판 판정) 반폭·반높이. 좌표계(공·포수·배트 크기)는 그대로 두고 판정 존만 좁혔다
 export const ZONE_K = 0.85;
 

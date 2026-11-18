@@ -16,7 +16,7 @@ export const CONFIG = {
     AIM_PENALTY: 0.45,             // 배트 가운데에서 벗어난 만큼(0 가운데 ~ 1 끝) 타구질이 떨어진다(제곱)
     HR_Q: 0.78, HR_BASE: 0.10, HR_POWER: 0.55,
     HIT_BASE: 0.05, HIT_Q: 0.40,
-    CPU_ZONE: 0.5, SWING_ZONE: 0.74, CHASE: 0.15, SIGMA_BASE: 94,
+    CPU_ZONE: 0.5, SWING_ZONE: 0.74, CHASE: 0.15, SIGMA_BASE: 97,
     CORNER_TAKE: 0.35,             // 존 끝에 걸치는 공은 이만큼(최대) 덜 휘두른다 → 루킹 스트라이크
     CHASE_BREAK: 1.2,              // 존 밖 변화구는 휘는 만큼 더 쫓는다(유인구). 존에 가까울수록 더
     SPEED_MIX: 1.5,                // 바로 전 공과 구속 차이 1km/h마다 타이밍이 이만큼(ms) 더 흔들린다(완급 조절)
@@ -25,6 +25,9 @@ export const CONFIG = {
     HBP_CHANCE: 0.5,               //   → 이 확률로 몸에 맞는 공(사구, 타자 1루)
     WILD_DIST: 1.7,                // 너무 떨어진 공: 존 중심에서 이만큼(최대 좌표) 넘게 벗어나면
     WILD_CHANCE: 0.35,             //   → 이 확률로 포수가 놓쳐 공이 빠진다(폭투, 주자 한 베이스 진루. 주자가 없거나 4구째면 그냥 볼)
-    SAME_PITCH: 12,                // 같은 구종·비슷한 구속이 이어지면 눈에 익어 타이밍이 이만큼(ms) 덜 흔들린다
+    // 구위(구속): 리그 평균 VELO_MID km/h보다 1km 빠를 때마다 컴퓨터 타자의 타이밍이 VELO_SIGMA ms 더 흔들리고,
+    // 맞혀도 타구질이 VELO_Q만큼 떨어진다(느리면 반대로 쉬워지되 VELO_SLOW만큼만). 차이는 VELO_CAP(km)까지만 센다
+    VELO_MID: 147, VELO_SIGMA: 2.5, VELO_Q: 0.006, VELO_SLOW: 0.25, VELO_CAP: 25,
+    SAME_PITCH: 12,               // 같은 구종·비슷한 구속이 이어지면 눈에 익어 타이밍이 이만큼(ms) 덜 흔들린다
   },
 };

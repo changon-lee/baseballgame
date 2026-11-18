@@ -9,6 +9,10 @@ import { playerLine } from './growth.js';
 
 export const PULL_FATIGUE = 0.6;        // 컴퓨터 투수 교체와 같은 기준
 export const PULL_RUNS = 5;             // 한 이닝에 이만큼 주면 그 이닝 뒤 강판
+// 위 기준에 걸리면 투수코치가 올라와 한 번 묻는다(phase 'pull'). '더 던진다'를 고르면 그 경기에선 다시 묻지 않고,
+// 그 뒤 PULL_HARD까지 지치거나 PULL_MORE_RUNS점을 더 주면 묻지 않고 내린다
+export const PULL_HARD = 0.85;
+export const PULL_MORE_RUNS = 2;
 export const PINCH = { inning: 7, cond: -1, so: 2 };
 export const CLOSE_GAP = 3;             // 마무리는 9회초 시작 때 점수 차가 이 이하일 때만
 
@@ -106,16 +110,28 @@ const runsInHalf = (log, id, inning) => log.reduce((a, e) => a + (e.pitcherId ==
 // ── 선발 ──
 function starterStep(m0, { playerId: id }, rng) {
   if (m0.pitcher.home !== id) return finish(m0, rng, 'pulled', m0);
-  const m = simulateUntil(m0, rng, x => x.game.half === 'top' || x.pitcher.home !== id);
+  // 내 선발은 컴퓨터 교체에서 빼 둔다(공수교대 중에 몰래 바뀌지 않게). keep만 붙인 건 '넘긴 장면'이 아니다
+  const k0 = m0.keep && m0.keep.home === id ? m0 : { ...m0, keep: { ...(m0.keep || {}), home: id } };
+  const m = simulateUntil(k0, rng, x => x.game.half === 'top' || x.pitcher.home !== id);
   if (m.game.over) return out(m, 'end', m0);
   if (m.pitcher.home !== id) return finish(m, rng, 'pulled', m0);
   const fresh = m.game.balls + m.game.strikes === 0;          // 강판은 타석 사이에만
-  const tired = fresh && fatigue(m.pitchCount.home, matchup(m).pitcher.stamina) >= PULL_FATIGUE;
-  const blown = fresh && m.game.outs === 0 && m.game.inning > 1 && runsInHalf(m.log, id, m.game.inning - 1) >= PULL_RUNS
-    && !m.log.some(e => e.inning === m.game.inning && e.half === 'top');
-  if (tired || blown) return finish(pullMe(m, rng), rng, 'pulled', m0);
-  return me(m, m0);
+  if (!fresh) return me(m, k0);
+  const f = fatigue(m.pitchCount.home, matchup(m).pitcher.stamina);
+  if (m.stay) {                                               // 더 던지기로 했다: 한계에 닿으면 묻지 않고 내린다
+    const more = m.log.slice(m.stay.at).reduce((a, e) => a + (e.pitcherId === id ? e.runs || 0 : 0), 0);
+    if (f >= PULL_HARD || more >= PULL_MORE_RUNS) return finish(pullMe(m, rng), rng, 'pulled', m0);
+    return me(m, k0);
+  }
+  const lastRuns = m.game.outs === 0 && m.game.inning > 1 && !m.log.some(e => e.inning === m.game.inning && e.half === 'top')
+    ? runsInHalf(m.log, id, m.game.inning - 1) : 0;
+  const why = f >= PULL_FATIGUE ? 'tired' : lastRuns >= PULL_RUNS ? 'blown' : null;
+  if (why) return { match: m, phase: 'pull', why, runs: lastRuns, note: null, skipped: m !== k0 };
+  return me(m, k0);
 }
+
+// 투수코치 방문에 답한다. off = 내려간다(불펜 투수로 바꾼다), 아니면 더 던진다(이 경기에선 다시 안 묻는다)
+export const raisePull = (m, off, rng) => (off ? pullMe(m, rng) : { ...m, stay: { at: m.log.length } });
 
 // ── 마무리 ──
 function closerStep(m0, { playerId: id }, rng) {

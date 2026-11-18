@@ -13,13 +13,13 @@ const fnv = s => { let x = 2166136261; for (let i = 0; i < s.length; i++) { x ^=
 const S = getTeam('samsung');
 
 test('perks-free matches are byte-identical to before', () => {
-  // 기대값은 perks를 넣기 전 코드로 뽑았다
-  const sim = { 11: 203811049, 222: 2853468584, 3333: 3342552156 };
+  // 기대값은 perks 없이 뽑았다(구위 보정 VELO_* 를 넣으면서 다시 뽑음)
+  const sim = { 11: 3943048763, 222: 243748184, 3333: 1676126688 };
   for (const [seed, h] of Object.entries(sim)) {
     const r = simulateGame({ home: S, away: getTeam('lg'), innings: 9, rng: createRng(+seed) });
     assert.equal(fnv(JSON.stringify(r)), h, `sim seed ${seed}`);
   }
-  const heat = { 11: 1431453171, 222: 1860550176, 3333: 1416899416 };
+  const heat = { 11: 2763066085, 222: 3384296191, 3333: 3704251713 };
   for (const [seed, h] of Object.entries(heat)) {
     const rng = createRng(+seed);
     let m = createMatch({ userTeam: S, cpuTeam: getTeam('kia'), userLineup: defaultLineup(S), innings: 9, rng, heat: true });

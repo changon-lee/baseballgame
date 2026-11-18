@@ -3,7 +3,7 @@
 // bat = { x, y, level }: 내가 칠 때 배트를 댄 곳(존 좌표). 공이 배트가 닿는 타원 밖으로 오면 헛스윙.
 //   없으면(컴퓨터 타자) 위치는 따지지 않는다.
 import { CONFIG } from '../config.js';
-import { BALL_R } from './pitch.js';
+import { BALL_R, veloEdge } from './pitch.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export const timingWindowMs = contact => 18 + contact * 0.3;
@@ -42,7 +42,9 @@ export function swingResult({ timingDiffMs, batter, pitch, rng, bat = null, boos
   if (d > w * 5 || m > 1.6) return { kind: 'MISS', quality: 0, pull: 0 };
   const dq = bat ? Math.max(0, d - graceMs(bat.level)) : d;
   const pen = easy ? EASY.penalty : 1;
-  const quality = Math.min(1, 1 - dq / (w * 5) + (easy ? EASY.bonus : 0) + (boost ? boost.quality : 0)
+  // 컴퓨터 타자(bat 없음)만: 빠른 공은 맞혀도 밀린다. 내가 칠 때는 공이 실제로 더 빨리 날아오는 걸로 충분하다
+  const velo = bat || pitch.speedKmh == null ? 0 : veloEdge(pitch) * B.VELO_Q;
+  const quality = Math.min(1, 1 - dq / (w * 5) - velo + (easy ? EASY.bonus : 0) + (boost ? boost.quality : 0)
     - (Math.max(0, m - 0.6) * B.EDGE_PENALTY
     + (Math.abs(pitch.breakX) + Math.abs(pitch.breakY)) * B.BREAK_PENALTY
     + off.e * off.e * B.AIM_PENALTY) * pen);

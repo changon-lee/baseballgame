@@ -152,6 +152,8 @@ export function changePitcher(m, side, pitcherId) {
 }
 
 export function cpuMaybeChangePitcher(m, rng, side = 'away') {
+  // 육성모드 내 선발(keep)은 컴퓨터가 몰래 바꾸지 않는다. 강판은 raisematch가 코치 방문으로 정한다
+  if (m.keep && m.keep[side] === m.pitcher[side]) return m;
   const p = perkPitcher(m, pitcherOf(m, side));      // 육성 '강철 어깨'는 컴퓨터 교체에서도 덜 지친다(perks 없으면 그대로)
   if (fatigue(m.pitchCount[side], p.stamina) < 0.6) return m;
   const avail = availableRelievers(m.teams[side], m.used[side], p.id);
