@@ -9,7 +9,7 @@ const MITTS = Array.from({ length: 11 }, (_, i) => `mitt_${i + 1}`);
 const YELLS = ['crowd_yell1', 'crowd_yell2', 'crowd_yell3'];
 const FILES = ['bat_crack', 'mitt_pop', 'glove_catch', 'swing_whoosh', 'fence_hit', 'ball_bounce',
   ...MITTS, ...YELLS, 'crowd_yell_big', 'jingle_hr', 'crowd_loop'];
-const LOOPS = { crowd_loop: 60 };   // 반복 소리의 원래 길이(초): mp3 앞뒤 빈 소리를 빼고 이만큼만 돈다
+const LOOPS = { crowd_loop: 30 };   // 반복 소리의 원래 길이(초): mp3 앞뒤 빈 소리를 빼고 이만큼만 돈다
 const RAW = {}, BUF = {};
 let fetching = false;
 const opts = { sfx: true, amb: true, sfxVol: 1, ambVol: 1 };

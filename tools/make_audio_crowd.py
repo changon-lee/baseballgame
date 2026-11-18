@@ -2,9 +2,9 @@
 # 실행: python tools/make_audio_crowd.py   (imageio-ffmpeg 의 ffmpeg 를 쓴다)
 #  - assets/raw/Baseball Sound Effects All Sounds.mp3
 #      0:51~1:15  관중 함성 → crowd_yell1~3(짧게 세 가지), crowd_yell_big(길게: 홈런·승리)
-#      6:47~10:35 관중 웅성거림 → crowd_loop(60초 반복). 중간에 함성이 튀는 곳(8:07~8:17, 9:03~9:23)은 피해서 9:27~부터 쓴다
+#      6:47~10:35 관중 웅성거림 → crowd_loop_alt.mp3(60초 반복, 시험용). 써 봤지만 예전 것(tools/make_audio.py 의 crowd_loop)이
+#                 더 나아서 게임은 예전 crowd_loop 를 쓴다. 다시 바꾸려면 이 파일을 crowd_loop.mp3 로 두고 feedback.js 의 LOOPS 를 60으로
 #  - assets/raw/Short Shots Glove Pop.mp3 → mitt_1~11 (포수 미트 '퍽' 11가지. 앞 1.6초의 잡음은 뺀다)
-# tools/make_audio.py 도 crowd_loop 를 만들지만, 지금 쓰는 건 이 스크립트가 만든 것이다
 import subprocess, os
 import numpy as np
 import imageio_ffmpeg
@@ -58,8 +58,8 @@ loop = amb[:n].copy()
 w = np.linspace(0, 1, nx)[:, None]
 loop[:nx] = loop[:nx] * w + amb[n:n + nx] * (1 - w)
 old = load(f'{OUT}/crowd_loop.mp3', 2) if os.path.exists(f'{OUT}/crowd_loop.mp3') else None
-target = float(np.sqrt((old ** 2).mean())) if old is not None else 0.12   # 예전 반복 소리와 같은 크기로
-save('crowd_loop', loop, kbps=64, rms=target)
+target = float(np.sqrt((old ** 2).mean())) if old is not None else 0.12   # 지금 반복 소리와 같은 크기로
+if os.environ.get('CROWD_ALT'): save('crowd_loop_alt', loop, kbps=64, rms=target)   # CROWD_ALT=1 일 때만(게임은 안 쓴다)
 
 # ── 포수 미트 '퍽' 11가지 ──
 pop = load(POP, 1)
