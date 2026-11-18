@@ -620,6 +620,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     else playSound(k === 'FOUL' ? 'foul' : 'hit', { q });
     vibrate(k === 'INPLAY' && q > 0.8 ? 70 : 35);
     shake(cv, r.contact.bunt ? 2 : k === 'INPLAY' ? 4 + q * 8 : 3);
+    if (!r.contact.bunt) startHitFx(k === 'INPLAY' ? (r.event === 'HR' || q >= CONFIG.BALANCE.HR_Q ? 2 : q >= HIT_GOOD_Q ? 1 : 0) : 0);
     ball.hitAt = performance.now(); ball.contact = r.contact;
     apply(r, false);
   }
@@ -1339,6 +1340,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
       }
     }
     drawImpact(now);
+    drawHitFx(now);
     drawMsg();
   }
   // ── 미트 임팩트(내가 던질 때): 구속 단계 색 잔상 → 미트에 닿으면 빛 + 바닥에 퍼지는 타원 충격파 ──
@@ -1366,6 +1368,69 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     const lv = tierOf(ball.pitch.speedKmh), [x, y] = toS(V, ball.pitch.plate.x, ball.pitch.plate.y);
     impact = { at: performance.now(), x, y, lv, c: TIER_COLOR[lv] };
     if (lv) { shake(stage, lv === 2 ? 6 : 3); vibrate(lv === 2 ? 35 : 15); }
+  }
+  // ── 타격 임팩트(내가 칠 때): 방망이가 지나간 빛나는 호 + 맞은 점 섬광 + 사방으로 튀는 불꽃 + 충격 고리 ──
+  // 단계: 0 빗맞음·파울(흰색) · 1 정타(금색) · 2 홈런급(주황→빨강, 고리 두 겹)
+  const HIT_GOOD_Q = 0.55;
+  const HIT_COLOR = ['#ffffff', '#ffd23f', '#ff5a1f'];
+  let hitFx = null;
+  function startHitFx(lv) {
+    const mu = matchup(match), bats = mu.batter.bats === 'S' ? (mu.pitcher.throws === 'L' ? 'R' : 'L') : mu.batter.bats;
+    const [x, y] = toS(V, ball.pitch.plate.x, ball.pitch.plate.y);
+    hitFx = { at: performance.now(), x, y, lv, side: batterAnchor(V, bats).x > x ? 1 : -1 };
+  }
+  function drawHitFx(now) {
+    if (!hitFx) return;
+    const t = hitFx.fixed ?? now - hitFx.at, D = 520;   // fixed: 확인용(__ui.showHitFx)
+    if (t > D) { hitFx = null; return; }
+    const { x, y, lv, side } = hitFx, c = HIT_COLOR[lv], s = V.zw / 120;
+    const ease = u => 1 - Math.pow(1 - Math.min(1, Math.max(0, u)), 3);
+    ctx.save(); ctx.lineCap = 'round';
+    // 방망이 길: 타자 쪽에서 맞은 점을 지나 반대쪽으로 쓸고 지나간다(앞 90ms 동안 그려지고 사라진다)
+    const P0 = [x + side * 140 * s, y - 60 * s], P1 = [x + side * 20 * s, y + 90 * s], P2 = [x - side * 130 * s, y + 30 * s];
+    const reveal = ease(t / 90), fadeA = t < 130 ? 1 : Math.max(0, 1 - (t - 130) / 320), N = 22, lw = [10, 18, 26][lv] * s * 0.7;
+    const at = u => [(1 - u) * (1 - u) * P0[0] + 2 * (1 - u) * u * P1[0] + u * u * P2[0], (1 - u) * (1 - u) * P0[1] + 2 * (1 - u) * u * P1[1] + u * u * P2[1]];
+    ctx.shadowColor = c; ctx.shadowBlur = [4, 8, 14][lv];
+    for (let i = 1; i <= N; i++) {
+      const u0 = (i - 1) / N * reveal, u1 = i / N * reveal, k = i / N;
+      const [ax, ay] = at(u0), [bx, by] = at(u1);
+      ctx.globalAlpha = fadeA * k * (lv ? 0.95 : 0.75);
+      ctx.strokeStyle = lv === 2 ? (k < 0.45 ? '#ffd23f' : k < 0.75 ? '#ff922b' : '#ff3b30') : c;
+      ctx.lineWidth = lw * (0.35 + 0.65 * k);
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
+    // 맞은 점 섬광
+    if (t < 300) {
+      const cr = 30 * [0.8, 1.3, 2][lv] * s * (0.4 + 0.6 * ease(t / 60) + 0.4 * t / 300);
+      const g = ctx.createRadialGradient(x, y, 0, x, y, cr);
+      g.addColorStop(0, '#fff'); g.addColorStop(0.35, c); g.addColorStop(1, c + '00');
+      ctx.globalAlpha = t < 60 ? 1 : 1 - (t - 60) / 240; ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(x, y, cr, 0, Math.PI * 2); ctx.fill();
+    }
+    // 충격 고리(홈런급은 두 겹)
+    const ring = (d, w) => {
+      const u = (t - d) / 420;
+      if (u <= 0 || u >= 1) return;
+      ctx.globalAlpha = 1 - u; ctx.strokeStyle = c; ctx.lineWidth = w * s; ctx.shadowColor = c; ctx.shadowBlur = 10;
+      ctx.beginPath(); ctx.arc(x, y, 15 * s * (0.3 + [2.5, 4, 6][lv] * ease(u)), 0, Math.PI * 2); ctx.stroke();
+      ctx.shadowBlur = 0;
+    };
+    ring(0, 3); if (lv === 2) ring(70, 2);
+    // 불꽃: 사방으로 튀는 빛줄기
+    const n = [8, 14, 22][lv], su = t / 380;
+    if (su < 1) {
+      for (let i = 0; i < n; i++) {
+        const a = (i * 360 / n + (i % 3) * 7) * Math.PI / 180, L = ([40, 70, 110][lv] + (i % 4) * 14) * s;
+        const d0 = 10 * s + L * 0.9 * ease(su), len = L * (0.2 + 0.8 * ease(su)) * 0.5;
+        const ax = x + Math.cos(a) * d0, ay = y + Math.sin(a) * d0, bx = x + Math.cos(a) * (d0 - len), by = y + Math.sin(a) * (d0 - len);
+        const g = ctx.createLinearGradient(ax, ay, bx, by);
+        g.addColorStop(0, '#fff'); g.addColorStop(0.4, c); g.addColorStop(1, c + '00');
+        ctx.globalAlpha = su < 0.1 ? 1 : 1 - (su - 0.1) / 0.9; ctx.strokeStyle = g; ctx.lineWidth = 3 * s;
+        ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+      }
+    }
+    ctx.restore();
   }
   function drawImpact(now) {
     if (!impact) return;
@@ -1571,6 +1636,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   // 확인용: 지금 타석에 정해진 타구 장면을 바로 띄운다(수비 조작 확인)
   const testPlay = (event, fly = false, style = null, pull = 0, batting = false) => { const pitch = cpuPitchToUser(match, rng); ball = batting ? { pitch } : null; apply({ ...applyDecision(match, pitch, { event, contact: { kind: 'INPLAY', pull, quality: 0.6 }, fly, style, swung: true }), pitch }, !batting); };
   window.__ui = { showLineScore, testPlay, showSpeed: (v, k = 'FB') => { speedTag = { v, k, name: PITCH_TYPES[k].name, at: performance.now() }; },
+    showHitFx: (lv, fixed) => { const b = ball; ball = { pitch: { plate: { x: 0.1, y: 0 } } }; startHitFx(lv); ball = b; if (fixed != null) hitFx.fixed = fixed; },
     showImpact: (v, fixed) => { const b = ball; ball = { pitch: { speedKmh: v, plate: { x: 0.15, y: -0.1 } } }; startImpact(); ball = b; if (fixed != null) impact.fixed = fixed; } };
   window.__match = f => { if (f) { match = f(match); updateBoard(); } return match; };   // 확인용
   window.__game = () => ({ mode, dragging, V: !!V, W, H, target, ball: !!ball, ballStart: ball ? ball.start : null, arrival: ball ? ball.arrival : null, swung: !!(ball && ball.swung), pitchAt, play: play && play.start ? { ms: Math.round(performance.now() - play.start), event: play.event, fc: play.fc ? { state: play.fc.state, ring: !!play.fc.r0, hitAt: play.fc.hitAt, grade: play.fc.grade || null } : null } : null });
