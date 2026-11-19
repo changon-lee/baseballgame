@@ -16,7 +16,7 @@ import { boostFor } from '../core/perks.js';
 import { raiseStep, raiseSteal, raisePull, gameLine, PULL_MORE_RUNS } from '../core/raisematch.js';
 import { lineScore, todayText, gameMvp } from '../core/boxscore.js';
 import { fieldChance, judgeTap, fieldWin, CPU_DIVE } from '../core/fielding.js';
-import { clutchOf, scoreSwing, highlightsOf, bestOf } from '../core/moments.js';
+import { clutchOf, scoreSwing, highlightsOf, bestOf, qualityStart, seasonMilestones } from '../core/moments.js';
 import { playerLine, avg, era, ip } from '../core/growth.js';
 import { face } from './hub.js';
 import { loadPrefs, savePrefs, LEVELS, LEVEL_NAME } from './prefs.js';
@@ -84,7 +84,7 @@ function goFullscreen() {
 //   perks = { id, cond, traits }(컨디션·특성 효과). 끝까지 하면 onExit({ home, away, log, starterId, raise: { note } })
 // stats: 우리 선수 시즌 기록 { bat: { id: { ab, h, hr } } } (타자 소개 띠에 시즌 타율을 보여 준다). 없으면 능력치를 보여 준다
 // startMatch(육성모드): 미리 내 첫 장면까지 돌려 둔 경기. 있으면 새로 만들지 않고 거기서 이어 간다
-export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterId, title, net = null, cpuLineup = null, practice = null, stats = null, perks = null, raise = null, startMatch = null }, onExit) {
+export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterId, title, net = null, cpuLineup = null, practice = null, stats = null, perks = null, raise = null, startMatch = null, season = null }, onExit) {
   goFullscreen();
   loadSprites();                                     // 메인 화면에서 아직 다 못 받았으면 지금 바로
   const rng = createRng((Date.now() ^ (Math.random() * 1e9)) >>> 0);
@@ -766,19 +766,23 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   // 이번 공으로 생긴 기록 메달: 경기 기록(연속 삼진·3구 삼진·연속 홈런…) + 개인 최고(구속·비거리·한 경기 탈삼진)
   function medalsFor(prev, r, userPitched, logN, hrM, delay) {
     const ms = [], paDone = match.log.length > logN, e = paDone ? match.log[match.log.length - 1] : null;
-    if (paDone) for (const h of highlightsOf(match.log, mySide)) ms.push({ ...h, label: h.batterId || h.pitcherId ? `${nameOf(h.batterId || h.pitcherId)} · ${h.label}` : h.label });
+    if (paDone) ms.push(...highlightsOf(match.log, mySide));
+    if (paDone && season && !practice) ms.push(...seasonMilestones(match.log, season.id, season));   // 육성모드 시즌 이정표
+    const qs = practice ? null : qualityStart(match.log, mySide, prev, match.game, innings);
+    if (qs) ms.push(qs);
     if (!net && !auto && hold) {
+      const best = { rec: true, en: 'NEW PERSONAL BEST' };
       if (userPitched && ball && ball.pitch && ball.pitch.speedKmh) {
         const b = tryRecord('velo', hold.pitcher.id, ball.pitch.speedKmh);
-        if (b) ms.push({ rec: true, big: b.value, unit: 'km', label: `${hold.pitcher.name} 개인 최고 구속` });
+        if (b) ms.push({ ...best, who: hold.pitcher.id, big: String(b.value), unit: 'km', label: '개인 최고 구속', sub: `이전 최고 ${b.prev}km` });
       }
       if (!userPitched && hrM) {
         const b = tryRecord('hr', hold.batter.id, hrM);
-        if (b) ms.push({ rec: true, big: b.value, unit: 'm', label: `${hold.batter.name} 개인 최장 홈런` });
+        if (b) ms.push({ ...best, who: hold.batter.id, big: String(b.value), unit: 'm', label: '개인 최장 홈런', sub: `이전 최장 ${b.prev}m` });
       }
       if (e && userPitched && e.event === 'STRIKEOUT') {
         const n = match.log.filter(q => q.pitcherId === e.pitcherId && q.event === 'STRIKEOUT').length, b = tryRecord('k', e.pitcherId, n, 6);
-        if (b) { ms.splice(0, ms.length, ...ms.filter(m => m.today == null)); ms.push({ rec: true, big: `${n}K`, label: `${nameOf(e.pitcherId)} 한 경기 최다 탈삼진` }); }
+        if (b) { ms.splice(0, ms.length, ...ms.filter(m => m.today == null)); ms.push({ ...best, who: e.pitcherId, big: String(n), unit: 'K', label: '한 경기 최다 탈삼진', sub: `이전 최다 ${b.prev}개` }); }
       }
     }
     ms.slice(0, 3).forEach(m => queueMedal(m, delay));
@@ -1100,16 +1104,21 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   root.addEventListener('pointercancel', e => endBatDrag(e, false));
 
   // ── 그리기 ──
-  // 제구 게이지: 투수 오른쪽에 ')' 모양 반원. 아래 끝(0) ↔ 위 끝(1)을 공이 오가고, 가장 오른쪽(0.5)이 한가운데.
-  // 초록 = 제구 성공 구간(sweet), 밝은 초록 = 완벽. 던진 뒤 잠깐(GAUGE_HOLD_MS) 멈춘 자리를 보여 주고 결과 색으로 반짝인다
+  // 제구 게이지: 투수 오른쪽에 큰 야구공. 공의 오른쪽 실밥(')' 모양 호)을 따라 손가락 자리가 아래 끝(0) ↔ 위 끝(1)을 오가고, 가운데(0.5)가 한가운데.
+  // 실밥 색: 초록 = 제구 성공 구간(sweet), 밝은 민트 = 완벽, 노랑 = 아깝다, 빨강 = 실패. 던진 뒤 잠깐(GAUGE_HOLD_MS) 멈춘 자리를 결과 색으로 반짝인다
   let lastGauge = null;
-  const GAUGE_HOLD_MS = 550, ARC = 1.15;           // ARC: 위아래로 벌어진 각도(라디안, 가운데에서 한쪽으로)
+  const GAUGE_HOLD_MS = 550, ARC = 0.75, SEAM_N = 14;   // ARC: 실밥 호가 위아래로 벌어진 각도(라디안), SEAM_N: 실밥 수
   // 게이지 자리: 투수 몸 오른쪽(화면 밖으로 나가지 않게). 구종 칩도 여기 뜬다
+  // R: 예전 반원 크기(구종 칩 자리 기준). 공 반지름 rb, 실밥 호는 중심 (sx, cy)·반지름 rs — 호의 가장 오른쪽이 예전 반원 오른쪽 끝(cx + R)
   function gaugeSpot() {
     const pa = pitcherAnchor(V, matchup(match).pitcher.throws);
-    const R = Math.min(H * 0.12, W * 0.2), lw = Math.max(10, R * 0.17);
-    return { R, lw, cx: Math.min(pa.x + pa.scale * 40, W - R - lw - 8), cy: Math.min(pa.y - pa.scale * 120, H - R * Math.sin(ARC) - lw - 8) };
+    const R = Math.min(H * 0.12, W * 0.2), lw = Math.max(10, R * 0.17), rb = R * 0.92, rs = rb * 1.44;
+    const cx = Math.min(pa.x + pa.scale * 40, W - R - rb * 0.6 - 8), cy = Math.min(pa.y - pa.scale * 120, H - rb - 10);
+    const bx = cx + R - rb * 0.4;
+    return { R, lw, cx, cy, rb, rs, bx, sx: bx - rb * 1.04 };
   }
+  const seamZone = (p, sw) => { const e = Math.abs(p - 0.5) * 2; return e <= sw * 0.35 ? 3 : e <= sw ? 2 : e <= sw * 2 ? 1 : 0; };
+  const SEAM_COL = ['#c8242a', '#f1c40f', '#2ecc71', '#a8ffcb'];
   function drawGauge(now) {
     let pos, sw, alpha = 1, q = -1;
     if (mode === 'gauge') {
@@ -1118,36 +1127,53 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     } else if (lastGauge && now - lastGauge.at < GAUGE_HOLD_MS && V.kind === 'pitcher') {
       ({ pos, sweet: sw, q } = lastGauge); alpha = 1 - Math.max(0, (now - lastGauge.at) / GAUGE_HOLD_MS - 0.5) * 2;
     } else return;
-    const { cx, cy, R, lw } = gaugeSpot();
+    const { cy, lw, rb, rs, bx, sx } = gaugeSpot();
     const ang = p => ARC - 2 * ARC * p;              // p = 0 아래, 1 위 (화면은 y가 아래로 커진다)
-    const arc = (p0, p1, color, w) => { ctx.strokeStyle = color; ctx.lineWidth = w; ctx.beginPath(); ctx.arc(cx, cy, R, ang(p1), ang(p0)); ctx.stroke(); };
-    ctx.save(); ctx.globalAlpha = alpha; ctx.lineCap = 'round';
-    arc(0, 1, 'rgba(255,255,255,.28)', lw + 5);     // 테두리
-    arc(0, 1, 'rgba(8,16,30,.9)', lw + 2);           // 바탕(어두운 유리)
-    arc(0, 1, 'rgba(255,99,88,.3)', lw - 2);         // 바깥: 제구 실패
-    ctx.lineCap = 'butt';
-    arc(0.5 - sw, 0.5 + sw, 'rgba(241,196,15,.75)', lw);   // 아깝다
-    arc(0.5 - sw / 2, 0.5 + sw / 2, '#27ae60', lw);  // 성공
-    arc(0.5 - sw * 0.175, 0.5 + sw * 0.175, '#a8ffcb', lw);   // 완벽
-    ctx.lineCap = 'round';
-    const at = p => [cx + Math.cos(ang(p)) * R, cy + Math.sin(ang(p)) * R];
-    const [tx, ty] = at(0.5);                        // 한가운데 눈금
-    ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(tx + lw * 0.75, ty); ctx.lineTo(tx + lw * 1.25, ty); ctx.stroke();
-    if (q >= 0) {                                    // 던진 뒤: 결과 색으로 반짝
-      const t = (now - lastGauge.at) / GAUGE_HOLD_MS, [bx, by] = at(pos);
-      ctx.strokeStyle = ['#ff6b5e', '#2ecc71', '#ffd75e'][q]; ctx.lineWidth = 3; ctx.globalAlpha = alpha * (1 - t);
-      ctx.beginPath(); ctx.arc(bx, by, lw * (0.8 + t * 1.8), 0, Math.PI * 2); ctx.stroke();
-      ctx.globalAlpha = alpha;
-    } else {                                         // 움직이는 공 뒤 잔상
-      for (let k = 4; k >= 1; k--) {
-        const [x, y] = at(gaugePos(now - gaugeStart - k * 22, period));
-        ctx.fillStyle = `rgba(255,255,255,${0.16 - k * 0.03})`; ctx.beginPath(); ctx.arc(x, y, lw * 0.5, 0, Math.PI * 2); ctx.fill();
-      }
+    const at = (p, r = rs) => [sx + Math.cos(ang(p)) * r, cy + Math.sin(ang(p)) * r];
+    ctx.save(); ctx.globalAlpha = alpha;
+    // 공: 가죽 바탕 + 그림자
+    ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = 16; ctx.shadowOffsetY = 6;
+    const lg = ctx.createRadialGradient(bx - rb * 0.3, cy - rb * 0.35, rb * 0.1, bx, cy, rb);
+    lg.addColorStop(0, 'rgba(255,255,255,.96)'); lg.addColorStop(0.6, 'rgba(226,219,205,.93)'); lg.addColorStop(1, 'rgba(168,158,142,.93)');
+    ctx.fillStyle = lg; ctx.beginPath(); ctx.arc(bx, cy, rb, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+    // 반대쪽 실밥(장식)과 게이지 실밥 선
+    ctx.lineCap = 'round'; ctx.lineWidth = 1.6;
+    ctx.strokeStyle = 'rgba(200,36,42,.45)'; ctx.setLineDash([4, 5]);
+    ctx.beginPath(); ctx.arc(bx + rb * 1.04, cy, rs, Math.PI - ARC * 0.75, Math.PI + ARC * 0.75); ctx.stroke(); ctx.setLineDash([]);
+    ctx.strokeStyle = 'rgba(200,36,42,.4)'; ctx.beginPath(); ctx.arc(sx, cy, rs, ang(1), ang(0)); ctx.stroke();
+    // 성공 구간은 실밥 밑에 은은한 빛
+    const glow = (p0, p1, color, w) => { ctx.strokeStyle = color; ctx.lineWidth = w; ctx.beginPath(); ctx.arc(sx, cy, rs, ang(p1), ang(p0)); ctx.stroke(); };
+    glow(0.5 - sw / 2, 0.5 + sw / 2, 'rgba(46,204,113,.28)', lw * 1.5);
+    glow(0.5 - sw * 0.175, 0.5 + sw * 0.175, 'rgba(168,255,203,.45)', lw * 1.5);
+    // 실밥: V자 바늘땀. 구간 색으로
+    const st = lw * 0.62;
+    for (let k = 0; k < SEAM_N; k++) {
+      const p = (k + 0.5) / SEAM_N, t = ang(p), [x, y] = at(p), nx = Math.cos(t), ny = Math.sin(t), tx = -ny, ty = nx, z = seamZone(p, sw);
+      ctx.strokeStyle = SEAM_COL[z]; ctx.lineWidth = 3;
+      if (z >= 2) { ctx.shadowColor = '#2ecc71'; ctx.shadowBlur = 6; }
+      ctx.beginPath(); ctx.moveTo(x - nx * st + tx * 3, y - ny * st + ty * 3); ctx.lineTo(x - tx * 2, y - ty * 2); ctx.lineTo(x + nx * st + tx * 3, y + ny * st + ty * 3); ctx.stroke();
+      ctx.shadowBlur = 0;
     }
-    const [bx, by] = at(pos);
-    ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 6;
-    drawBall(ctx, bx, by, lw * 0.62, q >= 0 ? 0 : now / 40);
+    const [mx, my] = at(0.5, rs + lw * 1.1);          // 한가운데 눈금(공 바깥)
+    ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(mx + lw * 0.6, my); ctx.stroke();
+    // 손가락 자리: 지금 구간 색으로 빛나는 점. 움직일 때는 잔상
+    const tone = SEAM_COL[seamZone(pos, sw)];
+    if (q < 0) for (let k = 4; k >= 1; k--) {
+      const [x, y] = at(gaugePos(now - gaugeStart - k * 22, period));
+      ctx.fillStyle = `rgba(255,255,255,${0.2 - k * 0.04})`; ctx.beginPath(); ctx.arc(x, y, lw * 0.55, 0, Math.PI * 2); ctx.fill();
+    }
+    const [fx, fy] = at(pos), fr = lw * 1.05;
+    const fg = ctx.createRadialGradient(fx, fy, 0, fx, fy, fr);
+    fg.addColorStop(0, 'rgba(255,255,255,.95)'); fg.addColorStop(0.5, tone); fg.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.shadowColor = tone; ctx.shadowBlur = 14; ctx.fillStyle = fg;
+    ctx.beginPath(); ctx.arc(fx, fy, fr, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
+    if (q >= 0) {                                    // 던진 뒤: 결과 색 고리가 퍼진다
+      const t = (now - lastGauge.at) / GAUGE_HOLD_MS;
+      ctx.strokeStyle = ['#ff6b5e', '#2ecc71', '#ffd75e'][q]; ctx.lineWidth = 3; ctx.globalAlpha = alpha * (1 - t);
+      ctx.beginPath(); ctx.arc(fx, fy, lw * (0.9 + t * 2), 0, Math.PI * 2); ctx.stroke();
+    }
     ctx.restore();
   }
   function drawHUD() {
@@ -1495,7 +1521,11 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     setTimeout(() => el.remove(), ms);
     return el;
   };
-  const nameOf = id => { for (const s of ['home', 'away']) { const t = match.teams[s], p = t.batters.find(q => q.id === id) || t.pitchers.find(q => q.id === id); if (p) return p.name; } return ''; };
+  const playerOf = id => {
+    for (const s of ['home', 'away']) { const t = match.teams[s], b = t.batters.find(q => q.id === id), p = b || t.pitchers.find(q => q.id === id); if (p) return { p, team: t, kind: b ? 'b' : 'p' }; }
+    return null;
+  };
+  const nameOf = id => { const x = playerOf(id); return x ? x.p.name : ''; };
 
   // 1) 클러치: 화면 테두리가 숨 쉬듯 빛나고 점수판 옆에 '찬스'(우리 공격 · 금색) / '위기'(우리 수비 · 빨강) 딱지
   let clutchNow = false;
@@ -1522,17 +1552,20 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
   }
 
   // 3) 기록 메달: 금메달이 빙글 돌며 떨어져 박히고 아래에 무슨 기록인지. 여러 개면 하나씩 차례로
-  const MEDAL_MS = 2100, REC_KEY = 'baseball.records.v1';
+  const MEDAL_MS = 2600, REC_KEY = 'baseball.records.v1';
   let medalFree = 0, records = {};
   try { records = JSON.parse(localStorage.getItem(REC_KEY) || '{}') || {}; } catch (e) { /* 저장소 막힘 */ }
   const saveRecords = () => { try { localStorage.setItem(REC_KEY, JSON.stringify(records)); } catch (e) { /* 무시 */ } };
   function queueMedal(m, delay = 0) {
     const at = Math.max(performance.now() + delay, medalFree);
-    medalFree = at + MEDAL_MS - 200;
+    medalFree = at + MEDAL_MS - 250;
     later(() => {
-      const big = String(m.big), unit = m.unit ? `<small>${m.unit}</small>` : '';
-      fxAdd(`<div class="medal${m.rec ? ' rec' : ''}"><div class="m-coin"><b class="${big.length > 2 ? 'sm' : ''}">${esc(big)}${unit}</b></div>
-        <div class="m-cap">${m.rec ? '<em>NEW RECORD</em>' : ''}${esc(m.label)}</div></div>`, MEDAL_MS);
+      // 중계 하단 자막: 왼쪽에서 팀 색 띠가 깔리고 얼굴 · 영문 머리말 · 제목 · 한 줄 설명, 오른쪽에 숫자 타일
+      const who = playerOf(m.who), team = who ? who.team : match.teams[mySide], big = String(m.big), unit = m.unit || '';
+      const sub = [who && who.p.name, m.sub].filter(Boolean).map(esc).join(' · ');
+      fxAdd(`<div class="lt3${m.rec ? ' rec' : ''}" style="--c:${team.colors.main}"><i class="lt-gold"></i><div class="lt-band"></div>
+        ${who ? face(who.p, who.kind, 'lt-face') : ''}<div class="lt-tx${who ? '' : ' nf'}"><div class="k">${esc(m.en || 'HIGHLIGHT')}</div><div class="t">${esc(m.label)}</div>${sub ? `<div class="s">${sub}</div>` : ''}</div>
+        <div class="lt-num"><b class="${big.length + unit.length > 3 ? 'sm' : ''}">${esc(big)}${unit ? `<small>${esc(unit)}</small>` : ''}</b></div></div>`, MEDAL_MS);
       playSound('catch', { gain: 0.5 }); vibrate(30);
     }, at - performance.now());
   }
@@ -1558,6 +1591,7 @@ export function showGame(root, { userTeam, cpuTeam, lineup, innings, cpuStarterI
     const stars = '★'.repeat(what[1]) + '☆'.repeat(5 - what[1]);
     fxAdd(`<div class="gplay${side === mySide ? ' me' : ''}" style="--c:${t.colors.main}">${p ? face(p, h.who === 'P' ? 'p' : 'b') : ''}
       <div><small>${FIELD_POS[h.who] || ''} · ${what[0]}</small><b>${esc(p ? p.name : t.short)}</b><em>${stars}</em></div></div>`, 2300);
+    medalFree = Math.max(medalFree, performance.now() + 2200);      // 기록 자막은 호수비 카드가 내려간 뒤에
   }
 
   // 5) PERFECT: 타이밍이 완벽하면 맞는 순간 화면을 잠깐 멈추고(히트스톱), 큰 고리가 공으로 좁혀지며 번쩍 + PERFECT

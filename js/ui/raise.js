@@ -312,6 +312,12 @@ export function showRaise(root, { storage, loadGame, onBack }) {
     root.innerHTML = `<div class="screen menu raise ${cls}">${html}${saveOk ? '' : '<p class="note center">이 브라우저에서는 저장이 안 돼요. 창을 닫으면 진행이 사라져요.</p>'}</div>`;
     const sc = root.querySelector('.screen'); if (sc) sc.scrollTop = 0;
   };
+  // 같은 화면을 다시 그릴 때(쇼핑에서 사기, 재테크에서 사고팔기)는 보던 자리를 그대로 둔다
+  const keepScroll = draw => {
+    const sc = root.querySelector('.screen'), y = sc ? sc.scrollTop : 0;
+    draw();
+    const nx = root.querySelector('.screen'); if (nx) nx.scrollTop = y;
+  };
   const act = (name, fn) => root.querySelectorAll(`[data-act=${name}]`).forEach(b => { b.onclick = () => fn(b); });
   // 순위표 탭: 고른 기록은 기억해 두고 표만 바꾼다
   const boardKey = { bat: 'avg', pitch: 'era' };
@@ -615,7 +621,9 @@ export function showRaise(root, { storage, loadGame, onBack }) {
     const mod = await loadGame();
     if (!mod) return hubView(i);
     const set = pre.set;
-    mod.showGame(root, { ...set, innings: 9, startMatch: pre.match, stats: s.kind === 'bat' && s.stats.bat ? { bat: { [s.playerId]: s.stats.bat } } : null },
+    // 시즌 이정표(시즌 20홈런·100탈삼진 등): 정규시즌에만. 오늘 전까지의 시즌 기록을 넘긴다
+    const season = s.season.phase === 'regular' ? { id: s.playerId, bat: s.stats.bat || null, pit: s.stats.pit || null, year: s.year, game: s.season.round + 1 } : null;
+    mod.showGame(root, { ...set, innings: 9, startMatch: pre.match, season, stats: s.kind === 'bat' && s.stats.bat ? { bat: { [s.playerId]: s.stats.bat } } : null },
       result => (result ? finishDay(i, result) : hubView(i)));      // 중간에 나가면 그 경기는 없던 것
   }
 
@@ -761,7 +769,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
       if (!canBuy(data.slots[i], x.id).ok) return;
       if (x.price >= 50000 && !confirm(`${x.name}을(를) ${won(x.price)}에 살까요?`)) return;
       data = { ...data, slots: data.slots.map((q, j) => (j === i ? buyItem(q, x.id) : q)) }; persist();
-      shopView(i, `${x.icon} ${x.name}${x.type === 'season' ? ' 계약했어요' : x.id === 'donate' ? ' 했어요' : ' 샀어요'}`);
+      keepScroll(() => shopView(i, `${x.icon} ${x.name}${x.type === 'season' ? ' 계약했어요' : x.id === 'donate' ? ' 했어요' : ' 샀어요'}`));
     });
   }
 
@@ -791,9 +799,9 @@ export function showRaise(root, { storage, loadGame, onBack }) {
           ${sel === p.id ? trade(p, h) : ''}</section>`;
       }).join('')}`);
     act('back', () => hubView(i));
-    act('prod', b => investView(i, b.dataset.id === sel ? null : b.dataset.id));
+    act('prod', b => keepScroll(() => investView(i, b.dataset.id === sel ? null : b.dataset.id)));
     const name = id => PRODUCTS.find(p => p.id === id).name;
-    const commit = (next, m) => { data = { ...data, slots: data.slots.map((q, j) => (j === i ? next : q)) }; persist(); investView(i, sel, m); };
+    const commit = (next, m) => { data = { ...data, slots: data.slots.map((q, j) => (j === i ? next : q)) }; persist(); keepScroll(() => investView(i, sel, m)); };
     act('buy', b => {
       const a = b.dataset.a === 'all' ? cash : +b.dataset.a;
       commit(buy(data.slots[i], sel, a), `${name(sel)}에 ${won(Math.min(a, cash))} 넣었어요`);
