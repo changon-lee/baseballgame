@@ -7,7 +7,7 @@ import { battingSide } from '../js/core/rules.js';
 import { defaultLineup } from '../js/core/team.js';
 import { getTeam } from '../js/data/rosters.js';
 import { createRng } from '../js/core/rng.js';
-import { raiseStep, raiseSteal, raisePull, decisions, gameLine, PULL_HARD, PULL_MORE_RUNS } from '../js/core/raisematch.js';
+import { raiseStep, raiseSteal, raisePull, decisions, gameLine, PULL_HARD, PULL_MORE_RUNS, MANAGER_INNING } from '../js/core/raisematch.js';
 
 const S = getTeam('samsung'), B = 'samsung-b03', SP = 'samsung-p01', CL = 'samsung-p05';
 const mk = (seed, starterId = S.pitchers[0].id) => {
@@ -24,7 +24,7 @@ function runGame(seed, raise, starterId, onMe = () => {}, coach = () => true) {
   for (let i = 0; i < 300; i++) {
     r = raiseStep(m, raise, rng);
     if (r.phase === 'steal') { m = raiseSteal(r.match, raise.playerId, false, rng).match; continue; }   // 도루는 안 한다
-    if (r.phase === 'pull') { m = raisePull(r.match, coach(r), rng); continue; }
+    if (r.phase === 'pull') { m = raisePull(r.match, coach(r), rng, r.why); continue; }
     if (r.phase === 'done') return { r, me, m: r.match };
     me++; onMe(r.match);
     m = playMyPA(r.match, rng);
@@ -77,7 +77,7 @@ test('starter: coach comes out at fatigue 0.6; going off means I never return', 
     const tops = m.log.map((e, i) => (e.half === 'top' ? i : -1)).filter(i => i >= 0);
     const myTops = tops.slice(0, mine.length);
     assert.deepEqual(mine, myTops, `seed ${seed}`);
-    if (r.note === 'pulled') pulled++;
+    if (r.note === 'pulled' || r.note === 'changed') pulled++;
   }
   assert.ok(pulled > 0, 'some starts end with the starter pulled');
 });
@@ -101,15 +101,40 @@ test('staying in: asked only once, then pulled without asking at PULL_HARD or af
   const raise = { kind: 'pitch', role: 'SP', playerId: SP, cond: 0 };
   for (let seed = 1; seed <= 12; seed++) {
     let asks = 0;
-    const { r, m } = runGame(seed, raise, SP, () => {}, () => (asks++, false));
+    const { r, m } = runGame(seed, raise, SP, () => {}, q => (q.why !== 'seventh' && asks++, false));   // 7회 감독 질문은 따로 센다
     assert.ok(asks <= 1, `seed ${seed}: asked ${asks} times`);
-    if (r.note !== 'pulled') continue;
+    if (r.note !== 'pulled' && r.note !== 'changed') continue;
     // 내려간 순간: 많이 지쳤거나, 더 던지기로 한 뒤 2점 이상 더 줬다
     const last = m.log.map((e, i) => (e.pitcherId === SP ? i : -1)).filter(i => i >= 0).pop();
     const f = fatigue(m.log.slice(0, last + 1).filter(e => e.pitcherId === SP).reduce((a, e) => a + e.pitches.length, 0), S.pitchers.find(p => p.id === SP).stamina);
     assert.ok(asks === 1, `seed ${seed}: pulled only after the coach asked`);
     assert.ok(f >= PULL_HARD - 0.05 || m.log.some(e => e.pitcherId === SP && e.runs), `seed ${seed}: f=${f.toFixed(2)}`);
   }
+});
+
+test('manager asks once at the start of the 7th; staying keeps me in, going off is just a change', () => {
+  const { m: m0, rng } = mk(4, SP);
+  const raise = { kind: 'pitch', role: 'SP', playerId: SP, cond: 0 };
+  const m = { ...m0, game: { ...m0.game, inning: MANAGER_INNING, half: 'top', outs: 0 } };
+  const ask = raiseStep(m, raise, rng);
+  assert.equal(ask.phase, 'pull'); assert.equal(ask.why, 'seventh');
+  const stay = raiseStep(raisePull(ask.match, false, rng, 'seventh'), raise, rng);
+  assert.equal(stay.phase, 'me'); assert.equal(stay.match.pitcher.home, SP);
+  assert.ok(!stay.match.stay, 'the coach can still come out later');
+  const off = raiseStep(raisePull(ask.match, true, rng, 'seventh'), raise, rng);
+  assert.equal(off.phase, 'done'); assert.equal(off.note, 'changed');
+  // 6회·8회 시작에는 감독이 묻지 않는다
+  for (const inning of [6, 8]) assert.equal(raiseStep({ ...m, game: { ...m.game, inning } }, raise, rng).phase, 'me');
+});
+
+test('pulled after giving up runs says pulled; tired with few runs says changed', () => {
+  const { m: m0, rng } = mk(3, SP);
+  const raise = { kind: 'pitch', role: 'SP', playerId: SP, cond: 0 };
+  const run = (runs, inning) => ({ batterId: 'kt-b01', pitcherId: SP, event: 'SINGLE', runs, outs: 0, inning, half: 'top', bases: [false, false, false], score: { home: 0, away: 0 }, pitches: [] });
+  const m = { ...m0, game: { ...m0.game, inning: 4, half: 'top' } };
+  assert.equal(raiseStep(raisePull({ ...m, log: [run(1, 2)] }, true, rng, 'tired'), raise, rng).note, 'changed');
+  assert.equal(raiseStep(raisePull({ ...m, log: [run(2, 2), run(2, 3)] }, true, rng, 'tired'), raise, rng).note, 'pulled');   // 그 경기 4실점
+  assert.equal(raiseStep(raisePull({ ...m, log: [run(1, 3)] }, true, rng, 'blown'), raise, rng).note, 'pulled');
 });
 
 test('my starter is never swapped by the computer between innings', () => {

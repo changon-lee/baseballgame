@@ -15,6 +15,7 @@ import { tickMarket, netWorth } from './invest.js';
 import { LIFE, gearBonus, overBonus, trainMult, loadMult, dailyRecover, restBonus, fansOf, addFans, rollInjury, rollEvent, resolveEvent, dayRng } from './raiselife.js';
 import { CUSTOM_ID, validCustom, withCustom } from './raisecustom.js';
 import { PAY } from './raisepay.js';
+import { PITCH_TYPES } from './pitch.js';
 
 const ME = USER_TEAM_ID;
 const KEY = 'baseball.raise.v1';
@@ -177,8 +178,14 @@ function withGear(p, slot) {
   }
   return q;
 }
+// 내 투수가 연습으로 익힌 구종을 구종 목록 끝에 붙인다(경기에서 고를 수 있고, 자동 진행에서도 던진다)
+const withLearned = (p, slot) => {
+  const add = (slot.learned || []).filter(k => PITCH_TYPES[k] && !p.pitches.includes(k));
+  return add.length ? { ...p, pitches: [...p.pitches, ...add] } : p;
+};
 export const raiseTeam = (slot, { benchMe = false } = {}) => {
   let t = applyGrowth(withSpeed(samsung(slot.custom)), slot.growth);
+  if (slot.learned && slot.learned.length) t = { ...t, pitchers: t.pitchers.map(p => (p.id === slot.playerId ? withLearned(p, slot) : p)) };
   if (slot.owned) t = { ...t, batters: t.batters.map(b => withGear(b, slot)), pitchers: t.pitchers.map(p => withGear(p, slot)) };
   return benchMe ? { ...t, pitchers: t.pitchers.filter(p => p.id !== slot.playerId), batters: t.batters.filter(b => b.id !== slot.playerId) } : t;
 };
@@ -205,7 +212,19 @@ export function xpPerTraining(stat, value) {
   return Math.max(RAISE.xpMin, RAISE.xpBase - (v - 60) * RAISE.xpSlope);
 }
 
-const drillOf = id => DRILLS.find(d => d.id === id);
+// ── 구종 배우기(투수) ──
+// 아직 없는 구종을 연습장에서 그 구종만 5구 던져 익힌다. 연습 점수 비율(기준 1, 잘하면 1.5, 못하면 0.3)을 쌓아 LEARN.need가 되면 익힌다
+// → 기준만큼 던지면 3번, 아주 잘 던지면 2번. 구종은 LEARN.max개까지
+export const LEARN = { need: 3, max: 6 };
+export const learnDrill = k => (PITCH_TYPES[k] ? { id: `learn:${k}`, kind: 'pitch', name: `${PITCH_TYPES[k].name} 배우기`, stat: 'control', learn: k,
+  drill: false, light: false, quick: false, cost: RAISE.trainCost } : null);
+export const learnable = slot => {
+  if (slot.kind !== 'pitch') return [];
+  const p = slotPlayer(slot);
+  return p.pitches.length >= LEARN.max ? [] : Object.keys(PITCH_TYPES).filter(k => !p.pitches.includes(k));
+};
+export const learnLeft = (slot, k) => Math.max(0, LEARN.need - ((slot.pitchLearn && slot.pitchLearn[k]) || 0));
+export const drillOf = id => DRILLS.find(d => d.id === id) || (/^learn:/.test(String(id)) ? learnDrill(String(id).slice(6)) : null);
 
 export function canChoose(slot, id) {
   if (slot.chosen) return { ok: false, reason: 'done' };
@@ -214,6 +233,7 @@ export function canChoose(slot, id) {
   if (slot.injury) return { ok: false, reason: 'injured' };
   const d = drillOf(id);
   if (!d || d.kind !== slot.kind) return { ok: false, reason: 'kind' };
+  if (d.learn && !learnable(slot).includes(d.learn)) return { ok: false, reason: 'known' };
   if (slot.fatigue + d.cost > 100) return { ok: false, reason: 'tired' };
   return { ok: true };
 }
@@ -231,6 +251,14 @@ export function choose(slot, id, pts = null) {
     return { slot: { ...slot, ...extra, chosen: true, resting: true, fatigue: clamp(slot.fatigue + rest, 0, 100), condition: cond }, ups: [], trait: null };
   }
   const d = drillOf(id), now = slotPlayer(slot)[d.stat];
+  if (d.learn) {                                   // 구종 배우기: 능력치 대신 그 구종 숙련도가 쌓이고, 다 차면 익힌다
+    const k = pts == null ? 1 : clamp(pts / RAISE.practiceRef.pitch, RAISE.practiceMin, RAISE.practiceMax);
+    const got = ((slot.pitchLearn && slot.pitchLearn[d.learn]) || 0) + k, done = got >= LEARN.need - 1e-9;
+    const pitchLearn = { ...(slot.pitchLearn || {}) };
+    if (done) delete pitchLearn[d.learn]; else pitchLearn[d.learn] = Math.round(got * 100) / 100;
+    const learned = done ? [...(slot.learned || []), d.learn] : slot.learned;
+    return { slot: { ...slot, pitchLearn, ...(learned ? { learned } : {}), chosen: true, fatigue: clamp(slot.fatigue + d.cost, 0, 100) }, ups: [], trait: null, learned: done ? d.learn : null, gain: k };
+  }
   let growth = slot.growth, ups = [];
   if (now < CAP[d.stat]) {
     const k = pts == null ? 1 : clamp(pts / RAISE.practiceRef[slot.kind], RAISE.practiceMin, RAISE.practiceMax);

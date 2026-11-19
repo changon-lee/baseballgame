@@ -5,7 +5,8 @@ import { icon } from './icons.js';
 
 const asset = path => new URL('../../assets/' + path, import.meta.url).href;
 
-// info: { season: 시즌모드 한 줄, seasonOn: 진행 중인 시즌이 있다, raise: 육성모드 한 줄 }, on: { season, raise, versus }
+// info: { season: 시즌모드 한 줄, seasonOn: 진행 중인 시즌이 있다, raise: 육성모드 한 줄, backup: 백업 한 줄, backupWarn: 백업할 때가 됐다 },
+// on: { season, raise, versus, backup }
 export function showTitle(root, { info = {}, on }) {
   root.innerHTML = `
   <div class="screen title">
@@ -34,6 +35,7 @@ export function showTitle(root, { info = {}, on }) {
           <span><b>대결모드</b><small>폰 두 대로 1:1 대결</small></span>${icon('chev', 'go')}
         </button>
       </div>
+      ${on.backup ? `<button class="t-backup${info.backupWarn ? ' warn' : ''}" data-mode="backup"><span>💾 기록 백업</span><small>${info.backup || ''}</small></button>` : ''}
     </main>
   </div>`;
   root.querySelectorAll('[data-mode]').forEach(b => { b.onclick = () => on[b.dataset.mode](); });

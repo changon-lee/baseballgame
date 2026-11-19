@@ -11,6 +11,7 @@ import { showHub, showResult, showPracticeResult } from './ui/hub.js';
 import { showTitle } from './ui/title.js';
 import { standings } from './core/season.js';
 import { loadRaise } from './core/raise.js';
+import { backupAge, hasProgress } from './core/backup.js';
 import './ui/art/sprites.js';   // 경기 그림을 홈 화면에서 미리 불러 둔다
 import './ui/art/stadium.js';
 
@@ -70,9 +71,13 @@ function title() {
     season = `${s.year} 시즌 ${s.phase === 'regular' ? '정규시즌' : s.phase === 'post' ? '포스트시즌' : '종료'} · ${me.w}승 ${me.l}패 · ${me.rank}위`;
   }
   const n = loadRaise(storage).slots.filter(Boolean).length;
+  // 기록 백업: 지킬 기록이 있는데 백업한 적이 없거나 7일이 지났으면 단추가 눈에 띄게
+  const age = storage ? backupAge(storage) : null, warn = !!storage && hasProgress(storage) && (age == null || age >= 7);
+  const backupLine = age == null ? (warn ? '백업한 적이 없어요' : '파일로 저장 · 되돌리기') : age === 0 ? '오늘 백업했어요' : `마지막 백업 ${age}일 전`;
   showTitle(app, {
-    info: { season, seasonOn: !!s && s.phase !== 'done', raise: n ? `키우는 선수 ${n}명` : null },
-    on: { season: () => { hubCtx.tab = 'home'; hub(); scrollTop(); }, raise: () => raiseMenu(), versus: () => versusMenu() },
+    info: { season, seasonOn: !!s && s.phase !== 'done', raise: n ? `키우는 선수 ${n}명` : null, backup: backupLine, backupWarn: warn },
+    on: { season: () => { hubCtx.tab = 'home'; hub(); scrollTop(); }, raise: () => raiseMenu(), versus: () => versusMenu(),
+      ...(storage ? { backup: async () => { const { showBackup } = await import('./ui/backup.js'); showBackup(app.querySelector('.screen') || app, storage, title); } } : {}) },
   });
 }
 

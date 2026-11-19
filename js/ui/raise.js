@@ -6,7 +6,8 @@ import { avg, era, ip } from '../core/growth.js';
 import { createRng } from '../core/rng.js';
 import { TRAITS } from '../core/perks.js';
 import { defaultLineup } from '../core/team.js';
-import { RAISE, DRILLS, newSlot, loadRaise, saveRaise, slotPlayer, raiseTeam, canChoose, choose, dayInfo, applyDay, seasonOver, nextSeason, seasonGains, prelude , postResult, rings , withSpeed, instant, pickEvent, STAT_CAP } from '../core/raise.js';
+import { RAISE, DRILLS, newSlot, loadRaise, saveRaise, slotPlayer, raiseTeam, canChoose, choose, dayInfo, applyDay, seasonOver, nextSeason, seasonGains, prelude , postResult, rings , withSpeed, instant, pickEvent, STAT_CAP, drillOf, learnable, learnLeft, LEARN } from '../core/raise.js';
+import { PITCH_TYPES } from '../core/pitch.js';
 import { LIFE, SHOP, SHOP_GROUPS, canBuy, buyItem, has, fansOf, fansShown, fansMult, adsOf, eventOf, canPick, restBonus } from '../core/raiselife.js';
 import { AWARDS } from '../core/raiseawards.js';
 import { CUSTOM, CUSTOM_ID, NAME_MAX, FACES, FACE_GROUPS, POSITIONS, POS_KO, defaultCustom, validCustom, groupOf, pointsOf, usedPoints, customPlayer } from '../core/raisecustom.js';
@@ -23,7 +24,7 @@ const STAT_KO = { power: '파워', contact: '컨택', eye: '선구안', speed: '
 const STATS = { bat: ['power', 'contact', 'eye', 'speed'], pitch: ['velo', 'control', 'stamina'] };
 const COND = [['▼▼', '최악', 'c-2'], ['▼', '나쁨', 'c-1'], ['–', '보통', 'c0'], ['▲', '좋음', 'c1'], ['▲▲', '최상', 'c2']];
 const ROLE = { SP: '선발', CL: '마무리' };
-const NOTE = { pinch: '대타로 교체됐어요', pulled: '강판됐어요', noshow: '오늘은 등판이 없었어요', bench: '오늘은 벤치에서 경기를 지켜봤어요' };
+const NOTE = { pinch: '대타로 교체됐어요', pulled: '강판됐어요', changed: '투수 교체로 마운드를 내려왔어요', noshow: '오늘은 등판이 없었어요', bench: '오늘은 벤치에서 경기를 지켜봤어요' };
 // 후보 선수: 감독 신뢰도 막대
 const trustHtml = s => (s.kind === 'bat' && s.bench ? `<div class="rz-trust"><span>후보 · 감독 신뢰도</span><i><u style="width:${Math.min(100, ((s.trust || 0) / RAISE.bench.need) * 100)}%"></u></i><em>${Math.round(s.trust || 0)}/${RAISE.bench.need}</em></div>
   <p class="hint">잘 치면 신뢰도가 올라요. 다 차면 주전 지명타자로 매일 나가요.</p>` : '');
@@ -483,7 +484,19 @@ export function showRaise(root, { storage, loadGame, onBack }) {
           return `<button class="ns-drill ${got ? 'got' : ''}" data-act="choose" data-id="${x.id}" ${c.ok ? '' : 'disabled'}><span>${x.name}<small>${got ? `${tr.name} 보유` : `→ ${tr.name}`} · <em class="${c.ok ? '' : 'tired'}">${c.ok ? `피로 +${x.cost}` : '너무 지쳤어요'}</em></small></span>
             <span class="d">${Array.from({ length: RAISE.drillNeed }, (_, k) => `<i class="${got || k < n ? 'f' : ''}"></i>`).join('')}</span></button>`;
         };
+        // 투수: 구종 배우기(그 구종만 던지는 연습장). 숙련 막대가 다 차면 익혀서 경기에서 던질 수 있다
+        const learn = s.kind !== 'pitch' ? '' : (() => {
+          const ks = learnable(s), known = p.pitches.map(k => PITCH_TYPES[k].name).join(' · ');
+          const lrow = k => {
+            const x = drillOf(`learn:${k}`), c = canChoose(s, x.id), got = LEARN.need - learnLeft(s, k);
+            return `<button class="ns-drill learn" data-act="choose" data-id="${x.id}" ${c.ok ? '' : 'disabled'}><span>${x.name}<small>숙련 ${got.toFixed(1)}/${LEARN.need} · <em class="${c.ok ? '' : 'tired'}">${c.ok ? `피로 +${x.cost}` : '너무 지쳤어요'}</em></small></span>
+              <span class="lbar"><u style="width:${Math.round(got / LEARN.need * 100)}%"></u></span></button>`;
+          };
+          return `<div class="ns-learn"><div class="nl-h">구종 배우기<small>지금 구종 · ${esc(known)}</small></div>
+            ${ks.length ? ks.map(lrow).join('') : `<p class="hint">구종을 ${LEARN.max}개까지 모두 익혔어요</p>`}</div>`;
+        })();
         return `<div class="ns-tiles">${drills.filter(x => !x.drill).map(tile).join('')}</div>
+      ${learn}
       <div class="ns-drills">${drills.filter(x => x.drill).map(row).join('')}
         <button class="ns-drill rest" data-act="choose" data-id="rest"><span>휴식<small>컨디션이 보통 쪽으로 · 오늘 경기는 결장</small></span><b>피로 ${RAISE.rest}</b></button></div>
       <p class="hint">훈련을 고르면 연습장에서 직접 ${s.kind === 'bat' ? '쳐요' : '던져요'}. 잘할수록 많이 오르고, 중간에 나가면 훈련은 없던 일이 돼요. 훈련한 날도 경기에는 나가요. 휴식한 날만 쉬어요.</p>`;
@@ -537,7 +550,7 @@ export function showRaise(root, { storage, loadGame, onBack }) {
     });
     act('choose', b => {
       const id = b.dataset.id;
-      const x = DRILLS.find(q => q.id === id);
+      const x = drillOf(id);
       if (instant(x)) return lightTraining(i, x);
       if (id !== 'rest' && id !== 'rehab') return training(i, id);
       if (!canChoose(data.slots[i], id).ok) return;
@@ -562,11 +575,14 @@ export function showRaise(root, { storage, loadGame, onBack }) {
 
   // 훈련 = 연습장 한 번(타자는 타격 연습, 투수는 투구 연습). 끝까지 하면 그 점수로 능력치 경험치가 쌓인다
   async function training(i, id) {
-    const s = data.slots[i], x = DRILLS.find(q => q.id === id);
+    const s = data.slots[i], x = drillOf(id);
     if (!canChoose(s, id).ok) return;
     const mod = await loadGame();
     if (!mod) return hubView(i);
-    const team = raiseTeam(s), base = defaultLineup(team), kind = s.kind;
+    let team = raiseTeam(s);
+    const base = defaultLineup(team), kind = s.kind;
+    // 구종 배우기: 연습장에서는 배우는 구종 하나만 고를 수 있다
+    if (x.learn) team = { ...team, pitchers: team.pitchers.map(q => (q.id === s.playerId ? { ...q, pitches: [x.learn] } : q)) };
     const lineup = kind === 'pitch' ? { ...base, starterId: s.playerId } : { ...base, order: Array(9).fill(s.playerId) };
     mod.showGame(root, {
       userTeam: team, cpuTeam: getTeam('lg'), lineup, innings: 99, title: `${x.name} · ${slotPlayer(s).name}`,
@@ -578,6 +594,12 @@ export function showRaise(root, { storage, loadGame, onBack }) {
       data = { ...data, slots: data.slots.map((q, j) => (j === i ? r.slot : q)) }; persist();
       const k = pr.pts / RAISE.practiceRef[kind], grade = k >= 1.3 ? '훌륭해요!' : k >= 0.9 ? '좋아요' : '아쉬워요';
       const ups = r.ups.map(u => `${STAT_KO[u.stat]} +${u.n}`).join(', ');
+      if (x.learn) {
+        const nm = PITCH_TYPES[x.learn].name;
+        flash = r.learned ? `🎉 ${nm}을(를) 익혔어요! 이제 경기에서 던질 수 있어요 · 연습 점수 ${pr.pts.toFixed(1)}`
+          : `${x.name} · 연습 점수 ${pr.pts.toFixed(1)} ${grade} · 숙련 +${r.gain.toFixed(1)} (${(LEARN.need - learnLeft(r.slot, x.learn)).toFixed(1)}/${LEARN.need})`;
+        return hubView(i);
+      }
       flash = `${x.name} 완료 · 연습 점수 ${pr.pts.toFixed(1)} ${grade}${ups ? ` · ${ups}` : ' · 경험치가 쌓였어요'}${r.trait ? ` · 특성 '${traitOf(r.trait).name}'을 얻었어요!` : ''}`;
       hubView(i);
     });
